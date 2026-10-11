@@ -1,0 +1,76 @@
+name: fluxcrm
+
+x-app: &app
+  build:
+    context: .
+  env_file:
+    - path: .env
+      required: true
+  environment:
+    MYSQL_HOST: database
+    MYSQL_PORT: "3306"
+  restart: unless-stopped
+
+services:
+  database:
+    image: mysql:8.4
+    env_file:
+      - path: .env
+        required: true
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+    ports:
+      - "127.0.0.1:${MYSQL_EXPOSE_PORT:-3306}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./docker/mysql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - MYSQL_PWD="$$MYSQL_ROOT_PASSWORD" mysqladmin ping -h 127.0.0.1 -uroot --silent
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    restart: unless-stopped
+
+  web:
+    <<: *app
+    command:
+      - sh
+      - -c
+      - python manage.py migrate --noinput && gunicorn fluxcrm.wsgi:application --bind 0.0.0.0:8000 --access-logfile - --error-logfile -
+    depends_on:
+      database:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${WEB_PORT:-8000}:8000"
+    volumes:
+      - uploads:/app/uploads
+      - staticfiles:/app/staticfiles
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl --fail --silent http://127.0.0.1:8000/ready/ >/dev/null
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  scheduler:
+    <<: *app
+    command:
+      - sh
+      - -c
+      - while true; do python manage.py run_due_jobs; sleep 60; done
+    depends_on:
+      web:
+        condition: service_healthy
+    volumes:
+      - uploads:/app/uploads
+
+volumes:
+  mysql_data:
+  staticfiles:
+  uploads:

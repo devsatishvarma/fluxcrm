@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>FluxCRM</title>
+  </head>
+  <body>
+    <main>
+      <h1>FluxCRM</h1>
+      <p>The Phase 0 foundation is running.</p>
+      <nav aria-label="Service status">
+        <a href="{% url 'core:health' %}">Health</a>
+        <a href="{% url 'core:readiness' %}">Readiness</a>
+      </nav>
+    </main>
+  </body>
+</html>
