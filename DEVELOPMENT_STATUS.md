@@ -5,19 +5,19 @@
 
 ## Current position
 
-- **MVP completion:** 7% (5 of 69 Phase 0–9 gate items verified)
+- **MVP completion:** 9% (6 of 69 Phase 0–9 gate items verified)
 - **Current phase:** Phase 0 — Foundation
 - **Phase status:** In progress
-- **Phase completion:** 71% (5 of 7 gate items verified)
+- **Phase completion:** 86% (6 of 7 gate items verified)
 - **Planning baseline:** Complete
 - **Last updated:** 2026-10-11
-- **Last verified result:** MySQL tests (6), Playwright smoke test (1), Compose
-  health, failure behavior, restart persistence, and clean restore passed on
-  2026-10-11.
+- **Last verified result:** Clean checkout `40a0734` started with the
+  documented command; web, MySQL, and scheduler are healthy. The private CI
+  run is not yet observable.
 
 ## Current phase gate — Phase 0
 
-- [ ] Clean clone starts with one documented command.
+- [x] Clean clone starts with one documented command.
 - [ ] Migrations pass against empty local and CI MySQL 8.4 databases.
 - [x] Database failure produces a clear failed readiness result.
 - [x] Container restart preserves database and upload volumes.
@@ -27,7 +27,7 @@
 
 ## Phase summary
 
-- **Phase 0 — Foundation:** 5/7, in progress.
+- **Phase 0 — Foundation:** 6/7, in progress.
 - **Phase 1 — Company and identity:** 0/7, waiting for Phase 0.
 - **Phase 2 — Leads and lead-linked Deals:** 0/7, waiting for Phase 1.
 - **Phase 3 — Workflow:** 0/7, waiting for Phase 2.
@@ -41,8 +41,9 @@
 
 ## Active blockers
 
-- The clean-checkout and CI migration gates require these uncommitted
-  foundation files to be committed and the GitHub Actions workflow to run.
+- GitHub CLI is not authenticated, so the private Actions result cannot be
+  read. Run `gh auth login` and then report the `phase-0-foundation` workflow
+  result.
 
 ## Decisions needed later
 
@@ -59,11 +60,10 @@
 
 ## Next three actions
 
-1. Review and commit the Phase 0 foundation files.
-2. Run the GitHub Actions workflow and record the clean-MySQL migration,
-   pytest, Ruff, and Playwright results.
-3. Verify startup from a clean checkout, close the remaining two Phase 0 gates,
-   and begin Phase 1 design.
+1. Authenticate the GitHub CLI and record the `phase-0-foundation` Actions
+   result, including clean-MySQL migrations.
+2. Close the remaining Phase 0 CI gate only if that run passes.
+3. Begin Phase 1 design after the CI gate passes.
 
 ## Latest evidence
 
@@ -82,6 +82,13 @@
   liveness returned 200 and readiness returned 503 while MySQL was stopped.
 - 2026-10-11: Rebuilt the final image; web readiness and the single scheduler
   are healthy, and request logs contain JSON request IDs, status, and latency.
+- 2026-10-11: Committed `13289eb` and `40a0734` and pushed them to
+  `phase-0-foundation`. Direct push to `main` was blocked.
+- 2026-10-11: Cloned `40a0734` to a clean directory. `cp .env.example .env &&
+  docker compose up --build` produced healthy web, MySQL, and scheduler
+  services; `/health/`, `/ready/`, and the home page passed. The checkout had
+  no source changes. The existing named database volume was reused, so this
+  run did not repeat the empty-database migration.
 - 2026-10-11: The synthetic marker survived a full service restart.
 - 2026-10-11: A compressed backup restored into a clean verification database;
   the fixture marker was reconciled before the verification database was
