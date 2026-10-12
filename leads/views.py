@@ -2,6 +2,7 @@
 
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
+from django.db.models import Q
 from django.http import Http404
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_http_methods, require_POST
@@ -87,10 +88,20 @@ def lead_create(request):
 def lead_detail(request, lead_id):
     activate_viewer_timezone(request.user)
     try:
-        lead = get_scoped(Lead, request.user, lead_id)
+        lead = get_scoped(
+            Lead,
+            request.user,
+            lead_id,
+            related=("owner", "converted_contact", "converted_account"),
+        )
     except PermissionDenied:
         return render(request, "crm/forbidden.html", status=403)
-    deals = scoped(Deal.objects.filter(lead=lead).select_related("owner"), request.user)
+    deals = scoped(
+        Deal.objects.filter(Q(lead=lead) | Q(converted_from_lead=lead)).select_related(
+            "owner", "account"
+        ),
+        request.user,
+    )
     from core.workflow import LEAD_BOARD_STAGES, LEAD_GRAPH, allowed_targets
     from leads.services import lead_history
 

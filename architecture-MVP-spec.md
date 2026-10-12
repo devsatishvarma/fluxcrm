@@ -137,12 +137,12 @@ stateDiagram-v2
   MQL --> SQL_Ready: sales qualification accepted
   MQL --> Nurturing: MQL not sales-ready / reason + follow-up
   MQL --> Unqualified: not relevant / reason
-  SQL_Ready --> Nurturing: no current deal / reason + follow-up
+  SQL_Ready --> Nurturing: not sales-ready / reason + follow-up
   SQL_Ready --> SQL_Reactivation: lost prospect enters reactivation
   Nurturing --> MQL: marketing-ready again
-  Nurturing --> SQL_Ready: sales-ready; offer deal creation
+  Nurturing --> SQL_Ready: sales-ready again
   Nurturing --> SQL_Reactivation: reactivation accepted
-  SQL_Reactivation --> SQL_Ready: requalified; offer conversion/deal
+  SQL_Reactivation --> SQL_Ready: requalified
   SQL_Reactivation --> Nurturing: not ready; reason + follow-up
   New --> Archived: no interest / reason
   Contacted --> Archived: no interest / reason
@@ -160,12 +160,12 @@ stateDiagram-v2
 |---|---|---|
 | New → Contacted | Contact sub-status = Attempted to Contact or In Contact; at least one usable email/phone or explicit “no contact details” note. | Log a Call/Email activity or create a follow-up task; stage timestamp updated. |
 | Contacted → MQL | Required contact/company fields and a managed source. Qualification fields can be configured. | Record actor/time and qualification note. |
-| MQL → SQL Ready | Need and business fit documented; lead owner assigned; next step captured. | Offer “Create Deal” and “Convert Lead” actions. SQL does not silently create duplicate Account/Contact records. |
+| MQL → SQL Ready | Need and business fit documented; lead owner assigned; next step captured. | Record actor, time, and the qualification note. This stage change does not create a Deal, Account, or Contact. |
 | Any active stage → Nurturing | Required nurture reason; `next_follow_up_at` required. | Remove from active SQL queue; remain visible in nurture queue and stale alerts. |
 | Any active stage → Unqualified | Required reason; terminal for normal users. | Exclude from active pipeline. Admin may reopen with reason and audit entry. |
 | Any active stage → Archived | Required no-interest reason; terminal but reopenable. | Close active reminders; preserve activities and history. |
-| Nurturing → SQL Reactivation | Re-engagement reason, owner and next task required. | Create reactivation task. Deal creation still requires SQL Ready. |
-| Conversion | See workflow below. | Set `converted_at`, converted Account/Contact IDs. Preserve Lead and timeline; hide from open lead pipeline by default. |
+| Nurturing → SQL Reactivation | Re-engagement reason, owner and next task required. | Create reactivation task. This stage change does not create or move a Deal. |
+| Conversion | Separate from every lead stage change. See the workflow below. A deal stage change also does not move the lead. | Set `converted_at`, converted Account/Contact IDs. Preserve the lead stage and timeline; hide the lead from the open lead pipeline by default. |
 
 ### Deal state machine
 
@@ -213,7 +213,15 @@ stateDiagram-v2
 
 At every stage change, record `StageHistory` and snapshot probability. The stage default updates the probability; authorized Managers may override it with a required reason. A closed Deal is excluded from open pipeline totals. Hold is closed for forecasting but reopenable. `target_close_quarter` is calculated from expected close date and Company fiscal calendar; an optional override is allowed when the date is not known.
 
+Lead stages and deal stages are separate machines. Changing a lead stage does not change any deal. Changing a deal stage does not change the lead stage. Create Deal and Convert remain separate actions on the lead; they are not edges in either graph.
+
+When a deal enters Closed Won or Closed Lost and still belongs to a lead, that lead is converted in the same transaction. The lead stage stays where it is. If an account already has the same website domain, or the same normalized company name, the lead is added as a contact on that account and existing account and contact fields are left unchanged. A similar name alone does not select an account; a new account is created instead. Closed Won creates a Customer account. Closed Lost creates a Prospect account. Closed Hold does not convert the lead. Other deals on that lead stay where they are. A second close for the same lead reuses the account and contact from the first conversion. The manual conversion wizard remains available before a deal closes.
+
 ## 5. Lead conversion workflow
+
+Lead conversion is not a lead stage and not a deal stage. A person can convert a lead from the lead page at any stage, or a deal close can convert it automatically. Neither path changes the lead stage or any other deal's stage.
+
+### Manual conversion
 
 1. Rep selects **Convert** from the Lead. The wizard checks required fields, current owner, open Deals and duplicate candidates.
 2. Match possible Accounts by normalized company domain, then normalized name + country/address. Show exact and fuzzy candidates; never auto-merge. User selects an existing Account, creates a new Account, or returns to the Lead.
@@ -221,10 +229,19 @@ At every stage change, record `StageHistory` and snapshot probability. The stage
 4. Match Contacts under the chosen Account by normalized email, then name + title. User may link an existing Contact or create a new one. Do not overwrite existing data silently; show field-level differences and require explicit choices.
 5. User reviews Account, Contact, owner, primary-contact flag, and conversion notes. Account is unique by application-level duplicate policy, not a database uniqueness assumption on company name.
 6. User chooses to create a Deal now, convert existing open Lead-linked Deals to the Account, or convert without a Deal. A new Deal is created only after its minimum fields validate.
-7. In one database transaction: create/link Account and Contact, re-parent open Deals from Lead to Account, set their primary Contact if selected, write conversion IDs/date on Lead, add timeline note, and append audit and stage-history events. If any write fails, the conversion is rolled back.
+7. In one database transaction: create/link Account and Contact, re-parent open Deals from Lead to Account, set their primary Contact if selected, write conversion IDs/date on Lead, add timeline note, and append audit events. If any write fails, the conversion is rolled back. The lead stage is not changed.
 8. Keep the Lead as a historical record, marked converted, visible in Account/Contact origin references and audit. Do not hard-delete it.
 
-**Duplicates:** show candidate score and match reasons; allow authorized “create anyway” with a justification. Normalize email/domain in application code; preserve original input. A nightly report flags potential duplicates for review.
+### Automatic conversion when a deal closes
+
+1. The deal transition to Closed Won or Closed Lost is the trigger. Closed Hold is not.
+2. If the deal has no lead, or the lead is already converted, reuse the existing account and contact. Do not create another account or contact.
+3. Otherwise match an account by website domain, then by the same normalized company name. Do not use a fuzzy or partial name match.
+4. When an exact account exists, add the lead as a contact on that account's contact list. If that account already has a contact with the same email, use that contact and do not overwrite its fields. When no exact account exists, create one (Customer for Closed Won, Prospect for Closed Lost) and create the contact from the lead. The person leaves the active lead list and appears under that account on the Contacts page.
+5. Move only the deal that just closed onto that account, and keep a link to the originating lead. Leave every other deal on its current lead or account.
+6. Run this in the same transaction as the deal stage change. A failure rolls the stage change back with the account and contact writes.
+
+**Duplicates:** the manual wizard shows candidate score and match reasons and allows an authorized “create anyway” with a justification. Automatic close does not show that wizard. Normalize email/domain in application code; preserve original input. A nightly report flags potential duplicates for review.
 
 ## 6. Roles, hierarchy and permission matrix
 
@@ -266,6 +283,7 @@ Admin is a bootstrap/configuration role and should not be assigned for day-to-da
 | Lead detail | Header: stage, owner, next follow-up, convert action. Summary fields, contact actions, timeline, related Deals/tasks/attachments. Quick-log menu for Call/Email/Meeting/Note; open form prefilled from record. |
 | Conversion wizard | Stepper: duplicate review → Account match/create → Contact match/create → open Deal transfer/new Deal → final review. Explicit merge/overwrite decisions. |
 | Account hierarchy | Searchable tree/list with parent/child, type, owner, open pipeline amount. Related tabs for Contacts, Deals, Activities and attachments. |
+| Contact list | Navigation item Contacts. Search by name, email, title, or account. Filter by account and primary contact. Contacts are grouped under their account. |
 | Contact detail | Contact channels, Account/primary marker, reports-to, preferences, timeline and open tasks. |
 | Deal list/Kanban | Saved views, stage/owner/type/temperature/close-date filters; amount and weighted amount; Kanban by stage. Stage gates validated at transition. |
 | Deal detail | Summary, stage history/time-in-stage, BANT panel, primary contact, source, close/competitor/OEM sections, activities, tasks and attachments. |

@@ -3,15 +3,30 @@
 {% block title %}{{ lead.first_name }} {{ lead.last_name }} · FluxCRM{% endblock %}
 {% block content %}
   <h1>{{ lead.first_name }} {{ lead.last_name }}</h1>
-  <p><a href="{% url 'leads:edit' lead.pk %}">Edit</a></p>
+  <p>
+    <a href="{% url 'leads:edit' lead.pk %}">Edit</a>
+    {% if lead.converted_at %}
+      <a href="{% url 'accounts:detail' lead.converted_account_id %}">Converted account</a>
+    {% else %}
+      <a href="{% url 'leads:convert' lead.pk %}">Convert</a>
+    {% endif %}
+  </p>
   <dl>
     <dt>Company</dt><dd>{{ lead.company_name }}</dd>
+    {% if lead.converted_contact %}
+      <dt>Contact</dt>
+      <dd>
+        {{ lead.converted_contact.first_name }} {{ lead.converted_contact.last_name }}
+        at
+        <a href="{% url 'accounts:detail' lead.converted_account_id %}">{{ lead.converted_account.name }}</a>
+      </dd>
+    {% endif %}
     <dt>Email</dt><dd>{{ lead.email|default:"—" }}</dd>
     <dt>Source</dt><dd>{{ lead.source }}</dd>
     <dt>Lead rating</dt><dd>{{ lead.rating|choice_label }}</dd>
     <dt>Created</dt><dd>{{ lead.created_at|date:"Y-m-d" }}</dd>
     <dt>Lead Age</dt><dd>{{ lead.created_at|elapsed }}</dd>
-    <dt>Stage</dt><dd>{{ lead.stage }}</dd>
+    <dt>Lead stage</dt><dd>{{ lead.stage }}</dd>
     <dt>Stage-Age</dt><dd>{{ lead.stage_entered_at|elapsed }}</dd>
     <dt>Owner</dt><dd>{{ lead.owner.display_name }}</dd>
     <dt>External ID</dt><dd>{{ lead.external_id }}</dd>
@@ -29,7 +44,7 @@
     <p>No deals are linked to this lead.</p>
   {% endif %}
   <p><a href="{% url 'sales:create' %}?lead={{ lead.pk }}">Add deal</a></p>
-  <h2>Move stage</h2>
+  <h2>Move lead stage</h2>
   <form method="post" action="{% url 'leads:transition' lead.pk %}">
     {% csrf_token %}
     <input type="hidden" name="version" value="{{ lead.version }}">

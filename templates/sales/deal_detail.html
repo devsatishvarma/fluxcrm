@@ -6,12 +6,34 @@
   <p><a href="{% url 'sales:edit' deal.pk %}">Edit</a></p>
   <dl>
     <dt>Lead</dt>
-    <dd><a href="{% url 'leads:detail' deal.lead.pk %}">{{ deal.lead.company_name }}</a></dd>
+    <dd>
+      {% if deal.lead %}
+        <a href="{% url 'leads:detail' deal.lead.pk %}">{{ deal.lead.company_name }}</a>
+      {% else %}
+        —
+      {% endif %}
+    </dd>
+    {% if deal.account %}
+      <dt>Account</dt>
+      <dd><a href="{% url 'accounts:detail' deal.account.pk %}">{{ deal.account.name }}</a></dd>
+    {% endif %}
+    {% if deal.primary_contact %}
+      <dt>Contact</dt>
+      <dd>{{ deal.primary_contact.first_name }} {{ deal.primary_contact.last_name }}</dd>
+    {% endif %}
+    {% if deal.converted_from_lead %}
+      <dt>Converted from</dt>
+      <dd>
+        <a href="{% url 'leads:detail' deal.converted_from_lead.pk %}">
+          {{ deal.converted_from_lead.company_name }}
+        </a>
+      </dd>
+    {% endif %}
     <dt>Amount</dt><dd>{{ deal.amount }} {{ deal.currency }}</dd>
     <dt>Deal confidence</dt><dd>{{ deal.confidence|choice_label }}</dd>
     <dt>Created</dt><dd>{{ deal.created_at|date:"Y-m-d" }}</dd>
     <dt>Deal Age</dt><dd>{{ deal.created_at|elapsed }}</dd>
-    <dt>Stage</dt><dd>{{ deal.stage }}</dd>
+    <dt>Deal stage</dt><dd>{{ deal.stage }}</dd>
     <dt>Stage-Age</dt><dd>{{ deal.stage_entered_at|elapsed }}</dd>
     <dt>Probability</dt><dd>{{ deal.probability }}</dd>
     <dt>Expected close</dt><dd>{{ deal.expected_close_date|default:"—" }}</dd>
@@ -19,7 +41,7 @@
     <dt>External ID</dt><dd>{{ deal.external_id }}</dd>
   </dl>
   {% if deal.notes %}<h2>Notes</h2><p>{{ deal.notes }}</p>{% endif %}
-  <h2>Move stage</h2>
+  <h2>Move deal stage</h2>
   <form method="post" action="{% url 'sales:transition' deal.pk %}">
     {% csrf_token %}
     <input type="hidden" name="version" value="{{ deal.version }}">

@@ -271,6 +271,59 @@ here before implementing it.
   D-014 addition under the new name.
 - **Approval source:** User request to rename the fields and deal values.
 
+### D-016 — Accounts, contacts, and lead conversion
+
+- **Date/status:** 2026-10-11 — Confirmed by starting Phase 5
+- **Decision:** An Account and its Contacts can be created directly. A Deal
+  belongs to one Lead or one Account, never both and never neither. Conversion
+  keeps the Lead, records the Account and Contact it produced, and can move
+  open Deals onto the Account while keeping the originating Lead on
+  `converted_from_lead`. Closed Deals stay on the Lead.
+- Duplicate Account matches use the website domain, then the normalized name,
+  then a shared name token. Contact matches use normalized email, then the
+  same name and title. Matches are shown with a score and reasons. Nothing is
+  merged or overwritten unless the person chooses an existing record and, for
+  each different field, chooses keep or use the lead value.
+- A standard user can convert only onto a Customer or Prospect. An
+  administrator can choose any account type. Account parent links and contact
+  reporting lines cannot cycle. A contact reports inside one account unless an
+  administrator overrides that. One primary contact is enforced by locking the
+  account row. A second conversion submit returns the first result. The
+  conversion work is one database transaction.
+- Converted leads stay readable, including from the lead page and
+  `?converted=1`, and stay out of the default lead queue.
+- **Affected phase:** 5
+- **Specification impact:** Supersedes the Phase 2 limit in D-011 that a Deal
+  cannot link to an Account. Manager-tree visibility stays in Phase 6.
+- **Approval source:** Phase 5 delivery plan, started by the request to baseline
+  the previous work and begin the next phase. D-017 changes what happens to
+  the deal that itself just closed.
+
+### D-017 — Independent stages and conversion on deal close
+
+- **Date/status:** 2026-10-11 — Confirmed by user request
+- **Decision:** Lead stages and deal stages change independently. A lead stage
+  change does not move a deal, create an account, or convert the lead. A deal
+  stage change does not move the lead.
+- Closed Won and Closed Lost convert the deal's lead in the same transaction
+  when that deal still belongs to a lead. The lead stage stays unchanged. An
+  existing account is used only when the website domain matches, or the
+  normalized company name matches exactly. The lead is added as a contact on
+  that account. An existing contact with the same email is reused and its
+  fields are not overwritten. Otherwise a new account is created: Customer for
+  Closed Won, Prospect for Closed Lost. The person leaves the active lead list
+  and is listed under that account on the account page and the Contacts page. A similar name is not reused. Closed
+  Hold does not convert the lead. Only the deal that closed moves onto the
+  account. A later close for the same lead reuses the first account and contact.
+- The manual conversion wizard remains for conversion before a deal closes.
+  That wizard still requires an explicit choice when it finds a duplicate.
+- **Affected phases:** 3 and 5
+- **Specification impact:** Updates the lead and deal state machines and the
+  conversion workflow in `architecture-MVP-spec.md`. Supersedes the D-016
+  statement that a closed deal stays on the lead, for the deal that just closed.
+- **Approval source:** User request to untie the stage machines and convert a
+  lead when its deal closes.
+
 ## Starter taxonomy — version 1
 
 The user approved a standard, admin-editable starter set. Keys are stable

@@ -11,6 +11,7 @@ from django.db.models import Max
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
+from accounts.models import Account, Contact
 from activities.models import Activity, ActivityLink, Task, TaskLink
 from audit.models import AuditEvent
 from core.access import get_scoped
@@ -21,7 +22,7 @@ from leads.models import Lead
 from sales.models import Deal
 
 logger = logging.getLogger(__name__)
-LINKABLE = {"lead": Lead, "deal": Deal}
+LINKABLE = {"lead": Lead, "deal": Deal, "account": Account, "contact": Contact}
 
 
 def _zone(user):

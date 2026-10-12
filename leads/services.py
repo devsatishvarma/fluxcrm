@@ -279,6 +279,8 @@ def normalize_lead(actor, data, *, current=None):
 
 def filter_leads(user, params):
     queryset = scoped(Lead.objects.select_related("owner"), user)
+    if str(params.get("converted") or "") != "1":
+        queryset = queryset.filter(converted_at__isnull=True)
     query = str(params.get("q") or "").strip()
     if len(query) > 100:
         raise ValidationError({"q": "Use 100 characters or fewer."})
@@ -449,6 +451,19 @@ def lead_payload(lead: Lead) -> dict:
             else lead.next_follow_up_at.isoformat()
         ),
         "notes": lead.notes,
+        "converted_at": (
+            None if lead.converted_at is None else lead.converted_at.isoformat()
+        ),
+        "converted_account": (
+            None
+            if lead.converted_account_id is None
+            else str(lead.converted_account_id)
+        ),
+        "converted_contact": (
+            None
+            if lead.converted_contact_id is None
+            else str(lead.converted_contact_id)
+        ),
         "version": lead.version,
         "created_at": lead.created_at.isoformat(),
         "updated_at": lead.updated_at.isoformat(),

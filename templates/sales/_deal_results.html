@@ -24,7 +24,15 @@
       {% for deal in page_obj %}
         <tr>
           <td><a href="{% url 'sales:detail' deal.pk %}">{{ deal.title }}</a></td>
-          <td>{{ deal.lead.company_name }}</td>
+          <td>
+            {% if deal.lead %}
+              {{ deal.lead.company_name }}
+            {% elif deal.account %}
+              {{ deal.account.name }}
+            {% else %}
+              —
+            {% endif %}
+          </td>
           <td>{{ deal.confidence|choice_label }}</td>
           <td>{{ deal.stage }}</td>
           <td>{{ deal.created_at|elapsed }}</td>

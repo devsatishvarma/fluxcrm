@@ -5,25 +5,34 @@
 
 ## Current position
 
-- **MVP completion:** 49% (34 of 69 Phase 0–9 gate items verified)
-- **Current phase:** Phase 5 — Accounts, Contacts, and conversion
+- **MVP completion:** 59% (41 of 69 Phase 0–9 gate items verified)
+- **Current phase:** Phase 6 — Teams, RBAC, and audit review
 - **Phase status:** Not started
 - **Phase completion:** 0% (0 of 7 gate items verified)
 - **Planning baseline:** Complete
-- **Code baseline:** Tag `pre-phase-5`. Includes follow-ups, Lead rating, Deal confidence, and day-based ages. Phase 5 starts after this tag.
+- **Code baseline:** Tag `pre-phase-5`. Phase 5 is implemented and verified locally, and is not committed yet.
 - **Last updated:** 2026-10-11
-- **Last verified result:** Phase 4 and the follow-up record display passed 45
-  MySQL tests, system checks, migration-drift checks, and live page checks.
+- **Last verified result:** Phase 5 passed 54 MySQL tests, system checks, and migration-drift checks. The Django test client exercised account creation, duplicate confirmation, and conversion.
 
-## Current phase gate — Phase 5
+## Current phase gate — Phase 6
 
-- [ ] Account and contact reporting hierarchies cannot cycle.
-- [ ] At most one primary Contact exists per Account under concurrent requests.
-- [ ] Exact and fuzzy duplicate candidates require an explicit human choice.
-- [ ] Duplicate conversion submissions are idempotent.
-- [ ] Injected failures leave no partial Account, Contact, Deal, or Lead state.
-- [ ] Re-parented Deals retain values and history.
-- [ ] Conversion permissions, source links, timeline note, and audit trail pass.
+- [ ] Every permission-matrix cell has positive and negative tests.
+- [ ] Managers see recursive descendants and no unrelated branch.
+- [ ] Read-only users cannot mutate through forms, HTMX, API, or crafted requests.
+- [ ] Export remains separately permissioned.
+- [ ] Privilege changes and denials are logged without exposing CRM content.
+- [ ] Audit rows cannot be created, updated, or deleted through user-facing paths.
+- [ ] Active administrator membership is manually reviewed.
+
+## Completed phase gate — Phase 5
+
+- [x] Account and contact reporting hierarchies cannot cycle.
+- [x] At most one primary Contact exists per Account under concurrent requests.
+- [x] Exact and fuzzy duplicate candidates require an explicit human choice.
+- [x] Duplicate conversion submissions are idempotent.
+- [x] Injected failures leave no partial Account, Contact, Deal, or Lead state.
+- [x] Re-parented Deals retain values and history.
+- [x] Conversion permissions, source links, timeline note, and audit trail pass.
 
 ## Completed phase gate — Phase 4
 
@@ -76,8 +85,10 @@
   and admin correction share one transition service. See D-012.
 - **Phase 4 — Activities and tasks:** 6/6, complete. Linked timelines,
   in-app reminders, and stale badges. See D-013.
-- **Phase 5 — Accounts, Contacts, conversion:** 0/7, not started.
-- **Phase 6 — Teams, RBAC, audit:** 0/7, waiting for Phase 5.
+- **Phase 5 — Accounts, Contacts, conversion:** 7/7, complete. Hierarchies,
+  one primary contact, explicit duplicate choice, and one conversion
+  transaction. See D-016.
+- **Phase 6 — Teams, RBAC, audit:** 0/7, not started.
 - **Phase 7 — Reports and dashboards:** 0/7, waiting for Phase 6.
 - **Phase 8 — Import/export:** 0/8, waiting for Phase 7.
 - **Phase 9 — Cloud pilot/hardening:** 0/6, waiting for Phase 8.
@@ -85,9 +96,9 @@
 
 ## Active blockers
 
-None for starting Phase 5. Stage moves still use the Phase 3 reason-based
+None for starting Phase 6. Stage moves still use the Phase 3 reason-based
 gates; requiring a logged activity before a stage change is a later decision.
-See D-013.
+See D-013. Manager-tree visibility starts in Phase 6.
 
 ## Decisions needed later
 
@@ -104,10 +115,9 @@ See D-013.
 
 ## Next three actions
 
-1. Define account and contact duplicate scoring, hierarchy rules, and the
-   conversion transaction.
-2. Implement Account, Contact, and primary-contact rules.
-3. Implement the reviewed lead-conversion wizard.
+1. Define the role matrix, recursive manager traversal, and denied-access logging.
+2. Implement teams, manager scope, and editable grants on the existing record pages.
+3. Cover every permission-matrix cell with positive and negative tests.
 
 ## Latest evidence
 
@@ -233,6 +243,17 @@ See D-013.
   Leads have a Lead rating of Hot, Warm, or Cold. Deals have Deal confidence
   of High, Medium, or Low. Tasks can be added from a lead, a deal, or
   the task list. 45 MySQL tests passed. See D-014.
+- 2026-10-11: Phase 5 passed 54 MySQL tests. Ruff, Django checks, and
+  migration-drift checks passed. Account and contact cycles are rejected, one
+  primary contact survives concurrent updates, duplicate matches require a
+  choice, a second conversion returns the first result, and an injected
+  failure leaves no account, contact, or deal change. Open deals keep their
+  amount, stage, and history when moved to the account. The convert page
+  returns 422 until the new account is confirmed, then creates it.
+- 2026-10-11: Lead and deal stages change independently. Closed Won and Closed
+  Lost convert the source lead without changing the lead stage. An exact
+  company match receives the lead as a contact; a similar name gets a new
+  account. Closed Hold does not convert. See D-017.
 
 ## Recent decision/change log
 
@@ -266,8 +287,11 @@ See D-013.
 - **2026-10-11 — Follow-ups:** Activities and tasks are linked records with
   in-app reminders. Email reminders stay deferred. Sample rows that require
   account deal `deal-2001` are not seeded. See D-013.
-- **2026-10-11 — Phase 4 baseline:** Phases 0–4 are the checkpoint for later
-  work. Phase 5 starts from tag `phase-4-baseline` and is not started.
+- **2026-10-11 — Phase 4 baseline:** Phases 0–4 are the checkpoint at tag
+  `pre-phase-5`.
+- **2026-10-11 — Accounts and conversion:** A deal belongs to one lead or one
+  account. Conversion keeps the lead, requires an explicit duplicate choice,
+  and moves only open deals. See D-016.
 
 ## How to maintain this file
 

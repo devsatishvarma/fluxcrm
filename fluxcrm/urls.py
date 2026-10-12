@@ -22,7 +22,9 @@ urlpatterns = [
     path("", include("leads.urls")),
     path("", include("sales.urls")),
     path("", include("activities.urls")),
+    path("", include("accounts.urls")),
     path("api/v1/", include("leads.api_urls")),
     path("api/v1/", include("sales.api_urls")),
     path("api/v1/", include("activities.api_urls")),
+    path("api/v1/", include("accounts.api_urls")),
 ]

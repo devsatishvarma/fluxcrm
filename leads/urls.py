@@ -1,6 +1,7 @@
 from django.contrib.auth.decorators import login_required
 from django.urls import path
 
+from accounts.views import lead_convert as convert_view
 from leads import views
 
 app_name = "leads"
@@ -20,5 +21,10 @@ urlpatterns = [
         "leads/<uuid:lead_id>/delete/",
         login_required(views.lead_delete),
         name="delete",
+    ),
+    path(
+        "leads/<uuid:lead_id>/convert/",
+        login_required(convert_view),
+        name="convert",
     ),
 ]

@@ -31,6 +31,8 @@ from sales.models import Deal
 
 logger = logging.getLogger(__name__)
 
+DEAL_RELATED = ("owner", "lead", "account", "converted_from_lead", "primary_contact")
+
 DEAL_ORDERING = {
     "created_at": "created_at",
     "-created_at": "-created_at",
@@ -51,7 +53,13 @@ def deal_snapshot(deal: Deal) -> dict:
     return {
         "external_id": deal.external_id,
         "title": deal.title,
-        "lead_id": str(deal.lead_id),
+        "lead_id": None if deal.lead_id is None else str(deal.lead_id),
+        "account_id": None if deal.account_id is None else str(deal.account_id),
+        "converted_from_lead_id": (
+            None
+            if deal.converted_from_lead_id is None
+            else str(deal.converted_from_lead_id)
+        ),
         "stage": deal.stage,
         "probability": str(deal.probability),
         "outcome": deal.outcome,
@@ -90,6 +98,45 @@ def _visible_lead(actor, lead_id):
         raise ValidationError({"lead": "Select an active lead."}) from exc
 
 
+def _visible_account(actor, account_id):
+    if not account_id:
+        raise ValidationError({"account": "Select an account."})
+    try:
+        from accounts.models import Account
+
+        return get_scoped(Account, actor, account_id)
+    except PermissionDenied:
+        raise
+    except Http404 as exc:
+        raise ValidationError({"account": "Select an active account."}) from exc
+
+
+def _deal_source(actor, data, current):
+    partial = current is not None
+    if partial and "lead" not in data and "account" not in data:
+        return {}
+    if current is None:
+        lead_id = data.get("lead") or None
+        account_id = data.get("account") or None
+    else:
+        lead_id = data["lead"] if "lead" in data else current.lead_id
+        account_id = data["account"] if "account" in data else current.account_id
+    if lead_id in ("", None):
+        lead_id = None
+    if account_id in ("", None):
+        account_id = None
+    if bool(lead_id) == bool(account_id):
+        raise ValidationError(
+            {
+                "lead": "Choose a lead or an account, not both.",
+                "account": "Choose a lead or an account, not both.",
+            }
+        )
+    if lead_id:
+        return {"lead": _visible_lead(actor, lead_id), "account": None}
+    return {"lead": None, "account": _visible_account(actor, account_id)}
+
+
 def _probability(stage, value):
     if value in (None, ""):
         return Decimal(DEAL_STAGE_PROBABILITY[stage])
@@ -100,12 +147,9 @@ def _probability(stage, value):
 
 
 def normalize_deal(actor, data, *, current=None):
-    if "account" in data and data.get("account") not in (None, ""):
-        raise ValidationError(
-            {"account": "Deals cannot be linked to an account before Phase 5."}
-        )
     partial = current is not None
     normalized = {}
+    normalized.update(_deal_source(actor, data, current))
     if not partial or "external_id" in data:
         normalized["external_id"] = clean_external_id(
             data.get("external_id"),
@@ -120,9 +164,6 @@ def normalize_deal(actor, data, *, current=None):
         if len(title) > 200:
             raise ValidationError({"title": "Use 200 characters or fewer."})
         normalized["title"] = title
-    if not partial or "lead" in data:
-        lead_value = data.get("lead", None if current is None else current.lead_id)
-        normalized["lead"] = _visible_lead(actor, lead_value)
     if not partial or "deal_type" in data:
         normalized["deal_type"] = clean_required_key(
             "DEAL_TYPE",
@@ -182,13 +223,15 @@ def normalize_deal(actor, data, *, current=None):
 
 
 def filter_deals(user, params):
-    queryset = scoped(Deal.objects.select_related("owner", "lead"), user)
+    queryset = scoped(Deal.objects.select_related("owner", "lead", "account"), user)
     query = str(params.get("q") or "").strip()
     if len(query) > 100:
         raise ValidationError({"q": "Use 100 characters or fewer."})
     if query:
         queryset = queryset.filter(
-            Q(title__icontains=query) | Q(lead__company_name__icontains=query)
+            Q(title__icontains=query)
+            | Q(lead__company_name__icontains=query)
+            | Q(account__name__icontains=query)
         )
     if params.get("stage"):
         queryset = queryset.filter(
@@ -251,7 +294,7 @@ def create_deal(*, actor, data, request_id=""):
 
 @transaction.atomic
 def update_deal(*, actor, deal_id, version, data, request_id=""):
-    deal = get_scoped(Deal, actor, deal_id, for_update=True, related=("owner", "lead"))
+    deal = get_scoped(Deal, actor, deal_id, for_update=True, related=DEAL_RELATED)
     if require_version(version) != deal.version:
         raise VersionConflict
     normalized = normalize_deal(actor, data, current=deal)
@@ -288,7 +331,7 @@ def update_deal(*, actor, deal_id, version, data, request_id=""):
 
 @transaction.atomic
 def delete_deal(*, actor, deal_id, version, delete_reason, request_id=""):
-    deal = get_scoped(Deal, actor, deal_id, for_update=True, related=("owner", "lead"))
+    deal = get_scoped(Deal, actor, deal_id, for_update=True, related=DEAL_RELATED)
     if require_version(version) != deal.version:
         raise VersionConflict
     before = deal_snapshot(deal)
@@ -307,8 +350,15 @@ def deal_payload(deal: Deal) -> dict:
         "id": str(deal.pk),
         "external_id": deal.external_id,
         "title": deal.title,
-        "lead": str(deal.lead_id),
-        "lead_company": deal.lead.company_name,
+        "lead": None if deal.lead_id is None else str(deal.lead_id),
+        "lead_company": "" if deal.lead_id is None else deal.lead.company_name,
+        "account": None if deal.account_id is None else str(deal.account_id),
+        "account_name": "" if deal.account_id is None else deal.account.name,
+        "converted_from_lead": (
+            None
+            if deal.converted_from_lead_id is None
+            else str(deal.converted_from_lead_id)
+        ),
         "deal_type": deal.deal_type,
         "amount": None if deal.amount is None else str(deal.amount),
         "currency": deal.currency,
@@ -379,7 +429,7 @@ def transition_deal(
         stage_is_active,
     )
 
-    deal = get_scoped(Deal, actor, deal_id, for_update=True, related=("owner", "lead"))
+    deal = get_scoped(Deal, actor, deal_id, for_update=True, related=DEAL_RELATED)
     if require_version(version) != deal.version:
         raise VersionConflict
     destination = str(to_stage or "").strip()
@@ -473,6 +523,19 @@ def transition_deal(
     deal.probability = probability
     deal.stage_entered_at = now
     deal.updated_by = actor
+    if destination in {"CLOSED_WON", "CLOSED_LOST"} and deal.lead_id:
+        from accounts.conversion import prepare_lead_for_closed_deal
+
+        account, contact = prepare_lead_for_closed_deal(
+            actor=actor,
+            lead=deal.lead,
+            closed_stage=destination,
+            request_id=request_id,
+        )
+        deal.converted_from_lead = deal.lead
+        deal.account = account
+        deal.primary_contact = contact
+        deal.lead = None
     deal.version += 1
     deal.full_clean()
     deal.save()

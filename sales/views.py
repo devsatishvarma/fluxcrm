@@ -12,7 +12,13 @@ from core.validation import add_form_errors
 from identity.models import User
 from sales.forms import DealDeleteForm, DealForm
 from sales.models import Deal
-from sales.services import create_deal, delete_deal, filter_deals, update_deal
+from sales.services import (
+    DEAL_RELATED,
+    create_deal,
+    delete_deal,
+    filter_deals,
+    update_deal,
+)
 
 PAGE_SIZE = 50
 
@@ -91,7 +97,7 @@ def deal_create(request):
 def deal_detail(request, deal_id):
     activate_viewer_timezone(request.user)
     try:
-        deal = get_scoped(Deal, request.user, deal_id, related=("owner", "lead"))
+        deal = get_scoped(Deal, request.user, deal_id, related=DEAL_RELATED)
     except PermissionDenied:
         return render(request, "crm/forbidden.html", status=403)
     from core.taxonomy import DEAL_STAGE_PROBABILITY
@@ -126,7 +132,7 @@ def deal_detail(request, deal_id):
 def deal_edit(request, deal_id):
     activate_viewer_timezone(request.user)
     try:
-        deal = get_scoped(Deal, request.user, deal_id, related=("owner", "lead"))
+        deal = get_scoped(Deal, request.user, deal_id, related=DEAL_RELATED)
     except PermissionDenied:
         return render(request, "crm/forbidden.html", status=403)
     form = DealForm(request.POST or None, user=request.user, instance=deal)
@@ -162,7 +168,7 @@ def deal_edit(request, deal_id):
 def deal_delete(request, deal_id):
     form = DealDeleteForm(request.POST)
     if not form.is_valid():
-        deal = get_scoped(Deal, request.user, deal_id, related=("owner", "lead"))
+        deal = get_scoped(Deal, request.user, deal_id, related=DEAL_RELATED)
         return render(
             request,
             "sales/deal_detail.html",
@@ -180,7 +186,7 @@ def deal_delete(request, deal_id):
     except PermissionDenied:
         return render(request, "crm/forbidden.html", status=403)
     except ValidationError as exc:
-        deal = get_scoped(Deal, request.user, deal_id, related=("owner", "lead"))
+        deal = get_scoped(Deal, request.user, deal_id, related=DEAL_RELATED)
         add_form_errors(form, exc)
         return render(
             request,
@@ -189,7 +195,7 @@ def deal_delete(request, deal_id):
             status=422,
         )
     except VersionConflict:
-        deal = get_scoped(Deal, request.user, deal_id, related=("owner", "lead"))
+        deal = get_scoped(Deal, request.user, deal_id, related=DEAL_RELATED)
         form.add_error(None, "This record was updated. Reload and retry.")
         return render(
             request,

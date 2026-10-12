@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Contacts · FluxCRM{% endblock %}
+{% block content %}
+  <h1>Contacts</h1>
+  {% if errors %}
+    <p role="alert">
+      {% for field, messages in errors.items %}{{ field }}: {{ messages|join:", " }} {% endfor %}
+    </p>
+  {% endif %}
+  <form class="row g-2 align-items-end mb-4" method="get">
+    <div class="col-md-4">
+      <label class="form-label" for="contact-q">Search</label>
+      <input class="form-control" id="contact-q" name="q" value="{{ query.q }}">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label" for="contact-account">Account</label>
+      <select class="form-select" id="contact-account" name="account">
+        <option value="">All accounts</option>
+        {% for account in account_choices %}
+          <option value="{{ account.pk }}"{% if query.account == account.pk|stringformat:"s" %} selected{% endif %}>
+            {{ account.name }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label" for="contact-primary">Primary</label>
+      <select class="form-select" id="contact-primary" name="primary">
+        <option value="">All contacts</option>
+        <option value="1"{% if query.primary == "1" %} selected{% endif %}>Primary only</option>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <button class="btn btn-secondary" type="submit">Filter</button>
+    </div>
+  </form>
+  {% if groups %}
+    {% for group in groups %}
+      <section class="mb-4">
+        <h2>
+          <a href="{% url 'accounts:detail' group.account.pk %}">{{ group.account.name }}</a>
+        </h2>
+        <table class="table">
+          <caption>Contacts at {{ group.account.name }}</caption>
+          <thead>
+            <tr>
+              <th scope="col">Name</th>
+              <th scope="col">Email</th>
+              <th scope="col">Title</th>
+              <th scope="col">Primary</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for contact in group.contacts %}
+              <tr>
+                <td>{{ contact.first_name }} {{ contact.last_name }}</td>
+                <td>{{ contact.email|default:"—" }}</td>
+                <td>{{ contact.title|default:"—" }}</td>
+                <td>{% if contact.is_primary %}Primary{% else %}—{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </section>
+    {% endfor %}
+    {% if page_obj.paginator.num_pages > 1 %}
+      <nav aria-label="Contact pages">
+        {% if page_obj.has_previous %}
+          <a href="?q={{ query.q }}&amp;account={{ query.account }}&amp;primary={{ query.primary }}&amp;page={{ page_obj.previous_page_number }}">Previous</a>
+        {% endif %}
+        <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+        {% if page_obj.has_next %}
+          <a href="?q={{ query.q }}&amp;account={{ query.account }}&amp;primary={{ query.primary }}&amp;page={{ page_obj.next_page_number }}">Next</a>
+        {% endif %}
+      </nav>
+    {% endif %}
+  {% else %}
+    <p>No contacts match these filters.</p>
+  {% endif %}
+{% endblock %}

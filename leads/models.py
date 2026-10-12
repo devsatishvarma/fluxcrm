@@ -45,6 +45,21 @@ class Lead(AuditedRecord):
     disqualification_reason = models.CharField(max_length=64, blank=True)
     next_follow_up_at = models.DateTimeField(null=True, blank=True)
     notes = models.TextField(blank=True)
+    converted_at = models.DateTimeField(null=True, blank=True)
+    converted_account = models.ForeignKey(
+        "accounts.Account",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="converted_leads",
+    )
+    converted_contact = models.ForeignKey(
+        "accounts.Contact",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="converted_leads",
+    )
 
     class Meta:
         indexes = [

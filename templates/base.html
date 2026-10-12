@@ -15,9 +15,15 @@
       <nav class="container" aria-label="Primary">
         <a class="navbar-brand" href="{% url 'core:home' %}">FluxCRM</a>
         {% if user.is_authenticated %}
-          <ul class="navbar-nav me-auto">
+            <ul class="navbar-nav me-auto flex-wrap">
             <li class="nav-item">
               <a class="nav-link" href="{% url 'leads:list' %}">Leads</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="{% url 'accounts:list' %}">Accounts</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="{% url 'accounts:contacts' %}">Contacts</a>
             </li>
             <li class="nav-item">
               <a class="nav-link" href="{% url 'sales:list' %}">Deals</a>

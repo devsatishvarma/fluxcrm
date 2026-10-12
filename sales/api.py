@@ -7,6 +7,7 @@ from core.access import get_scoped
 from core.api import CappedPagination, parse_page_size
 from sales.models import Deal
 from sales.services import (
+    DEAL_RELATED,
     create_deal,
     deal_history,
     deal_payload,
@@ -39,7 +40,7 @@ class DealListView(APIView):
 
 class DealDetailView(APIView):
     def get(self, request, deal_id):
-        deal = get_scoped(Deal, request.user, deal_id, related=("owner", "lead"))
+        deal = get_scoped(Deal, request.user, deal_id, related=DEAL_RELATED)
         return Response(deal_payload(deal))
 
     def patch(self, request, deal_id):
@@ -81,7 +82,7 @@ class DealTransitionView(APIView):
 
 class DealHistoryView(APIView):
     def get(self, request, deal_id):
-        deal = get_scoped(Deal, request.user, deal_id, related=("owner", "lead"))
+        deal = get_scoped(Deal, request.user, deal_id, related=DEAL_RELATED)
         return Response(
             [
                 {

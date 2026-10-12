@@ -1,8 +1,7 @@
 """Protected lead and deal stage graphs.
 
-Activity and task side effects stay in Phase 4. Primary-contact checks stay in
-Phase 5. Until then, the transition service enforces the data those gates need
-and explains any missing field.
+A lead stage change does not move a deal, and a deal stage change does not
+move a lead. Closing a deal as won or lost converts that lead separately.
 """
 
 from core.taxonomy import DEAL_STAGE_PROBABILITY, active_keys

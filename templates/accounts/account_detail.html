@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}{{ account.name }} · FluxCRM{% endblock %}
+{% block content %}
+  <h1>{{ account.name }}</h1>
+  <dl>
+    <dt>Type</dt><dd>{{ account.get_account_type_display }}</dd>
+    <dt>Website</dt><dd>{{ account.website_url|default:"—" }}</dd>
+    <dt>Owner</dt><dd>{{ account.owner.display_name }}</dd>
+    <dt>Parent</dt>
+    <dd>
+      {% if account.parent %}
+        <a href="{% url 'accounts:detail' account.parent.pk %}">{{ account.parent.name }}</a>
+      {% else %}
+        —
+      {% endif %}
+    </dd>
+  </dl>
+  {% if account.converted_from_lead_id %}
+    <p>
+      Converted from
+      <a href="{% url 'leads:detail' account.converted_from_lead_id %}">lead</a>.
+    </p>
+  {% endif %}
+  <h2>Child accounts</h2>
+  {% if children %}
+    <ul>
+      {% for child in children %}
+        <li><a href="{% url 'accounts:detail' child.pk %}">{{ child.name }}</a></li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p>No child accounts.</p>
+  {% endif %}
+  <h2>Contacts</h2>
+  <p><a href="{% url 'accounts:contact_create' account.pk %}">Add contact</a></p>
+  {% if contacts %}
+    <ul>
+      {% for contact in contacts %}
+        <li>
+          {{ contact.first_name }} {{ contact.last_name }}
+          {% if contact.email %}{{ contact.email }}{% endif %}
+          {% if contact.is_primary %}(primary){% endif %}
+          {% if contact.converted_from_lead_id %}from lead{% endif %}
+          {% if contact.reports_to %}reports to {{ contact.reports_to }}{% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p>No contacts yet.</p>
+  {% endif %}
+  <h2>Timeline</h2>
+  {% if activities %}
+    <ul>
+      {% for activity in activities %}
+        <li>{{ activity.subject }} ({{ activity.activity_type }})</li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p>No activities yet.</p>
+  {% endif %}
+{% endblock %}
