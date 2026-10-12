@@ -5,24 +5,34 @@
 
 ## Current position
 
-- **MVP completion:** 41% (28 of 69 Phase 0–9 gate items verified)
-- **Current phase:** Phase 4 — Activities and tasks
+- **MVP completion:** 49% (34 of 69 Phase 0–9 gate items verified)
+- **Current phase:** Phase 5 — Accounts, Contacts, and conversion
 - **Phase status:** Not started
-- **Phase completion:** 0% (0 of 6 gate items verified)
+- **Phase completion:** 0% (0 of 7 gate items verified)
 - **Planning baseline:** Complete
+- **Code baseline:** Phases 0–4, tag `phase-4-baseline`. Phase 5 has not started.
 - **Last updated:** 2026-10-11
-- **Last verified result:** Phases 1–3 passed the architecture/gate audit and
-  hardening suite: 34 MySQL tests, system checks, migration-drift checks, and
-  live HTTP verification passed.
+- **Last verified result:** Phase 4 and the follow-up record display passed 45
+  MySQL tests, system checks, migration-drift checks, and live page checks.
 
-## Current phase gate — Phase 4
+## Current phase gate — Phase 5
 
-- [ ] One activity appears once on every linked record.
-- [ ] Complete and snooze operations and their audit events stay consistent.
-- [ ] Due times render correctly per user, including DST boundaries.
-- [ ] Repeated scheduler runs do not duplicate reminders.
-- [ ] Failed jobs retry safely, and missed or repeated failures are observable.
-- [ ] Quick-add defaults the source record and keeps the documented keyboard
+- [ ] Account and contact reporting hierarchies cannot cycle.
+- [ ] At most one primary Contact exists per Account under concurrent requests.
+- [ ] Exact and fuzzy duplicate candidates require an explicit human choice.
+- [ ] Duplicate conversion submissions are idempotent.
+- [ ] Injected failures leave no partial Account, Contact, Deal, or Lead state.
+- [ ] Re-parented Deals retain values and history.
+- [ ] Conversion permissions, source links, timeline note, and audit trail pass.
+
+## Completed phase gate — Phase 4
+
+- [x] One activity appears once on every linked record.
+- [x] Complete and snooze operations and their audit events stay consistent.
+- [x] Due times render correctly per user, including DST boundaries.
+- [x] Repeated scheduler runs do not duplicate reminders.
+- [x] Failed jobs retry safely, and missed or repeated failures are observable.
+- [x] Quick-add defaults the source record and keeps the documented keyboard
       interaction from interfering with form fields.
 
 ## Completed phase gate — Phase 3
@@ -64,8 +74,9 @@
   flat. The 500,000-row clock is a Phase 9 measurement, accepted on 2026-10-11.
 - **Phase 3 — Workflow:** 7/7, complete. Graphs, history, Kanban, close rules,
   and admin correction share one transition service. See D-012.
-- **Phase 4 — Activities and tasks:** 0/6, not started.
-- **Phase 5 — Accounts, Contacts, conversion:** 0/7, waiting for Phase 4.
+- **Phase 4 — Activities and tasks:** 6/6, complete. Linked timelines,
+  in-app reminders, and stale badges. See D-013.
+- **Phase 5 — Accounts, Contacts, conversion:** 0/7, not started.
 - **Phase 6 — Teams, RBAC, audit:** 0/7, waiting for Phase 5.
 - **Phase 7 — Reports and dashboards:** 0/7, waiting for Phase 6.
 - **Phase 8 — Import/export:** 0/8, waiting for Phase 7.
@@ -74,8 +85,9 @@
 
 ## Active blockers
 
-None for starting Phase 4. Activity and task side effects were intentionally
-left out of the Phase 3 stage gates.
+None for starting Phase 5. Stage moves still use the Phase 3 reason-based
+gates; requiring a logged activity before a stage change is a later decision.
+See D-013.
 
 ## Decisions needed later
 
@@ -92,10 +104,10 @@ left out of the Phase 3 stage gates.
 
 ## Next three actions
 
-1. Define activity and task links, quick-add defaults, reminder policy, and
-   scheduler run rules.
-2. Implement Activity, ActivityLink, Task, and the linked timeline.
-3. Add due, overdue, and upcoming views with complete and snooze.
+1. Define account and contact duplicate scoring, hierarchy rules, and the
+   conversion transaction.
+2. Implement Account, Contact, and primary-contact rules.
+3. Implement the reviewed lead-conversion wizard.
 
 ## Latest evidence
 
@@ -206,6 +218,20 @@ left out of the Phase 3 stage gates.
   returned 404. The existing administrator is no longer staff/superuser, and
   migrations added baseline history for five Leads and two Deals. The
   Playwright foundation/browser smoke also passed.
+- 2026-10-11: Phase 4 MySQL suite passed with 41 tests. One activity linked to
+  a Lead and a Deal renders once on each timeline. Complete and snooze stay
+  consistent with their audit events. July, November, and March due times
+  render in `America/Los_Angeles`, including the DST boundaries. A repeated
+  scheduler run in the same minute creates one reminder; a failed run stays
+  `FAILED` and the next minute delivers that reminder once. Quick-add posts
+  the current record, defaults to Call, and the `A` shortcut ignores form
+  fields. Lead and Deal lists show stale badges. Unsigned `/tasks/` redirects
+  to login. Local seed created `act-3001`, `act-3003`, and `task-4001`.
+- 2026-10-11: Lead and deal pages show age from the created date and time in the
+  current stage. Stage history now says “Started in PROPOSAL” instead of
+  “to PROPOSAL by after 0 seconds” and hides the internal baseline label.
+  Leads have Hot, Warm, and Cold. Tasks can be added from a lead, a deal, or
+  the task list. 45 MySQL tests passed. See D-014.
 
 ## Recent decision/change log
 
@@ -236,6 +262,11 @@ left out of the Phase 3 stage gates.
   application role, not Django staff/superuser access. Invitations and
   administrator-requested resets use the configured email backend. See D-009
   and D-010.
+- **2026-10-11 — Follow-ups:** Activities and tasks are linked records with
+  in-app reminders. Email reminders stay deferred. Sample rows that require
+  account deal `deal-2001` are not seeded. See D-013.
+- **2026-10-11 — Phase 4 baseline:** Phases 0–4 are the checkpoint for later
+  work. Phase 5 starts from tag `phase-4-baseline` and is not started.
 
 ## How to maintain this file
 

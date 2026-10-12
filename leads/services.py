@@ -10,6 +10,7 @@ from django.utils import timezone
 
 from audit.models import AuditEvent
 from core.access import get_scoped, scoped
+from core.display import age_days
 from core.exceptions import VersionConflict
 from core.validation import (
     clean_date,
@@ -70,6 +71,7 @@ def lead_snapshot(lead: Lead) -> dict:
         "external_id": lead.external_id,
         "stage": lead.stage,
         "source": lead.source,
+        "temperature": lead.temperature,
         "owner_id": lead.owner_id,
         "version": lead.version,
         "company_name": lead.company_name,
@@ -143,6 +145,17 @@ def normalize_lead(actor, data, *, current=None):
             "LEAD_SOURCE",
             _value(data, "source", getattr(current, "source", "")),
             "source",
+        )
+    if not partial or "temperature" in data:
+        raw_temperature = _value(
+            data, "temperature", getattr(current, "temperature", "WARM")
+        )
+        if raw_temperature in (None, ""):
+            raw_temperature = "WARM"
+        normalized["temperature"] = clean_required_key(
+            "TEMPERATURE",
+            raw_temperature,
+            "temperature",
         )
     if not partial or "stage" in data:
         normalized["stage"] = clean_required_key(
@@ -286,6 +299,12 @@ def filter_leads(user, params):
         queryset = queryset.filter(
             stage=clean_known_key("LEAD_STAGE", params.get("stage"), "stage")
         )
+    if params.get("temperature"):
+        queryset = queryset.filter(
+            temperature=clean_known_key(
+                "TEMPERATURE", params.get("temperature"), "temperature"
+            )
+        )
     if params.get("owner"):
         queryset = queryset.filter(owner=clean_owner(user, params.get("owner")))
     if params.get("created_after"):
@@ -419,6 +438,9 @@ def lead_payload(lead: Lead) -> dict:
             None if lead.annual_revenue is None else str(lead.annual_revenue)
         ),
         "source": lead.source,
+        "temperature": lead.temperature,
+        "age_days": age_days(lead.created_at),
+        "stage_age_days": age_days(lead.stage_entered_at),
         "stage": lead.stage,
         "contact_substatus": lead.contact_substatus,
         "owner": lead.owner_id,

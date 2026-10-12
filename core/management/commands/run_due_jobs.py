@@ -32,10 +32,12 @@ class Command(BaseCommand):
             return
 
         try:
-            # Phase 4 registers reminder and stale-record handlers here.
+            from activities.jobs import deliver_due_reminders
+
+            reminder_result = deliver_due_reminders(timezone.now())
             job_run.status = JobRun.Status.SUCCEEDED
             job_run.finished_at = timezone.now()
-            job_run.detail = {"handlers_run": 0}
+            job_run.detail = {"handlers_run": 1, **reminder_result}
             job_run.save(update_fields=("status", "finished_at", "detail"))
         except Exception:
             job_run.status = JobRun.Status.FAILED

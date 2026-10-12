@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load crm %}
 {% block title %}Deal board · FluxCRM{% endblock %}
 {% block content %}
   <h1>Deal board</h1>
@@ -17,7 +18,8 @@
             data-url="{% url 'sales:transition' deal.pk %}"
           >
             <a href="{% url 'sales:detail' deal.pk %}">{{ deal.title }}</a>
-            <p class="mb-1">{{ deal.amount|default:"—" }} {{ deal.currency }}</p>
+            <p class="mb-1">{{ deal.amount|default:"—" }} {{ deal.currency }} · {{ deal.temperature|temperature_label }}</p>
+            <p class="mb-1">Age {{ deal.created_at|elapsed }} · {{ deal.stage_entered_at|elapsed }} in stage</p>
             <form method="post" action="{% url 'sales:transition' deal.pk %}">
               {% csrf_token %}
               <input type="hidden" name="version" value="{{ deal.version }}">

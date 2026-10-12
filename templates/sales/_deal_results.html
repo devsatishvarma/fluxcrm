@@ -1,3 +1,4 @@
+{% load crm %}
 {% if errors %}
   <p role="alert">
     {% for field, messages in errors.items %}{{ field }}: {{ messages|join:", " }} {% endfor %}
@@ -10,9 +11,13 @@
       <tr>
         <th scope="col">Title</th>
         <th scope="col">Lead company</th>
+        <th scope="col">Temperature</th>
         <th scope="col">Stage</th>
+        <th scope="col">Age</th>
+        <th scope="col">In stage</th>
         <th scope="col">Amount</th>
         <th scope="col">Owner</th>
+        <th scope="col">Follow-up</th>
       </tr>
     </thead>
     <tbody>
@@ -20,9 +25,13 @@
         <tr>
           <td><a href="{% url 'sales:detail' deal.pk %}">{{ deal.title }}</a></td>
           <td>{{ deal.lead.company_name }}</td>
+          <td>{{ deal.temperature|temperature_label }}</td>
           <td>{{ deal.stage }}</td>
+          <td>{{ deal.created_at|elapsed }}</td>
+          <td>{{ deal.stage_entered_at|elapsed }}</td>
           <td>{{ deal.amount|default:"—" }} {{ deal.currency }}</td>
           <td>{{ deal.owner.display_name }}</td>
+          <td>{% if deal.is_stale %}Stale{% else %}Current{% endif %}</td>
         </tr>
       {% endfor %}
     </tbody>

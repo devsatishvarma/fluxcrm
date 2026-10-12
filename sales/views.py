@@ -37,6 +37,9 @@ def deal_list(request):
         status = 422
     paginator = Paginator(queryset, PAGE_SIZE)
     page = paginator.get_page(request.GET.get("page") or 1)
+    from activities.services import attach_freshness
+
+    attach_freshness(list(page.object_list), "deal")
     filters = request.GET.copy()
     filters.pop("page", None)
     from sales.services import open_pipeline_total
@@ -96,11 +99,16 @@ def deal_detail(request, deal_id):
     from sales.services import deal_history
 
     stages = allowed_targets(DEAL_GRAPH, deal.stage)
+    from activities.services import timeline
+
+    activities, tasks = timeline(deal)
     return render(
         request,
         "sales/deal_detail.html",
         {
             "deal": deal,
+            "activities": activities,
+            "tasks": tasks,
             "history": deal_history(deal).select_related("changed_by"),
             "allowed_stages": stages,
             "bant_choices": choice_pairs("BANT_STATUS"),

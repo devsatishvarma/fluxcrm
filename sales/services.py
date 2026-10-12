@@ -12,6 +12,7 @@ from django.utils import timezone
 
 from audit.models import AuditEvent
 from core.access import get_scoped, scoped
+from core.display import age_days
 from core.exceptions import VersionConflict
 from core.taxonomy import DEAL_STAGE_PROBABILITY
 from core.validation import (
@@ -312,6 +313,8 @@ def deal_payload(deal: Deal) -> dict:
         "amount": None if deal.amount is None else str(deal.amount),
         "currency": deal.currency,
         "temperature": deal.temperature,
+        "age_days": age_days(deal.created_at),
+        "stage_age_days": age_days(deal.stage_entered_at),
         "expected_close_date": (
             None
             if deal.expected_close_date is None

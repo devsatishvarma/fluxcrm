@@ -47,6 +47,14 @@
       </div>
     {% endif %}
     <div class="col-md-2">
+      <label class="form-label" for="lead-temperature">Temperature</label>
+      <select class="form-select" id="lead-temperature" name="temperature">
+        {% for key, label in temperature_choices %}
+          <option value="{{ key }}"{% if query.temperature == key %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2">
       <label class="form-label" for="lead-created-after">Created after</label>
       <input class="form-control" id="lead-created-after" name="created_after" type="date" value="{{ query.created_after }}">
     </div>

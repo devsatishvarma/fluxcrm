@@ -3,6 +3,7 @@
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
+from activities.seed import seed_phase4
 from core.models import JobRun
 from identity.models import User
 from leads.seed import seed_phase2
@@ -40,7 +41,10 @@ class Command(BaseCommand):
             .first()
         ) or admin
         created_ids = seed_phase2(actor=admin, sdr=sdr, executive=admin)
+        created_ids.extend(seed_phase4(actor=admin))
         if created_ids:
             self.stdout.write(self.style.SUCCESS("Created: " + ", ".join(created_ids)))
         else:
-            self.stdout.write("Leads and deals were already present.")
+            self.stdout.write(
+                "Leads, deals, activities, and tasks were already present."
+            )

@@ -92,6 +92,14 @@ class CompanySettings(models.Model):
         validators=[MinValueValidator(1), MaxValueValidator(12)],
     )
     default_timezone = models.CharField(max_length=64, default="America/Los_Angeles")
+    lead_stale_days = models.PositiveSmallIntegerField(
+        default=14,
+        validators=[MinValueValidator(1), MaxValueValidator(365)],
+    )
+    deal_stale_days = models.PositiveSmallIntegerField(
+        default=21,
+        validators=[MinValueValidator(1), MaxValueValidator(365)],
+    )
     logo = models.FileField(upload_to=company_logo_path, blank=True)
 
     def __str__(self) -> str:

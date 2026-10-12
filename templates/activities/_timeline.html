@@ -1,0 +1,59 @@
+<h2>Timeline</h2>
+{% if activities %}
+  <ul>
+    {% for activity in activities %}
+      <li>
+        {{ activity.subject }}
+        ({{ activity.activity_type }})
+        at {{ activity.occurred_at|date:"Y-m-d H:i" }}
+      </li>
+    {% endfor %}
+  </ul>
+{% else %}
+  <p>No activities yet.</p>
+{% endif %}
+<h2>Tasks</h2>
+{% if tasks %}
+  <ul>
+    {% for task in tasks %}
+      <li>{{ task.title }} due {{ task.due_at|date:"Y-m-d H:i" }} ({{ task.status }})</li>
+    {% endfor %}
+  </ul>
+{% else %}
+  <p>No tasks yet.</p>
+{% endif %}
+<h2>Add task</h2>
+<form method="post" action="{% url 'activities:task_create' %}">
+  {% csrf_token %}
+  <input type="hidden" name="kind" value="{{ kind }}">
+  <input type="hidden" name="object_id" value="{{ object_id }}">
+  <label for="task-title-{{ kind }}">Title</label>
+  <input id="task-title-{{ kind }}" name="title" required>
+  <label for="task-due-{{ kind }}">Due</label>
+  <input id="task-due-{{ kind }}" name="due_at" type="datetime-local" required>
+  <label for="task-priority-{{ kind }}">Priority</label>
+  <select id="task-priority-{{ kind }}" name="priority">
+    <option value="LOW">Low</option>
+    <option value="NORMAL" selected>Normal</option>
+    <option value="HIGH">High</option>
+  </select>
+  <button class="btn btn-primary" type="submit">Add task</button>
+</form>
+<h2>Quick activity</h2>
+<form id="quick-activity" method="post" action="{% url 'activities:activity_create' %}">
+  {% csrf_token %}
+  <input type="hidden" name="kind" value="{{ kind }}">
+  <input type="hidden" name="object_id" value="{{ object_id }}">
+  <label for="activity-type-{{ kind }}">Type</label>
+  <select id="activity-type-{{ kind }}" name="activity_type">
+    <option value="CALL" selected>Call</option>
+    <option value="EMAIL">Email</option>
+    <option value="MEETING">Meeting</option>
+    <option value="NOTE">Note</option>
+  </select>
+  <label for="activity-subject-{{ kind }}">Subject</label>
+  <input id="activity-subject-{{ kind }}" name="subject" required>
+  <label for="activity-when-{{ kind }}">When</label>
+  <input id="activity-when-{{ kind }}" name="occurred_at" type="datetime-local">
+  <button class="btn btn-primary" type="submit">Log activity</button>
+</form>

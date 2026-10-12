@@ -32,6 +32,7 @@ class Lead(AuditedRecord):
         blank=True,
     )
     source = models.CharField(max_length=64)
+    temperature = models.CharField(max_length=16, default="WARM")
     stage = models.CharField(max_length=64)
     contact_substatus = models.CharField(max_length=64, blank=True)
     stage_entered_at = models.DateTimeField()

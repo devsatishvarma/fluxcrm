@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Tasks · FluxCRM{% endblock %}
+{% block content %}
+  <h1>Tasks</h1>
+  <h2>Add task</h2>
+  <form method="post" action="{% url 'activities:task_create' %}">
+    {% csrf_token %}
+    <label for="task-title">Title</label>
+    <input id="task-title" name="title" required>
+    <label for="task-due">Due</label>
+    <input id="task-due" name="due_at" type="datetime-local" required>
+    <label for="task-priority">Priority</label>
+    <select id="task-priority" name="priority">
+      <option value="LOW">Low</option>
+      <option value="NORMAL" selected>Normal</option>
+      <option value="HIGH">High</option>
+    </select>
+    <label for="task-lead">Lead</label>
+    <select id="task-lead" name="lead_id">
+      <option value="">None</option>
+      {% for lead in leads %}
+        <option value="{{ lead.pk }}">{{ lead.first_name }} {{ lead.last_name }} · {{ lead.company_name }}</option>
+      {% endfor %}
+    </select>
+    <label for="task-deal">Deal</label>
+    <select id="task-deal" name="deal_id">
+      <option value="">None</option>
+      {% for deal in deals %}
+        <option value="{{ deal.pk }}">{{ deal.title }}</option>
+      {% endfor %}
+    </select>
+    <button class="btn btn-primary" type="submit">Add task</button>
+  </form>
+  <nav aria-label="Task buckets">
+    {% for name in buckets %}
+      <a href="?bucket={{ name }}">{{ name|title }}</a>
+    {% endfor %}
+  </nav>
+  <p>Showing {{ bucket }} tasks.</p>
+  {% if tasks %}
+    <table class="table">
+      <caption>Open tasks</caption>
+      <thead>
+        <tr>
+          <th scope="col">Title</th>
+          <th scope="col">Due</th>
+          <th scope="col">Owner</th>
+          <th scope="col">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for task in tasks %}
+          <tr>
+            <td>{{ task.title }}</td>
+            <td>{{ task.due_at|date:"Y-m-d H:i" }}</td>
+            <td>{{ task.owner.display_name }}</td>
+            <td>
+              <form method="post" action="{% url 'activities:complete' task.pk %}">
+                {% csrf_token %}
+                <input type="hidden" name="version" value="{{ task.version }}">
+                <button type="submit">Complete</button>
+              </form>
+              <form method="post" action="{% url 'activities:snooze' task.pk %}">
+                {% csrf_token %}
+                <input type="hidden" name="version" value="{{ task.version }}">
+                <label for="snooze-{{ task.pk }}">Snooze until</label>
+                <input id="snooze-{{ task.pk }}" name="snooze_until" type="datetime-local" required>
+                <button type="submit">Snooze</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>No tasks in this bucket.</p>
+  {% endif %}
+{% endblock %}

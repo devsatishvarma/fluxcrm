@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Check the form · FluxCRM{% endblock %}
+{% block content %}
+  <h1>The follow-up was not saved</h1>
+  <ul>
+    {% for field, messages in errors.items %}
+      <li>{{ field }}: {{ messages|join:", " }}</li>
+    {% endfor %}
+  </ul>
+  {% if kind == "deal" %}
+    <p><a href="{% url 'sales:detail' object_id %}">Back to the deal</a></p>
+  {% elif object_id %}
+    <p><a href="{% url 'leads:detail' object_id %}">Back to the lead</a></p>
+  {% else %}
+    <p><a href="{% url 'activities:tasks' %}">Back to tasks</a></p>
+  {% endif %}
+{% endblock %}

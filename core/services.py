@@ -69,6 +69,8 @@ def company_snapshot(company: CompanySettings) -> dict:
         "base_currency": company.base_currency,
         "fiscal_year_start_month": company.fiscal_year_start_month,
         "default_timezone": company.default_timezone,
+        "lead_stale_days": company.lead_stale_days,
+        "deal_stale_days": company.deal_stale_days,
         "has_logo": bool(company.logo),
     }
 

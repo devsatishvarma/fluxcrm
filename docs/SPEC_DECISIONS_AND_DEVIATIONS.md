@@ -211,6 +211,53 @@ here before implementing it.
   activity, task, and primary-contact side effects to the phases that own them.
 - **Approval source:** Phase 3 delivery plan.
 
+### D-013 — Phase 4 activities, tasks, and reminders
+
+- **Date/status:** 2026-10-11 — Confirmed by proceeding from Phase 3 into Phase 4
+- **Decision:** An activity or task is one record. `ActivityLink` and `TaskLink`
+  attach it to a lead or deal, and the same pair cannot be stored twice. The
+  timeline of a record the user can already open shows every linked follow-up.
+  Creating or changing a follow-up still uses owner scope.
+- Quick-add on a lead or deal starts as a Call for that record. The `A` key
+  focuses it only when the cursor is outside a form field.
+- Task center buckets are overdue, due today, and upcoming, using the viewer's
+  time zone. Complete and snooze are audited and bump the version. Naive form
+  times are read in that user's zone; stored values stay UTC.
+- Reminders are in-app rows, one per task, recipient, and effective due time.
+  No email is sent. `run_due_jobs` still skips a repeated run in the same
+  minute. A failed run stays `FAILED` and is retried on a later minute without
+  creating a second reminder for a due time already delivered.
+- A lead is stale after 14 days without a newer linked activity, and a deal
+  after 21 days. Company administrators can change both thresholds. The list
+  badge uses one grouped query for the current page.
+- Synthetic `act-3002` and `task-4002` stay unseeded because they belong to
+  account deal `deal-2001`, which Phase 2 does not create. `act-3001`,
+  `act-3003`, and `task-4001` are seeded on the existing sample leads.
+- Stage moves keep the Phase 3 reason-based gates. Requiring a logged activity
+  or task before Contacted, Discovery, Proposal, or Closing is a later change
+  so existing audited transitions stay valid.
+- **Affected phases:** 4
+- **Specification impact:** Keeps reminder email deferred until a provider is
+  approved, and skips sample rows whose parent deal is not in the database.
+- **Approval source:** User request to proceed with Phase 4.
+
+### D-014 — Record age, time in stage, and lead temperature
+
+- **Date/status:** 2026-10-11 — Confirmed by user review of the lead and deal pages
+- **Decision:** Age is calculated from `created_at`. Time in the current stage is
+  calculated from `stage_entered_at`. Stage history states the stage that
+  started, or the move and the time spent in the previous stage. A baseline
+  row with no previous stage does not say “by after 0 seconds” or show the
+  internal “Phase 3 baseline” label.
+- Leads use the existing Hot, Warm, and Cold list. The architecture defined
+  that list on deals; leads now use the same values, defaulting to Warm when
+  a create request omits one. Sample leads are Hot, Warm, or Cold as seeded.
+- A task can be added from the lead, the deal, or the task list.
+- **Affected phases:** 2, 3, and 4
+- **Specification impact:** Adds lead temperature, which the architecture
+  model lists on deals only.
+- **Approval source:** User request after using the lead and deal pages.
+
 ## Starter taxonomy — version 1
 
 The user approved a standard, admin-editable starter set. Keys are stable

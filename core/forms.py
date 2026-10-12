@@ -113,6 +113,8 @@ class CompanySettingsForm(forms.ModelForm):
             "base_currency",
             "fiscal_year_start_month",
             "default_timezone",
+            "lead_stale_days",
+            "deal_stale_days",
             "logo",
         )
 
@@ -153,6 +155,8 @@ class CompanySettingsForm(forms.ModelForm):
             "base_currency": self.cleaned_data["base_currency"],
             "fiscal_year_start_month": self.cleaned_data["fiscal_year_start_month"],
             "default_timezone": self.cleaned_data["default_timezone"],
+            "lead_stale_days": self.cleaned_data["lead_stale_days"],
+            "deal_stale_days": self.cleaned_data["deal_stale_days"],
             "address": {
                 "street": self.cleaned_data["street"],
                 "city": self.cleaned_data["city"],

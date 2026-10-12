@@ -39,6 +39,9 @@ def lead_list(request):
         status = 422
     paginator = Paginator(queryset, PAGE_SIZE)
     page = paginator.get_page(request.GET.get("page") or 1)
+    from activities.services import attach_freshness
+
+    attach_freshness(list(page.object_list), "lead")
     filters = request.GET.copy()
     filters.pop("page", None)
     context = {
@@ -48,6 +51,7 @@ def lead_list(request):
         "filter_query": filters.urlencode(),
         "source_choices": choice_pairs("LEAD_SOURCE"),
         "stage_choices": choice_pairs("LEAD_STAGE"),
+        "temperature_choices": choice_pairs("TEMPERATURE"),
         "owner_choices": (
             User.objects.filter(is_active=True).order_by("display_name")
             if request.user.is_company_admin
@@ -91,12 +95,17 @@ def lead_detail(request, lead_id):
     from leads.services import lead_history
 
     stages = allowed_targets(LEAD_GRAPH, lead.stage)
+    from activities.services import timeline
+
+    activities, tasks = timeline(lead)
     return render(
         request,
         "leads/lead_detail.html",
         {
             "lead": lead,
             "deals": deals,
+            "activities": activities,
+            "tasks": tasks,
             "history": lead_history(lead).select_related("changed_by"),
             "allowed_stages": stages,
             "contact_substatus_choices": choice_pairs("CONTACT_SUBSTATUS"),

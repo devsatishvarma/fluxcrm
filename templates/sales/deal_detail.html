@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load crm %}
 {% block title %}{{ deal.title }} · FluxCRM{% endblock %}
 {% block content %}
   <h1>{{ deal.title }}</h1>
@@ -7,7 +8,11 @@
     <dt>Lead</dt>
     <dd><a href="{% url 'leads:detail' deal.lead.pk %}">{{ deal.lead.company_name }}</a></dd>
     <dt>Amount</dt><dd>{{ deal.amount }} {{ deal.currency }}</dd>
+    <dt>Temperature</dt><dd>{{ deal.temperature|temperature_label }}</dd>
+    <dt>Created</dt><dd>{{ deal.created_at|date:"Y-m-d" }}</dd>
+    <dt>Age</dt><dd>{{ deal.created_at|elapsed }}</dd>
     <dt>Stage</dt><dd>{{ deal.stage }}</dd>
+    <dt>Time in this stage</dt><dd>{{ deal.stage_entered_at|elapsed }}</dd>
     <dt>Probability</dt><dd>{{ deal.probability }}</dd>
     <dt>Expected close</dt><dd>{{ deal.expected_close_date|default:"—" }}</dd>
     <dt>Owner</dt><dd>{{ deal.owner.display_name }}</dd>
@@ -82,18 +87,25 @@
     <ul>
       {% for row in history %}
         <li>
-          {{ row.from_stage }} to {{ row.to_stage }}
-          by {{ row.changed_by.display_name }}
-          after {{ row.duration_seconds }} seconds.
-          Probability {{ row.probability_snapshot }}.
+          {% if row.from_stage %}
+            Moved from {{ row.from_stage }} to {{ row.to_stage }}
+            on {{ row.changed_at|date:"Y-m-d H:i" }}.
+            Spent {{ row.duration_seconds|duration }} in {{ row.from_stage }}.
+          {% else %}
+            Started in {{ row.to_stage }}
+            on {{ row.changed_at|date:"Y-m-d H:i" }}.
+          {% endif %}
+          {% if row.changed_by %}Recorded by {{ row.changed_by.display_name }}.{% endif %}
+          {% if row.probability_snapshot != None %}Probability {{ row.probability_snapshot }}.{% endif %}
           {% if row.probability_reason %}Override reason: {{ row.probability_reason }}.{% endif %}
-          {{ row.reason }}
+          {% if row.reason and row.reason != "Phase 3 baseline" %}{{ row.reason }}{% endif %}
         </li>
       {% endfor %}
     </ul>
   {% else %}
     <p>No stage changes yet.</p>
   {% endif %}
+  {% include "activities/_timeline.html" with kind="deal" object_id=deal.pk %}
   <h2>Delete deal</h2>
   <form method="post" action="{% url 'sales:delete' deal.pk %}">
     {% csrf_token %}

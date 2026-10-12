@@ -201,6 +201,8 @@ def test_company_values_persist_and_render_in_company_timezone(client):
             "base_currency": "USD",
             "fiscal_year_start_month": 1,
             "default_timezone": "America/Los_Angeles",
+            "lead_stale_days": 14,
+            "deal_stale_days": 21,
             "street": "26040 Acero",
             "city": "Mission Viejo",
             "region": "CA",

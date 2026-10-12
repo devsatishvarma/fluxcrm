@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load crm %}
 {% block title %}{{ lead.first_name }} {{ lead.last_name }} · FluxCRM{% endblock %}
 {% block content %}
   <h1>{{ lead.first_name }} {{ lead.last_name }}</h1>
@@ -7,7 +8,11 @@
     <dt>Company</dt><dd>{{ lead.company_name }}</dd>
     <dt>Email</dt><dd>{{ lead.email|default:"—" }}</dd>
     <dt>Source</dt><dd>{{ lead.source }}</dd>
+    <dt>Temperature</dt><dd>{{ lead.temperature|temperature_label }}</dd>
+    <dt>Created</dt><dd>{{ lead.created_at|date:"Y-m-d" }}</dd>
+    <dt>Age</dt><dd>{{ lead.created_at|elapsed }}</dd>
     <dt>Stage</dt><dd>{{ lead.stage }}</dd>
+    <dt>Time in this stage</dt><dd>{{ lead.stage_entered_at|elapsed }}</dd>
     <dt>Owner</dt><dd>{{ lead.owner.display_name }}</dd>
     <dt>External ID</dt><dd>{{ lead.external_id }}</dd>
   </dl>
@@ -72,16 +77,23 @@
     <ul>
       {% for row in history %}
         <li>
-          {{ row.from_stage }} to {{ row.to_stage }}
-          by {{ row.changed_by.display_name }}
-          after {{ row.duration_seconds }} seconds.
-          {{ row.reason }}
+          {% if row.from_stage %}
+            Moved from {{ row.from_stage }} to {{ row.to_stage }}
+            on {{ row.changed_at|date:"Y-m-d H:i" }}.
+            Spent {{ row.duration_seconds|duration }} in {{ row.from_stage }}.
+          {% else %}
+            Started in {{ row.to_stage }}
+            on {{ row.changed_at|date:"Y-m-d H:i" }}.
+          {% endif %}
+          {% if row.changed_by %}Recorded by {{ row.changed_by.display_name }}.{% endif %}
+          {% if row.reason and row.reason != "Phase 3 baseline" %}{{ row.reason }}{% endif %}
         </li>
       {% endfor %}
     </ul>
   {% else %}
     <p>No stage changes yet.</p>
   {% endif %}
+  {% include "activities/_timeline.html" with kind="lead" object_id=lead.pk %}
   <h2>Delete lead</h2>
   <form method="post" action="{% url 'leads:delete' lead.pk %}">
     {% csrf_token %}
