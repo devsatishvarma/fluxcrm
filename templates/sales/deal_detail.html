@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}{{ deal.title }} · FluxCRM{% endblock %}
+{% block content %}
+  <h1>{{ deal.title }}</h1>
+  <p><a href="{% url 'sales:edit' deal.pk %}">Edit</a></p>
+  <dl>
+    <dt>Lead</dt>
+    <dd><a href="{% url 'leads:detail' deal.lead.pk %}">{{ deal.lead.company_name }}</a></dd>
+    <dt>Amount</dt><dd>{{ deal.amount }} {{ deal.currency }}</dd>
+    <dt>Stage</dt><dd>{{ deal.stage }}</dd>
+    <dt>Probability</dt><dd>{{ deal.probability }}</dd>
+    <dt>Expected close</dt><dd>{{ deal.expected_close_date|default:"—" }}</dd>
+    <dt>Owner</dt><dd>{{ deal.owner.display_name }}</dd>
+    <dt>External ID</dt><dd>{{ deal.external_id }}</dd>
+  </dl>
+  {% if deal.notes %}<h2>Notes</h2><p>{{ deal.notes }}</p>{% endif %}
+  <h2>Delete deal</h2>
+  <form method="post" action="{% url 'sales:delete' deal.pk %}">
+    {% csrf_token %}
+    {{ delete_form.as_p }}
+    <button class="btn btn-outline-danger" type="submit">Delete deal</button>
+  </form>
+{% endblock %}

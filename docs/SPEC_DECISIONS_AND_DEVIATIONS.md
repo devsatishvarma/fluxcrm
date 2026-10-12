@@ -152,6 +152,28 @@ here before implementing it.
   unapproved production email service.
 - **Approval source:** Phase 1 delivery plan.
 
+### D-011 — Phase 2 lead-linked deals
+
+- **Date/status:** 2026-10-11 — Confirmed from the Phase 2 delivery boundary
+- A Deal requires a Lead. It has no Account link until Phase 5, so sample deals
+  `deal-2001` and `deal-2003` are not seeded.
+- Phase 2 validates frozen taxonomy keys, money, currency, dates, owners, and
+  record versions. Stage transition rules, stage history, Kanban, BANT, OEM
+  fields, and conversion remain later phases. `stage_entered_at` records only
+  the current stage entry.
+- Admin scope is all records. Standard User scope is records they own.
+  Manager-tree visibility remains Phase 6.
+- List views must stay free of per-row queries. The timed list target at
+  500,000 rows remains a Phase 9 measurement. On 2026-10-11 the user accepted
+  that deferral because that volume is not expected soon. Phase 2 instead
+  proved the list query count does not grow with the rows on the page.
+- Seed and API keys use this document's uppercase taxonomy. The architecture
+  sample's lowercase source names are illustrative only.
+- **Affected phases:** 2, 3, 5, 6, and 9
+- **Specification impact:** Preserves the Phase 2 exit gate that a Deal cannot
+  be orphaned or attached to an Account yet.
+- **Approval source:** Phase 2 delivery plan.
+
 ## Starter taxonomy — version 1
 
 The user approved a standard, admin-editable starter set. Keys are stable

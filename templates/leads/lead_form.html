@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}{% if lead %}Edit lead{% else %}Add lead{% endif %} · FluxCRM{% endblock %}
+{% block content %}
+  <h1>{% if lead %}Edit lead{% else %}Add lead{% endif %}</h1>
+  <form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button class="btn btn-primary" type="submit">Save lead</button>
+    {% if lead %}<a href="{% url 'leads:detail' lead.pk %}">Cancel</a>{% endif %}
+  </form>
+{% endblock %}

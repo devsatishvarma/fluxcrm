@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Leads · FluxCRM{% endblock %}
+{% block content %}
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="mb-0">Leads</h1>
+    <a class="btn btn-primary" href="{% url 'leads:create' %}">Add lead</a>
+  </div>
+  <form
+    class="row g-2 align-items-end mb-3"
+    method="get"
+    hx-get="{% url 'leads:list' %}"
+    hx-target="#lead-results"
+    hx-push-url="true"
+  >
+    <div class="col-md-4">
+      <label class="form-label" for="lead-q">Search</label>
+      <input class="form-control" id="lead-q" name="q" value="{{ query.q }}">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label" for="lead-source">Source</label>
+      <input class="form-control" id="lead-source" name="source" value="{{ query.source }}">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label" for="lead-stage">Stage</label>
+      <input class="form-control" id="lead-stage" name="stage" value="{{ query.stage }}">
+    </div>
+    <div class="col-md-2">
+      <button class="btn btn-outline-primary" type="submit">Filter</button>
+    </div>
+  </form>
+  <div id="lead-results">
+    {% include "leads/_lead_results.html" %}
+  </div>
+{% endblock %}

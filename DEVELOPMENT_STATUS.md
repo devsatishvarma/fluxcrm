@@ -5,25 +5,35 @@
 
 ## Current position
 
-- **MVP completion:** 20% (14 of 69 Phase 0–9 gate items verified)
-- **Current phase:** Phase 2 — Leads and lead-linked Deals
+- **MVP completion:** 30% (21 of 69 Phase 0–9 gate items verified)
+- **Current phase:** Phase 3 — Lead and Deal workflow
 - **Phase status:** Not started
 - **Phase completion:** 0% (0 of 7 gate items verified)
 - **Planning baseline:** Complete
 - **Last updated:** 2026-10-11
-- **Last verified result:** Phase 1 identity gates passed on a clean MySQL
-  database, in pytest, and against the local server. Production email delivery
-  is still undecided.
+- **Last verified result:** Phase 2 lead and deal gates passed. The 500,000-row
+  list timing stays with Phase 9, accepted because that volume is not expected
+  soon.
 
-## Current phase gate — Phase 2
+## Current phase gate — Phase 3
 
-- [ ] CRUD, search, filtering, pagination, and soft delete work in the UI and API.
-- [ ] A Deal cannot be orphaned or linked to an Account before Phase 5.
-- [ ] Invalid owners, taxonomy keys, money, currency, and dates are rejected.
-- [ ] Stale versions return a conflict without overwriting newer data.
-- [ ] Direct URL and API attempts cannot cross owner scope.
-- [ ] Displayed fixture values reconcile to database values.
-- [ ] Representative lists avoid N+1 queries and meet the phase performance budget.
+- [ ] Every allowed and rejected transition is covered at the service, UI, and API.
+- [ ] Drag and drop cannot bypass stage gates and explains missing fields.
+- [ ] Terminal outcome reasons and Won amount and close date are enforced.
+- [ ] Concurrent changes conflict instead of overwriting newer data.
+- [ ] History records actor, time, duration, reason, and probability.
+- [ ] Closed and held Deals are excluded from open pipeline totals.
+- [ ] Admin correction is reversible where possible and always audited.
+
+## Completed phase gate — Phase 2
+
+- [x] CRUD, search, filtering, pagination, and soft delete work in the UI and API.
+- [x] A Deal cannot be orphaned or linked to an Account before Phase 5.
+- [x] Invalid owners, taxonomy keys, money, currency, and dates are rejected.
+- [x] Stale versions return a conflict without overwriting newer data.
+- [x] Direct URL and API attempts cannot cross owner scope.
+- [x] Displayed fixture values reconcile to database values.
+- [x] Representative lists avoid N+1 queries and meet the phase performance budget.
 
 ## Completed phase gate — Phase 1
 
@@ -39,8 +49,9 @@
 
 - **Phase 0 — Foundation:** 7/7, complete.
 - **Phase 1 — Company and identity:** 7/7, complete.
-- **Phase 2 — Leads and lead-linked Deals:** 0/7, not started.
-- **Phase 3 — Workflow:** 0/7, waiting for Phase 2.
+- **Phase 2 — Leads and lead-linked Deals:** 7/7, complete. List queries stayed
+  flat. The 500,000-row clock is a Phase 9 measurement, accepted on 2026-10-11.
+- **Phase 3 — Workflow:** 0/7, not started.
 - **Phase 4 — Activities and tasks:** 0/6, waiting for Phase 3.
 - **Phase 5 — Accounts, Contacts, conversion:** 0/7, waiting for Phase 4.
 - **Phase 6 — Teams, RBAC, audit:** 0/7, waiting for Phase 5.
@@ -51,7 +62,7 @@
 
 ## Active blockers
 
-None for starting Phase 2.
+None for starting Phase 3.
 
 ## Decisions needed later
 
@@ -68,10 +79,9 @@ None for starting Phase 2.
 
 ## Next three actions
 
-1. Freeze version 1 of the starter taxonomy before Lead or Deal migrations.
-2. Define normalization, owner scope, optimistic locking, and soft delete for
-   leads and lead-linked deals.
-3. Implement Lead and lead-linked Deal models, screens, and API.
+1. Encode allowed lead and deal transitions, required reasons, and close rules.
+2. Record append-only stage history through one transition service.
+3. Add list and Kanban moves that call that same service.
 
 ## Latest evidence
 
@@ -125,6 +135,22 @@ None for starting Phase 2.
   for `/`, `/company/`, `/users/`, and a repeated `/setup/`. The browser
   password field was not submitted; the signed-in pages were checked on the
   same local server.
+- 2026-10-11: Nineteen pytest tests passed on MySQL, including the new lead
+  and deal coverage. UI and API create, search, filter, paginate, and soft-delete
+  records. A deal without a lead is rejected, as is an Account link. Invalid
+  stage, type, amount, currency, date, and owner values return 422. A stale
+  version returns 409 and leaves the stored company name unchanged. Another
+  owner's direct URL and API read return 403, and that user's list count is 0.
+- 2026-10-11: Seeded `lead-1002` and `deal-2002` match the database and the
+  signed-in pages: Northstar Robotics and 12500.00. An empty search says no
+  leads match. Adding three leads did not increase the list query count.
+  Create logs and audit snapshots omit the lead email and notes.
+- 2026-10-11: The local server required login for `/leads/`. After signing in,
+  `/leads/` showed Northstar Robotics and Pinecone Health Group, the empty
+  filter showed its empty state, and `/deals/` showed the Northstar renewal
+  at 12500.00.
+- 2026-10-11: The user accepted leaving the 500,000-row list timing for Phase 9.
+  Phase 2's list gate is complete on the flat query-count evidence.
 
 ## Recent decision/change log
 
@@ -144,6 +170,10 @@ None for starting Phase 2.
 - **2026-10-11 — Identity app:** Custom users live in `identity` so the
   swappable user is created in that app's first migration. `accounts` stays
   reserved for CRM customer records. See D-009 and D-010.
+- **2026-10-11 — Lead-linked deals:** Phase 2 deals require a lead and do not
+  link to an Account yet. See D-011.
+- **2026-10-11 — List timing:** The 500,000-row list measurement stays in
+  Phase 9. The user accepted that because that volume is not expected soon.
 
 ## How to maintain this file
 

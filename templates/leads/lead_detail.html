@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}{{ lead.first_name }} {{ lead.last_name }} · FluxCRM{% endblock %}
+{% block content %}
+  <h1>{{ lead.first_name }} {{ lead.last_name }}</h1>
+  <p><a href="{% url 'leads:edit' lead.pk %}">Edit</a></p>
+  <dl>
+    <dt>Company</dt><dd>{{ lead.company_name }}</dd>
+    <dt>Email</dt><dd>{{ lead.email|default:"—" }}</dd>
+    <dt>Source</dt><dd>{{ lead.source }}</dd>
+    <dt>Stage</dt><dd>{{ lead.stage }}</dd>
+    <dt>Owner</dt><dd>{{ lead.owner.display_name }}</dd>
+    <dt>External ID</dt><dd>{{ lead.external_id }}</dd>
+  </dl>
+  {% if lead.notes %}<h2>Notes</h2><p>{{ lead.notes }}</p>{% endif %}
+  <h2>Deals</h2>
+  {% if deals %}
+    <ul>
+      {% for deal in deals %}
+        <li><a href="{% url 'sales:detail' deal.pk %}">{{ deal.title }}</a> {{ deal.amount }} {{ deal.currency }}</li>
+      {% empty %}
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p>No deals are linked to this lead.</p>
+  {% endif %}
+  <p><a href="{% url 'sales:create' %}?lead={{ lead.pk }}">Add deal</a></p>
+  <h2>Delete lead</h2>
+  <form method="post" action="{% url 'leads:delete' lead.pk %}">
+    {% csrf_token %}
+    {{ delete_form.as_p }}
+    <button class="btn btn-outline-danger" type="submit">Delete lead</button>
+  </form>
+{% endblock %}

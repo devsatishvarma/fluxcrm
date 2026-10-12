@@ -1,0 +1,43 @@
+{% if errors %}
+  <p role="alert">
+    {% for field, messages in errors.items %}{{ field }}: {{ messages|join:", " }} {% endfor %}
+  </p>
+{% endif %}
+{% if page_obj.object_list %}
+  <table class="table">
+    <caption>Leads you can access</caption>
+    <thead>
+      <tr>
+        <th scope="col">Name</th>
+        <th scope="col">Company</th>
+        <th scope="col">Source</th>
+        <th scope="col">Stage</th>
+        <th scope="col">Owner</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for lead in page_obj %}
+        <tr>
+          <td><a href="{% url 'leads:detail' lead.pk %}">{{ lead.first_name }} {{ lead.last_name }}</a></td>
+          <td>{{ lead.company_name }}</td>
+          <td>{{ lead.source }}</td>
+          <td>{{ lead.stage }}</td>
+          <td>{{ lead.owner.display_name }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% else %}
+  <p>No leads match these filters.</p>
+{% endif %}
+{% if page_obj.paginator.num_pages > 1 %}
+  <nav aria-label="Lead pages">
+    {% if page_obj.has_previous %}
+      <a href="?{{ filter_query }}&amp;page={{ page_obj.previous_page_number }}">Previous</a>
+    {% endif %}
+    <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+    {% if page_obj.has_next %}
+      <a href="?{{ filter_query }}&amp;page={{ page_obj.next_page_number }}">Next</a>
+    {% endif %}
+  </nav>
+{% endif %}

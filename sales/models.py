@@ -1,1 +1,46 @@
-# Create your models here.
+"""Lead-linked deals. Account linkage arrives in Phase 5."""
+
+from django.conf import settings
+from django.db import models
+
+from core.records import AuditedRecord
+from leads.models import Lead
+
+
+class Deal(AuditedRecord):
+    """A sales deal that must belong to a lead."""
+
+    title = models.CharField(max_length=200)
+    lead = models.ForeignKey(Lead, on_delete=models.PROTECT, related_name="deals")
+    deal_type = models.CharField(max_length=64)
+    amount = models.DecimalField(
+        max_digits=18,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
+    currency = models.CharField(max_length=3, default="USD")
+    temperature = models.CharField(max_length=16)
+    expected_close_date = models.DateField(null=True, blank=True)
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="owned_deals",
+    )
+    stage = models.CharField(max_length=64)
+    stage_entered_at = models.DateTimeField()
+    probability = models.DecimalField(max_digits=5, decimal_places=2)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=("owner", "stage", "created_at")),
+            models.Index(fields=("deleted_at", "owner")),
+            models.Index(fields=("lead", "stage")),
+            models.Index(fields=("expected_close_date",)),
+            models.Index(fields=("stage", "created_at")),
+        ]
+        ordering = ("-created_at",)
+
+    def __str__(self) -> str:
+        return self.title
