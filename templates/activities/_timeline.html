@@ -1,59 +1,174 @@
-<h2>Timeline</h2>
-{% if activities %}
-  <ul>
-    {% for activity in activities %}
-      <li>
-        {{ activity.subject }}
-        ({{ activity.activity_type }})
-        at {{ activity.occurred_at|date:"Y-m-d H:i" }}
-      </li>
-    {% endfor %}
-  </ul>
-{% else %}
-  <p>No activities yet.</p>
-{% endif %}
-<h2>Tasks</h2>
-{% if tasks %}
-  <ul>
-    {% for task in tasks %}
-      <li>{{ task.title }} due {{ task.due_at|date:"Y-m-d H:i" }} ({{ task.status }})</li>
-    {% endfor %}
-  </ul>
-{% else %}
-  <p>No tasks yet.</p>
-{% endif %}
-<h2>Add task</h2>
-<form method="post" action="{% url 'activities:task_create' %}">
-  {% csrf_token %}
-  <input type="hidden" name="kind" value="{{ kind }}">
-  <input type="hidden" name="object_id" value="{{ object_id }}">
-  <label for="task-title-{{ kind }}">Title</label>
-  <input id="task-title-{{ kind }}" name="title" required>
-  <label for="task-due-{{ kind }}">Due</label>
-  <input id="task-due-{{ kind }}" name="due_at" type="datetime-local" required>
-  <label for="task-priority-{{ kind }}">Priority</label>
-  <select id="task-priority-{{ kind }}" name="priority">
-    <option value="LOW">Low</option>
-    <option value="NORMAL" selected>Normal</option>
-    <option value="HIGH">High</option>
-  </select>
-  <button class="btn btn-primary" type="submit">Add task</button>
-</form>
-<h2>Quick activity</h2>
-<form id="quick-activity" method="post" action="{% url 'activities:activity_create' %}">
-  {% csrf_token %}
-  <input type="hidden" name="kind" value="{{ kind }}">
-  <input type="hidden" name="object_id" value="{{ object_id }}">
-  <label for="activity-type-{{ kind }}">Type</label>
-  <select id="activity-type-{{ kind }}" name="activity_type">
-    <option value="CALL" selected>Call</option>
-    <option value="EMAIL">Email</option>
-    <option value="MEETING">Meeting</option>
-    <option value="NOTE">Note</option>
-  </select>
-  <label for="activity-subject-{{ kind }}">Subject</label>
-  <input id="activity-subject-{{ kind }}" name="subject" required>
-  <label for="activity-when-{{ kind }}">When</label>
-  <input id="activity-when-{{ kind }}" name="occurred_at" type="datetime-local">
-  <button class="btn btn-primary" type="submit">Log activity</button>
-</form>
+{% load crm %}
+<section>
+  <h2>Timeline</h2>
+  {% if activities %}
+    <ul class="list-unstyled">
+      {% for activity in activities %}
+        <li class="mb-3">
+          <strong>{{ activity.subject }}</strong>
+          ({{ activity.activity_type }}) · {{ activity.occurred_at|date:"m-d-Y, h:i A" }}
+          {% can "activity" "U" as can_edit_activity %}
+          {% can "activity" "D" as can_delete_activity %}
+          {% if can_edit_activity or can_delete_activity %}
+            <details class="mt-1">
+              <summary>Edit or delete</summary>
+              {% if can_edit_activity %}
+                <form class="row g-2 mt-1" method="post" action="{% url 'activities:activity_update' activity.pk %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="version" value="{{ activity.version }}">
+                  <input type="hidden" name="kind" value="{{ kind }}">
+                  <input type="hidden" name="object_id" value="{{ object_id }}">
+                  <div class="col-md-4">
+                    <label class="form-label" for="activity-type-{{ activity.pk }}">Type</label>
+                    <select class="form-select" id="activity-type-{{ activity.pk }}" name="activity_type">
+                      <option value="CALL" {% if activity.activity_type == "CALL" %}selected{% endif %}>Call</option>
+                      <option value="EMAIL" {% if activity.activity_type == "EMAIL" %}selected{% endif %}>Email</option>
+                      <option value="MEETING" {% if activity.activity_type == "MEETING" %}selected{% endif %}>Meeting</option>
+                      <option value="NOTE" {% if activity.activity_type == "NOTE" %}selected{% endif %}>Note</option>
+                    </select>
+                  </div>
+                  <div class="col-md-8">
+                    <label class="form-label" for="activity-subject-{{ activity.pk }}">Subject</label>
+                    <input class="form-control" id="activity-subject-{{ activity.pk }}" name="subject" value="{{ activity.subject }}">
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label" for="activity-when-{{ activity.pk }}">When</label>
+                    <input class="form-control" id="activity-when-{{ activity.pk }}" name="occurred_at" type="datetime-local" value="{{ activity.occurred_at|date:'Y-m-d' }}T{{ activity.occurred_at|date:'H:i' }}">
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label" for="activity-outcome-{{ activity.pk }}">Outcome</label>
+                    <input class="form-control" id="activity-outcome-{{ activity.pk }}" name="outcome" value="{{ activity.outcome }}">
+                  </div>
+                  <div class="col-12">
+                    <label class="form-label" for="activity-body-{{ activity.pk }}">Notes</label>
+                    <textarea class="form-control" id="activity-body-{{ activity.pk }}" name="body" rows="2">{{ activity.body }}</textarea>
+                  </div>
+                  <div class="col-12">
+                    <button class="btn btn-sm btn-primary" type="submit">Save activity</button>
+                  </div>
+                </form>
+              {% endif %}
+              {% if can_delete_activity %}
+                <form class="mt-2" method="post" action="{% url 'activities:activity_delete' activity.pk %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="version" value="{{ activity.version }}">
+                  <input type="hidden" name="kind" value="{{ kind }}">
+                  <input type="hidden" name="object_id" value="{{ object_id }}">
+                  <label class="form-label" for="activity-delete-{{ activity.pk }}">Delete reason</label>
+                  <input class="form-control mb-2" id="activity-delete-{{ activity.pk }}" name="delete_reason" required minlength="3">
+                  <button class="btn btn-sm btn-outline-danger" type="submit">Delete activity</button>
+                </form>
+              {% endif %}
+            </details>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p>No activities yet.</p>
+  {% endif %}
+  <form id="quick-activity" method="post" action="{% url 'activities:activity_create' %}">
+    {% csrf_token %}
+    <input type="hidden" name="kind" value="{{ kind }}">
+    <input type="hidden" name="object_id" value="{{ object_id }}">
+    <div class="row g-2">
+      <div class="col-md-4">
+        <label class="form-label" for="quick-activity-type">Activity</label>
+        <select class="form-select" id="quick-activity-type" name="activity_type">
+          <option value="CALL" selected>Call</option>
+          <option value="EMAIL">Email</option>
+          <option value="MEETING">Meeting</option>
+          <option value="NOTE">Note</option>
+        </select>
+      </div>
+      <div class="col-md-8">
+        <label class="form-label" for="quick-activity-subject">Subject</label>
+        <input class="form-control" id="quick-activity-subject" name="subject" required>
+      </div>
+    </div>
+    <button class="btn btn-sm btn-primary mt-2" type="submit">Add activity</button>
+  </form>
+</section>
+<section class="mt-4">
+  <h2>Tasks</h2>
+  {% if tasks %}
+    <ul>
+      {% for task in tasks %}
+        <li class="mb-2">
+          {{ task.title }} · {{ task.status }} · due {{ task.due_at|date:"m-d-Y, h:i A" }}
+          {% if task.related %}
+            ·
+            {% for item in task.related %}
+              <a href="{{ item.url }}">{{ item.label }}</a>{% if not forloop.last %}, {% endif %}
+            {% endfor %}
+          {% endif %}
+          {% if task.status == "OPEN" or task.status == "HOLD" %}
+            {% can "task" "U" as can_update_task %}
+            {% can "task" "D" as can_delete_task %}
+            {% if can_update_task %}
+              {% if task.status == "OPEN" %}
+                <form class="d-inline" method="post" action="{% url 'activities:complete' task.pk %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="version" value="{{ task.version }}">
+                  <input type="hidden" name="kind" value="{{ kind }}">
+                  <input type="hidden" name="object_id" value="{{ object_id }}">
+                  <button class="btn btn-sm btn-outline-primary" type="submit">Complete</button>
+                </form>
+                <form class="d-inline" method="post" action="{% url 'activities:hold' task.pk %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="version" value="{{ task.version }}">
+                  <input type="hidden" name="kind" value="{{ kind }}">
+                  <input type="hidden" name="object_id" value="{{ object_id }}">
+                  <button class="btn btn-sm btn-outline-secondary" type="submit">Hold</button>
+                </form>
+              {% else %}
+                <form class="d-inline" method="post" action="{% url 'activities:resume' task.pk %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="version" value="{{ task.version }}">
+                  <input type="hidden" name="kind" value="{{ kind }}">
+                  <input type="hidden" name="object_id" value="{{ object_id }}">
+                  <button class="btn btn-sm btn-outline-secondary" type="submit">Resume</button>
+                </form>
+              {% endif %}
+              <form class="d-inline" method="post" action="{% url 'activities:cancel' task.pk %}">
+                {% csrf_token %}
+                <input type="hidden" name="version" value="{{ task.version }}">
+                <input type="hidden" name="kind" value="{{ kind }}">
+                <input type="hidden" name="object_id" value="{{ object_id }}">
+                <button class="btn btn-sm btn-outline-secondary" type="submit">Cancel</button>
+              </form>
+            {% endif %}
+            {% if can_delete_task %}
+              <form class="d-inline" method="post" action="{% url 'activities:delete' task.pk %}">
+                {% csrf_token %}
+                <input type="hidden" name="version" value="{{ task.version }}">
+                <input type="hidden" name="kind" value="{{ kind }}">
+                <input type="hidden" name="object_id" value="{{ object_id }}">
+                <input name="delete_reason" placeholder="Delete reason" required minlength="3">
+                <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+              </form>
+            {% endif %}
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p>No tasks yet.</p>
+  {% endif %}
+  <form method="post" action="{% url 'activities:task_create' %}">
+    {% csrf_token %}
+    <input type="hidden" name="kind" value="{{ kind }}">
+    <input type="hidden" name="object_id" value="{{ object_id }}">
+    <div class="row g-2">
+      <div class="col-md-8">
+        <label class="form-label" for="quick-task-title">Task</label>
+        <input class="form-control" id="quick-task-title" name="title" required>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="quick-task-due">Due</label>
+        <input class="form-control" id="quick-task-due" name="due_at" type="datetime-local" required>
+      </div>
+    </div>
+    <button class="btn btn-sm btn-primary mt-2" type="submit">Add task</button>
+  </form>
+</section>

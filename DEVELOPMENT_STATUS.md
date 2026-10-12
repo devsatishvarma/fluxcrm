@@ -5,24 +5,34 @@
 
 ## Current position
 
-- **MVP completion:** 59% (41 of 69 Phase 0–9 gate items verified)
-- **Current phase:** Phase 6 — Teams, RBAC, and audit review
+- **MVP completion:** 70% (48 of 69 Phase 0–9 gate items verified)
+- **Current phase:** Phase 7 — Reports and dashboards
 - **Phase status:** Not started
 - **Phase completion:** 0% (0 of 7 gate items verified)
 - **Planning baseline:** Complete
-- **Code baseline:** Tag `pre-phase-5`. Phase 5 is implemented and verified locally, and is not committed yet.
+- **Code baseline:** Tag `pre-phase-7` on this commit. Phase 6 access control and the later task, settings, date, and amount work are included. Phase 7 is not started.
 - **Last updated:** 2026-10-11
-- **Last verified result:** Phase 5 passed 54 MySQL tests, system checks, and migration-drift checks. The Django test client exercised account creation, duplicate confirmation, and conversion.
+- **Last verified result:** 73 MySQL tests passed, plus Ruff and system checks, before this checkpoint.
 
-## Current phase gate — Phase 6
+## Current phase gate — Phase 7
 
-- [ ] Every permission-matrix cell has positive and negative tests.
-- [ ] Managers see recursive descendants and no unrelated branch.
-- [ ] Read-only users cannot mutate through forms, HTMX, API, or crafted requests.
-- [ ] Export remains separately permissioned.
-- [ ] Privilege changes and denials are logged without exposing CRM content.
-- [ ] Audit rows cannot be created, updated, or deleted through user-facing paths.
-- [ ] Active administrator membership is manually reviewed.
+- [ ] Every total reconciles to hand-checked fixtures.
+- [ ] Parent rollups do not double-count descendants.
+- [ ] Cohort, fiscal-quarter, prior-period, and time-zone boundaries are correct.
+- [ ] Raw rows and aggregates expose no records beyond viewer scope.
+- [ ] Large detail results remain paginated.
+- [ ] Report duration and query count meet measured budgets.
+- [ ] Export audit includes actor, filters, fields, and row count.
+
+## Completed phase gate — Phase 6
+
+- [x] Every permission-matrix cell has positive and negative tests.
+- [x] Managers see recursive descendants and no unrelated branch.
+- [x] Read-only users cannot mutate through forms, HTMX, API, or crafted requests.
+- [x] Export remains separately permissioned.
+- [x] Privilege changes and denials are logged without exposing CRM content.
+- [x] Audit rows cannot be created, updated, or deleted through user-facing paths.
+- [x] Active administrator membership is manually reviewed.
 
 ## Completed phase gate — Phase 5
 
@@ -88,17 +98,17 @@
 - **Phase 5 — Accounts, Contacts, conversion:** 7/7, complete. Hierarchies,
   one primary contact, explicit duplicate choice, and one conversion
   transaction. See D-016.
-- **Phase 6 — Teams, RBAC, audit:** 0/7, not started.
-- **Phase 7 — Reports and dashboards:** 0/7, waiting for Phase 6.
+- **Phase 6 — Teams, RBAC, audit:** 7/7, complete. See D-018.
+- **Phase 7 — Reports and dashboards:** 0/7, not started.
 - **Phase 8 — Import/export:** 0/8, waiting for Phase 7.
 - **Phase 9 — Cloud pilot/hardening:** 0/6, waiting for Phase 8.
 - **Phase 10 — Post-MVP modules:** separately approved; excluded from MVP %.
 
 ## Active blockers
 
-None for starting Phase 6. Stage moves still use the Phase 3 reason-based
+None for starting Phase 7. Stage moves still use the Phase 3 reason-based
 gates; requiring a logged activity before a stage change is a later decision.
-See D-013. Manager-tree visibility starts in Phase 6.
+See D-013.
 
 ## Decisions needed later
 
@@ -115,9 +125,9 @@ See D-013. Manager-tree visibility starts in Phase 6.
 
 ## Next three actions
 
-1. Define the role matrix, recursive manager traversal, and denied-access logging.
-2. Implement teams, manager scope, and editable grants on the existing record pages.
-3. Cover every permission-matrix cell with positive and negative tests.
+1. Write the fixture equation for each rep report before implementing its query.
+2. Add the rep dashboard for open leads, pipeline, overdue follow-ups, and recent activity.
+3. Reconcile those totals to the fixture and confirm they stay inside viewer scope.
 
 ## Latest evidence
 
@@ -254,6 +264,22 @@ See D-013. Manager-tree visibility starts in Phase 6.
   Lost convert the source lead without changing the lead stage. An exact
   company match receives the lead as a contact; a similar name gets a new
   account. Closed Hold does not convert. See D-017.
+- 2026-10-11: Phase 6 passed 69 MySQL tests, Ruff, system checks, and
+  migration-drift checks. Managers see descendant records only. Read-only
+  requests do not change records. Export is a separate grant. Audit rows
+  reject update and delete. Active administrator reviewed: `satish`. See D-018.
+- 2026-10-11: Tasks show their lead, contact, and deal, and can be held,
+  resumed, cancelled, or deleted. Timeline activities can be edited or
+  deleted. Detail pages use two columns. Lists sort by rating, stage, amount,
+  age, confidence, follow-up, and owner. 72 MySQL tests passed. Phase 7
+  report screens are not started. See D-019.
+- 2026-10-11: The task page opens on every open task. Overdue, due later
+  today, upcoming, held, completed, and cancelled each have a list. Displayed
+  dates use mm-dd-yyyy, hh:mm AM/PM. See D-020.
+- 2026-10-11: Company, Teams, Users, Roles, and Audit are under Settings.
+  Help sits next to Log out. See D-021.
+- 2026-10-11: Shown amounts are whole dollars with the symbol first, such as
+  $ 12,500. Stored amounts keep cents. See D-022.
 
 ## Recent decision/change log
 
@@ -292,6 +318,9 @@ See D-013. Manager-tree visibility starts in Phase 6.
 - **2026-10-11 — Accounts and conversion:** A deal belongs to one lead or one
   account. Conversion keeps the lead, requires an explicit duplicate choice,
   and moves only open deals. See D-016.
+- **2026-10-11 — Phase 6 access:** The architecture matrix is enforced in
+  server-side grants. Standard User remains an own-records role. Sales
+  Director sees the whole reporting line. See D-018.
 
 ## How to maintain this file
 

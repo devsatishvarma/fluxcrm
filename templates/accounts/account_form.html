@@ -9,26 +9,28 @@
   {% endif %}
   <form method="post">
     {% csrf_token %}
-    <div class="mb-3">
-      <label class="form-label" for="account-name">Name</label>
-      <input class="form-control" id="account-name" name="name" value="{{ posted.name }}" required>
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label" for="account-name">Name</label>
+        <input class="form-control" id="account-name" name="name" value="{{ posted.name }}" required>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="account-type">Type</label>
+        <select class="form-select" id="account-type" name="account_type" required>
+          {% for key, label in types %}
+            <option value="{{ key }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="account-website">Website</label>
+        <input class="form-control" id="account-website" name="website_url" value="{{ posted.website_url }}">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="account-phone">Phone</label>
+        <input class="form-control" id="account-phone" name="phone" value="{{ posted.phone }}">
+      </div>
     </div>
-    <div class="mb-3">
-      <label class="form-label" for="account-type">Type</label>
-      <select class="form-select" id="account-type" name="account_type" required>
-        {% for key, label in types %}
-          <option value="{{ key }}">{{ label }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="mb-3">
-      <label class="form-label" for="account-website">Website</label>
-      <input class="form-control" id="account-website" name="website_url" value="{{ posted.website_url }}">
-    </div>
-    <div class="mb-3">
-      <label class="form-label" for="account-phone">Phone</label>
-      <input class="form-control" id="account-phone" name="phone" value="{{ posted.phone }}">
-    </div>
-    <button class="btn btn-primary" type="submit">Save</button>
+    <button class="btn btn-primary mt-3" type="submit">Save</button>
   </form>
 {% endblock %}

@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Administrators · FluxCRM{% endblock %}
+{% block content %}
+  {% include "core/_settings_nav.html" %}
+  <h1>Active administrators</h1>
+  {% if reviewed %}<p role="status">Review recorded.</p>{% endif %}
+  <table class="table">
+    <caption>Users with the Admin role</caption>
+    <thead>
+      <tr>
+        <th scope="col">Name</th>
+        <th scope="col">Username</th>
+        <th scope="col">Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for admin in admins %}
+        <tr>
+          <td>{{ admin.display_name }}</td>
+          <td>{{ admin.username }}</td>
+          <td>{% if admin.is_active %}Active{% else %}Disabled{% endif %}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <form method="post">
+    {% csrf_token %}
+    <button class="btn btn-primary" type="submit">Record review</button>
+  </form>
+{% endblock %}

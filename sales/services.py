@@ -46,6 +46,12 @@ DEAL_ORDERING = {
     "-expected_close_date": "-expected_close_date",
     "stage": "stage",
     "-stage": "-stage",
+    "confidence": "confidence",
+    "-confidence": "-confidence",
+    "owner": "owner__display_name",
+    "-owner": "-owner__display_name",
+    "age": "created_at",
+    "-age": "-created_at",
 }
 
 
@@ -202,6 +208,7 @@ def normalize_deal(actor, data, *, current=None):
         normalized["owner"] = clean_owner(
             actor,
             data.get("owner", None if current is None else current.owner_id),
+            object_key="deal",
         )
     if not partial or "notes" in data:
         notes = str(data.get("notes", "" if current is None else current.notes) or "")
@@ -248,7 +255,9 @@ def filter_deals(user, params):
             )
         )
     if params.get("owner"):
-        queryset = queryset.filter(owner=clean_owner(user, params.get("owner")))
+        queryset = queryset.filter(
+            owner=clean_owner(user, params.get("owner"), object_key="deal")
+        )
     if params.get("lead"):
         queryset = queryset.filter(lead=_visible_lead(user, params.get("lead")))
     if params.get("close_after"):
@@ -271,6 +280,14 @@ def filter_deals(user, params):
 
 @transaction.atomic
 def create_deal(*, actor, data, request_id=""):
+    from core.policy import require_action
+    from leads.models import Lead
+
+    lead = None
+    raw_lead = data.get("lead") if hasattr(data, "get") else None
+    if raw_lead:
+        lead = Lead.objects.filter(pk=raw_lead).first()
+    require_action(actor, "deal", "C", lead=lead, object_id=raw_lead or "")
     requested_stage = str(data.get("stage") or "NEW").strip().upper()
     if requested_stage != "NEW":
         raise ValidationError(
@@ -294,6 +311,9 @@ def create_deal(*, actor, data, request_id=""):
 
 @transaction.atomic
 def update_deal(*, actor, deal_id, version, data, request_id=""):
+    from core.policy import can_correct, require_action
+
+    require_action(actor, "deal", "U", object_id=deal_id)
     deal = get_scoped(Deal, actor, deal_id, for_update=True, related=DEAL_RELATED)
     if require_version(version) != deal.version:
         raise VersionConflict
@@ -308,7 +328,7 @@ def update_deal(*, actor, deal_id, version, data, request_id=""):
     if (
         "probability" in normalized
         and normalized["probability"] != deal.probability
-        and not actor.is_company_admin
+        and not can_correct(actor)
     ):
         raise PermissionDenied
     if (
@@ -331,6 +351,9 @@ def update_deal(*, actor, deal_id, version, data, request_id=""):
 
 @transaction.atomic
 def delete_deal(*, actor, deal_id, version, delete_reason, request_id=""):
+    from core.policy import require_action
+
+    require_action(actor, "deal", "D", object_id=deal_id)
     deal = get_scoped(Deal, actor, deal_id, for_update=True, related=DEAL_RELATED)
     if require_version(version) != deal.version:
         raise VersionConflict
@@ -421,6 +444,7 @@ def transition_deal(
     from django.core.exceptions import PermissionDenied
 
     from core.models import StageHistory
+    from core.policy import can_correct, require_action
     from core.taxonomy import DEAL_STAGE_PROBABILITY
     from core.workflow import (
         DEAL_GRAPH,
@@ -429,6 +453,7 @@ def transition_deal(
         stage_is_active,
     )
 
+    require_action(actor, "deal", "U", object_id=deal_id)
     deal = get_scoped(Deal, actor, deal_id, for_update=True, related=DEAL_RELATED)
     if require_version(version) != deal.version:
         raise VersionConflict
@@ -438,7 +463,7 @@ def transition_deal(
     if not stage_is_active("DEAL_STAGE", destination):
         raise ValidationError({"to_stage": "That stage is unknown or retired."})
     if correction:
-        if not actor.is_company_admin:
+        if not can_correct(actor):
             raise PermissionDenied
         if not note:
             raise ValidationError({"reason": "A correction requires a reason."})
@@ -479,7 +504,7 @@ def transition_deal(
     if supplied not in (None, ""):
         override = clean_money(supplied, "probability")
         if override != probability:
-            if not actor.is_company_admin:
+            if not can_correct(actor):
                 raise PermissionDenied
             if not str(incoming.get("probability_reason") or "").strip():
                 raise ValidationError(

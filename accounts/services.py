@@ -9,7 +9,8 @@ from django.db.models import Q
 
 from accounts.models import Account, Contact
 from audit.models import AuditEvent
-from core.access import get_scoped
+from core.access import get_scoped, scoped
+from core.policy import require_action
 from core.validation import clean_email, clean_external_id, clean_owner, clean_website
 
 logger = logging.getLogger(__name__)
@@ -17,11 +18,12 @@ CONVERTIBLE_ACCOUNT_TYPES = {Account.Type.CUSTOMER, Account.Type.PROSPECT}
 
 
 def contacts_for_user(user):
-    """Contacts on accounts this person can open, plus contacts they own."""
+    """Contacts this person can read, plus contacts on accounts they can open."""
     queryset = Contact.objects.select_related("account", "owner")
-    if getattr(user, "is_company_admin", False):
-        return queryset
-    return queryset.filter(Q(owner=user) | Q(account__owner=user))
+    visible_accounts = scoped(Account.objects.all(), user)
+    return queryset.filter(
+        Q(pk__in=scoped(queryset, user).values("pk")) | Q(account__in=visible_accounts)
+    ).distinct()
 
 
 def normalize_name(value):
@@ -125,6 +127,7 @@ def _audit(actor, action, instance, request_id):
 
 @transaction.atomic
 def create_account(*, actor, data, request_id=""):
+    require_action(actor, "account", "C")
     name = str(data.get("name") or "").strip()
     if not name:
         raise ValidationError({"name": "This field is required."})
@@ -145,7 +148,7 @@ def create_account(*, actor, data, request_id=""):
         website_url=website,
         website_domain=domain,
         phone=str(data.get("phone") or "").strip()[:40],
-        owner=clean_owner(actor, data.get("owner")),
+        owner=clean_owner(actor, data.get("owner"), object_key="account"),
         notes=str(data.get("notes") or "").strip(),
         created_by=actor,
         updated_by=actor,
@@ -158,6 +161,7 @@ def create_account(*, actor, data, request_id=""):
 
 @transaction.atomic
 def create_contact(*, actor, data, request_id=""):
+    require_action(actor, "contact", "C")
     first_name = str(data.get("first_name") or "").strip()
     last_name = str(data.get("last_name") or "").strip()
     if not first_name or not last_name:
@@ -190,7 +194,9 @@ def create_contact(*, actor, data, request_id=""):
         email_normalized=email,
         account=account,
         reports_to=reports_to,
-        owner=clean_owner(actor, data.get("owner") or account.owner_id),
+        owner=clean_owner(
+            actor, data.get("owner") or account.owner_id, object_key="contact"
+        ),
         is_primary=False,
         created_by=actor,
         updated_by=actor,
@@ -206,6 +212,7 @@ def create_contact(*, actor, data, request_id=""):
 @transaction.atomic
 def mark_primary(*, actor, contact, request_id=""):
     """Keep one primary contact by locking the account row first."""
+    require_action(actor, "contact", "U", object_id=contact.pk)
     Account.objects.select_for_update().get(pk=contact.account_id)
     Contact.objects.filter(account_id=contact.account_id, is_primary=True).exclude(
         pk=contact.pk
@@ -241,6 +248,7 @@ def contact_differences(contact, incoming):
 
 @transaction.atomic
 def set_account_parent(*, actor, account, parent_id):
+    require_action(actor, "account", "U", object_id=account.pk)
     parent = None if not parent_id else get_scoped(Account, actor, parent_id)
     locked = Account.objects.select_for_update().get(pk=account.pk)
     assert_account_parent(locked, parent)
@@ -253,6 +261,7 @@ def set_account_parent(*, actor, account, parent_id):
 
 @transaction.atomic
 def set_reports_to(*, actor, contact, manager_id):
+    require_action(actor, "contact", "U", object_id=contact.pk)
     manager = None if not manager_id else get_scoped(Contact, actor, manager_id)
     locked = Contact.objects.select_for_update().get(pk=contact.pk)
     assert_reports_to(

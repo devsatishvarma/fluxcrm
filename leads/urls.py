@@ -10,6 +10,11 @@ urlpatterns = [
     path("leads/", login_required(views.lead_list), name="list"),
     path("leads/board/", login_required(views.lead_board), name="board"),
     path("leads/new/", login_required(views.lead_create), name="create"),
+    path(
+        "leads/bulk-assign/",
+        login_required(views.lead_bulk_assign),
+        name="bulk_assign",
+    ),
     path("leads/<uuid:lead_id>/", login_required(views.lead_detail), name="detail"),
     path("leads/<uuid:lead_id>/edit/", login_required(views.lead_edit), name="edit"),
     path(

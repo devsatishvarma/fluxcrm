@@ -51,6 +51,24 @@ class RequestIdMiddleware:
             request_id_context.reset(token)
 
 
+class AccessDenialMiddleware:
+    """Write denial rows after the request transaction has finished."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request: HttpRequest) -> HttpResponse:
+        from core.policy import begin_denial_scope, end_denial_scope, flush_denials
+
+        token = begin_denial_scope()
+        try:
+            response = self.get_response(request)
+        finally:
+            pending = end_denial_scope(token)
+            flush_denials(pending, getattr(request, "request_id", ""))
+        return response
+
+
 class SetupRequiredMiddleware:
     """Send an unconfigured installation to first-run setup."""
 

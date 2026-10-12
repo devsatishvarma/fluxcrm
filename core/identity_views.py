@@ -20,6 +20,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from core.forms import CompanySettingsForm, FluxLoginForm, SetupForm, UserCreateForm
+from core.policy import AccessDenied, allows, require_action, visible_user_ids
 from core.services import (
     SetupAlreadyCompleted,
     create_standard_user,
@@ -146,8 +147,20 @@ def home(request: HttpRequest) -> HttpResponse:
 
 
 @login_required
+def settings_home(request: HttpRequest) -> HttpResponse:
+    return render(request, "core/settings.html")
+
+
+@login_required
+def help_page(request: HttpRequest) -> HttpResponse:
+    return render(request, "core/help.html")
+
+
+@login_required
 def company_settings(request: HttpRequest) -> HttpResponse:
-    if not request.user.is_company_admin:
+    try:
+        require_action(request.user, "settings", "A")
+    except AccessDenied:
         return HttpResponse(status=403)
     company = get_object_or_404(CompanySettings, singleton=True)
     form = CompanySettingsForm(
@@ -181,22 +194,31 @@ def company_logo(request: HttpRequest) -> FileResponse:
 
 @login_required
 def user_list(request: HttpRequest) -> HttpResponse:
-    if not request.user.is_company_admin:
-        return HttpResponse(status=403)
+    if not (allows(request.user, "user", "R") or allows(request.user, "user", "A")):
+        try:
+            require_action(request.user, "user", "R")
+        except AccessDenied:
+            return HttpResponse(status=403)
+    users = User.objects.select_related("role", "manager").order_by("display_name")
+    visible = visible_user_ids(request.user)
+    if visible is not None:
+        users = users.filter(pk__in=visible)
     return render(
         request,
         "core/user_list.html",
         {
-            "users": User.objects.select_related("role", "manager").order_by(
-                "display_name"
-            )
+            "users": users,
+            "can_administer": allows(request.user, "user", "A"),
+            "managers": User.objects.filter(is_active=True).order_by("display_name"),
         },
     )
 
 
 @login_required
 def user_create(request: HttpRequest) -> HttpResponse:
-    if not request.user.is_company_admin:
+    try:
+        require_action(request.user, "user", "A")
+    except AccessDenied:
         return HttpResponse(status=403)
     form = UserCreateForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
@@ -228,7 +250,9 @@ def user_create(request: HttpRequest) -> HttpResponse:
 @login_required
 @require_POST
 def user_set_active(request: HttpRequest, user_id: int) -> HttpResponse:
-    if not request.user.is_company_admin:
+    try:
+        require_action(request.user, "user", "A")
+    except AccessDenied:
         return HttpResponse(status=403)
     user = get_object_or_404(User, pk=user_id)
     active = request.POST.get("active") == "1"
@@ -246,6 +270,7 @@ def user_set_active(request: HttpRequest, user_id: int) -> HttpResponse:
             {
                 "users": User.objects.select_related("role", "manager"),
                 "error": exc.messages[0],
+                "can_administer": True,
             },
             status=422,
         )
@@ -255,7 +280,9 @@ def user_set_active(request: HttpRequest, user_id: int) -> HttpResponse:
 @login_required
 @require_POST
 def user_send_password_reset(request: HttpRequest, user_id: int) -> HttpResponse:
-    if not request.user.is_company_admin:
+    try:
+        require_action(request.user, "user", "A")
+    except AccessDenied:
         return HttpResponse(status=403)
     user = get_object_or_404(User, pk=user_id)
     try:
@@ -272,6 +299,7 @@ def user_send_password_reset(request: HttpRequest, user_id: int) -> HttpResponse
             {
                 "users": User.objects.select_related("role", "manager"),
                 "error": exc.messages[0],
+                "can_administer": True,
             },
             status=422,
         )

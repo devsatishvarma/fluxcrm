@@ -217,7 +217,7 @@ def test_company_values_persist_and_render_in_company_timezone(client):
     fixed_now = datetime(2026, 1, 15, 7, 30, tzinfo=UTC)
     with patch("core.identity_views.timezone.now", return_value=fixed_now):
         home = client.get(reverse("core:home"))
-    assert b"2026-01-14 23:30" in home.content
+    assert b"01-14-2026, 11:30 PM" in home.content
     assert b"America/Los_Angeles" in home.content
 
 

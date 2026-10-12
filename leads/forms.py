@@ -2,6 +2,7 @@
 
 from django import forms
 
+from core.policy import assignable_users
 from core.taxonomy import choice_pairs
 from identity.models import User
 
@@ -54,10 +55,9 @@ class LeadForm(forms.Form):
         self.fields["disqualification_reason"].choices = choice_pairs(
             "DISQUALIFICATION_REASON"
         )
-        self.fields["owner"].queryset = User.objects.filter(is_active=True).order_by(
-            "display_name"
-        )
-        if not user.is_company_admin:
+        owners = assignable_users(user, "lead")
+        self.fields["owner"].queryset = owners
+        if owners.count() <= 1:
             self.fields.pop("owner")
         if instance is not None and not self.is_bound:
             for name in self.fields:

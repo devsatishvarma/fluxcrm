@@ -105,6 +105,9 @@ def exact_account_for_lead(lead):
 
 @transaction.atomic
 def convert_lead(*, actor, lead_id, version, data, request_id="", fail_at=""):
+    from core.policy import require_action
+
+    require_action(actor, "lead", "U", object_id=lead_id)
     lead = get_scoped(Lead, actor, lead_id, for_update=True)
     if lead.converted_at is not None:
         return {

@@ -34,11 +34,26 @@ def account_list(request):
     query = str(request.GET.get("q") or "").strip()
     if query:
         queryset = queryset.filter(name__icontains=query)
-    paginator = Paginator(queryset.order_by("name"), PAGE_SIZE)
+    ordering = request.GET.get("ordering") or "name"
+    account_order = {
+        "name": "name",
+        "-name": "-name",
+        "type": "account_type",
+        "-type": "-account_type",
+        "owner": "owner__display_name",
+        "-owner": "-owner__display_name",
+    }
+    if ordering not in account_order:
+        ordering = "name"
+    paginator = Paginator(queryset.order_by(account_order[ordering], "pk"), PAGE_SIZE)
     return render(
         request,
         "accounts/account_list.html",
-        {"page_obj": paginator.get_page(request.GET.get("page") or 1), "query": query},
+        {
+            "page_obj": paginator.get_page(request.GET.get("page") or 1),
+            "query": query,
+            "ordering": ordering,
+        },
     )
 
 
@@ -73,13 +88,24 @@ def contact_list(request):
             contacts = contacts.filter(account_id=account_id)
     if params.get("primary") == "1":
         contacts = contacts.filter(is_primary=True)
+    ordering = params.get("ordering") or "account"
+    account_order = "name"
+    contact_order = ("last_name", "first_name")
+    if ordering == "-account":
+        account_order = "-name"
+    elif ordering == "name":
+        contact_order = ("last_name", "first_name")
+    elif ordering == "-name":
+        contact_order = ("-last_name", "-first_name")
+    elif ordering == "title":
+        contact_order = ("title", "last_name")
     account_rows = Account.objects.filter(
         pk__in=contacts.values("account_id")
-    ).order_by("name")
+    ).order_by(account_order, "pk")
     paginator = Paginator(account_rows, PAGE_SIZE)
     page = paginator.get_page(params.get("page") or 1)
     listed = contacts.filter(account__in=list(page.object_list)).order_by(
-        "last_name", "first_name"
+        *contact_order
     )
     by_account = {}
     for contact in listed:
@@ -137,6 +163,7 @@ def account_detail(request, account_id):
         "owner", "reports_to", "converted_from_lead"
     )
     children = scoped(Account.objects.filter(parent=account), request.user)
+    activities, tasks = timeline(account)
     return render(
         request,
         "accounts/account_detail.html",
@@ -144,7 +171,8 @@ def account_detail(request, account_id):
             "account": account,
             "contacts": contacts,
             "children": children,
-            "activities": timeline(account)[0],
+            "activities": activities,
+            "tasks": tasks,
             "types": Account.Type.choices,
         },
     )

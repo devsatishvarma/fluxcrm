@@ -9,35 +9,39 @@
   {% endif %}
   <form method="post">
     {% csrf_token %}
-    <div class="mb-3">
-      <label class="form-label" for="contact-first">First name</label>
-      <input class="form-control" id="contact-first" name="first_name" required>
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label" for="contact-first">First name</label>
+        <input class="form-control" id="contact-first" name="first_name" required>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="contact-last">Last name</label>
+        <input class="form-control" id="contact-last" name="last_name" required>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="contact-title">Title</label>
+        <input class="form-control" id="contact-title" name="title">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="contact-email">Email</label>
+        <input class="form-control" id="contact-email" name="email" type="email">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="contact-reports">Reports to</label>
+        <select class="form-select" id="contact-reports" name="reports_to">
+          <option value="">—</option>
+          {% for person in reports %}
+            <option value="{{ person.pk }}">{{ person }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-6 d-flex align-items-end">
+        <div class="form-check mb-2">
+          <input class="form-check-input" id="contact-primary" name="is_primary" value="1" type="checkbox">
+          <label class="form-check-label" for="contact-primary">Primary contact</label>
+        </div>
+      </div>
     </div>
-    <div class="mb-3">
-      <label class="form-label" for="contact-last">Last name</label>
-      <input class="form-control" id="contact-last" name="last_name" required>
-    </div>
-    <div class="mb-3">
-      <label class="form-label" for="contact-title">Title</label>
-      <input class="form-control" id="contact-title" name="title">
-    </div>
-    <div class="mb-3">
-      <label class="form-label" for="contact-email">Email</label>
-      <input class="form-control" id="contact-email" name="email" type="email">
-    </div>
-    <div class="mb-3">
-      <label class="form-label" for="contact-reports">Reports to</label>
-      <select class="form-select" id="contact-reports" name="reports_to">
-        <option value="">—</option>
-        {% for person in reports %}
-          <option value="{{ person.pk }}">{{ person }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="mb-3 form-check">
-      <input class="form-check-input" id="contact-primary" name="is_primary" value="1" type="checkbox">
-      <label class="form-check-label" for="contact-primary">Primary contact</label>
-    </div>
-    <button class="btn btn-primary" type="submit">Save</button>
+    <button class="btn btn-primary mt-3" type="submit">Save</button>
   </form>
 {% endblock %}

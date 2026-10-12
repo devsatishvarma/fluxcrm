@@ -17,6 +17,8 @@ Including another URLconf
 
 from django.urls import include, path
 
+from core.access_api import AuditEventListView, ExportView, ImportAuthorizeView
+
 urlpatterns = [
     path("", include("core.urls")),
     path("", include("leads.urls")),
@@ -27,4 +29,11 @@ urlpatterns = [
     path("api/v1/", include("sales.api_urls")),
     path("api/v1/", include("activities.api_urls")),
     path("api/v1/", include("accounts.api_urls")),
+    path("api/v1/audit-events/", AuditEventListView.as_view(), name="api-audit"),
+    path("api/v1/exports/", ExportView.as_view(), name="api-export"),
+    path(
+        "api/v1/imports/authorize/",
+        ImportAuthorizeView.as_view(),
+        name="api-import-authorize",
+    ),
 ]

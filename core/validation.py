@@ -128,7 +128,9 @@ def clean_datetime(value, field):
     return parsed
 
 
-def clean_owner(actor, value):
+def clean_owner(actor, value, object_key="lead"):
+    from core.policy import grant_for, owner_ids_for
+
     if value in (None, ""):
         return actor
     if isinstance(value, User):
@@ -140,8 +142,18 @@ def clean_owner(actor, value):
             owner = User.objects.get(pk=int(value), is_active=True)
         except (TypeError, ValueError, User.DoesNotExist) as exc:
             raise ValidationError({"owner": "Select an active user."}) from exc
-    if not actor.is_company_admin and owner.pk != actor.pk:
-        raise ValidationError({"owner": "You can only assign records to yourself."})
+    scope = grant_for(actor, object_key).scope
+    allowed = owner_ids_for(actor, scope)
+    if allowed is not None and owner.pk not in allowed:
+        if scope == "OWN":
+            raise ValidationError({"owner": "You can only assign records to yourself."})
+        raise ValidationError(
+            {
+                "owner": (
+                    "You can only assign records inside your reporting line or team."
+                )
+            }
+        )
     return owner
 
 

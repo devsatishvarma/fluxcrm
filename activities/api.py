@@ -1,19 +1,23 @@
 """Activity and task API."""
 
-from datetime import timedelta
-from zoneinfo import ZoneInfo
-
-from django.db.models.functions import Coalesce
-from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from activities.models import Activity, Task
-from activities.services import complete_task, create_activity, create_task, snooze_task
+from activities.services import (
+    TASK_BUCKET_KEYS,
+    change_task_status,
+    complete_task,
+    create_activity,
+    create_task,
+    delete_activity,
+    delete_task,
+    filter_task_bucket,
+    snooze_task,
+    update_activity,
+)
 from core.access import scoped
 from core.api import CappedPagination
-
-BUCKETS = ("overdue", "due", "upcoming")
 
 
 def activity_payload(activity):
@@ -80,22 +84,8 @@ class TaskListView(APIView):
     def get(self, request):
         queryset = scoped(Task.objects.select_related("owner"), request.user)
         bucket = request.query_params.get("bucket")
-        if bucket in BUCKETS:
-            zone = ZoneInfo(request.user.timezone or "America/Los_Angeles")
-            local_now = timezone.now().astimezone(zone)
-            start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
-            end = start + timedelta(days=1)
-            queryset = queryset.filter(status=Task.Status.OPEN).annotate(
-                effective_due=Coalesce("snooze_until", "due_at")
-            )
-            if bucket == "overdue":
-                queryset = queryset.filter(effective_due__lt=local_now)
-            elif bucket == "upcoming":
-                queryset = queryset.filter(effective_due__gte=end)
-            else:
-                queryset = queryset.filter(
-                    effective_due__gte=start, effective_due__lt=end
-                )
+        if bucket in TASK_BUCKET_KEYS:
+            queryset = filter_task_bucket(queryset, bucket, request.user)
         page = CappedPagination().paginate_queryset(queryset, request, view=self)
         return Response({"results": [task_payload(item) for item in page]})
 
@@ -118,6 +108,52 @@ class TaskCompleteView(APIView):
             request_id=getattr(request, "request_id", ""),
         )
         return Response(task_payload(task))
+
+
+class TaskStatusView(APIView):
+    def post(self, request, task_id):
+        task = change_task_status(
+            actor=request.user,
+            task_id=task_id,
+            version=request.data.get("version"),
+            status=request.data.get("status"),
+            request_id=getattr(request, "request_id", ""),
+        )
+        return Response(task_payload(task))
+
+
+class TaskDeleteView(APIView):
+    def post(self, request, task_id):
+        delete_task(
+            actor=request.user,
+            task_id=task_id,
+            version=request.data.get("version"),
+            delete_reason=request.data.get("delete_reason"),
+            request_id=getattr(request, "request_id", ""),
+        )
+        return Response(status=204)
+
+
+class ActivityDetailView(APIView):
+    def patch(self, request, activity_id):
+        activity = update_activity(
+            actor=request.user,
+            activity_id=activity_id,
+            version=request.data.get("version"),
+            data=request.data,
+            request_id=getattr(request, "request_id", ""),
+        )
+        return Response(activity_payload(activity))
+
+    def delete(self, request, activity_id):
+        delete_activity(
+            actor=request.user,
+            activity_id=activity_id,
+            version=request.data.get("version"),
+            delete_reason=request.data.get("delete_reason"),
+            request_id=getattr(request, "request_id", ""),
+        )
+        return Response(status=204)
 
 
 class TaskSnoozeView(APIView):

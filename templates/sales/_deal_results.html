@@ -37,7 +37,7 @@
           <td>{{ deal.stage }}</td>
           <td>{{ deal.created_at|elapsed }}</td>
           <td>{{ deal.stage_entered_at|elapsed }}</td>
-          <td>{{ deal.amount|default:"—" }} {{ deal.currency }}</td>
+          <td>{{ deal.amount|money }}</td>
           <td>{{ deal.owner.display_name }}</td>
           <td>{% if deal.is_stale %}Stale{% else %}Current{% endif %}</td>
         </tr>

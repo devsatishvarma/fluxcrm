@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Company · FluxCRM{% endblock %}
 {% block content %}
+  {% include "core/_settings_nav.html" %}
   <h1>Company settings</h1>
   <form method="post" enctype="multipart/form-data">
     {% csrf_token %}

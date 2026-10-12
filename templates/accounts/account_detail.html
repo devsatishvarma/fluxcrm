@@ -2,18 +2,20 @@
 {% block title %}{{ account.name }} · FluxCRM{% endblock %}
 {% block content %}
   <h1>{{ account.name }}</h1>
-  <dl>
-    <dt>Type</dt><dd>{{ account.get_account_type_display }}</dd>
-    <dt>Website</dt><dd>{{ account.website_url|default:"—" }}</dd>
-    <dt>Owner</dt><dd>{{ account.owner.display_name }}</dd>
-    <dt>Parent</dt>
-    <dd>
-      {% if account.parent %}
-        <a href="{% url 'accounts:detail' account.parent.pk %}">{{ account.parent.name }}</a>
-      {% else %}
-        —
-      {% endif %}
-    </dd>
+  <dl class="detail-fields">
+    <div><dt>Type</dt><dd>{{ account.get_account_type_display }}</dd></div>
+    <div><dt>Website</dt><dd>{{ account.website_url|default:"—" }}</dd></div>
+    <div><dt>Owner</dt><dd>{{ account.owner.display_name }}</dd></div>
+    <div>
+      <dt>Parent</dt>
+      <dd>
+        {% if account.parent %}
+          <a href="{% url 'accounts:detail' account.parent.pk %}">{{ account.parent.name }}</a>
+        {% else %}
+          —
+        {% endif %}
+      </dd>
+    </div>
   </dl>
   {% if account.converted_from_lead_id %}
     <p>
@@ -48,14 +50,5 @@
   {% else %}
     <p>No contacts yet.</p>
   {% endif %}
-  <h2>Timeline</h2>
-  {% if activities %}
-    <ul>
-      {% for activity in activities %}
-        <li>{{ activity.subject }} ({{ activity.activity_type }})</li>
-      {% endfor %}
-    </ul>
-  {% else %}
-    <p>No activities yet.</p>
-  {% endif %}
+  {% include "activities/_timeline.html" with kind="account" object_id=account.pk %}
 {% endblock %}

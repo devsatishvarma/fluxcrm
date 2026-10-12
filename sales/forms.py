@@ -3,6 +3,7 @@
 from django import forms
 
 from core.access import scoped
+from core.policy import assignable_users
 from core.taxonomy import choice_pairs
 from identity.models import User
 from leads.forms import _style
@@ -32,10 +33,9 @@ class DealForm(forms.Form):
         ).order_by("company_name", "last_name")
         self.fields["deal_type"].choices = choice_pairs("DEAL_TYPE")
         self.fields["confidence"].choices = choice_pairs("DEAL_CONFIDENCE")
-        self.fields["owner"].queryset = User.objects.filter(is_active=True).order_by(
-            "display_name"
-        )
-        if not user.is_company_admin:
+        owners = assignable_users(user, "deal")
+        self.fields["owner"].queryset = owners
+        if owners.count() <= 1:
             self.fields.pop("owner")
         if instance is not None and not self.is_bound:
             self.initial.update(

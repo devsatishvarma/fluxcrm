@@ -324,6 +324,95 @@ here before implementing it.
 - **Approval source:** User request to untie the stage machines and convert a
   lead when its deal closes.
 
+### D-018 — Role matrix, teams, and audit
+
+- **Date/status:** 2026-10-11 — Recorded for Phase 6
+- **Decision:** The architecture role matrix is enforced on every record path.
+  Phase 1 Standard User stays beside that matrix, with create, read, update,
+  and soft-delete on records they own, and no export.
+- Team membership is `Team.members`. A person may belong to more than one
+  active team. `TEAM` scope is the union of those members. Sales Director
+  visibility follows the manager tree, including indirect reports, and does
+  not include an unrelated branch.
+- Sales Director may correct a stage and override probability. SDR/BDR may
+  create a deal only when the source lead is SQL Ready. Export is refused
+  without the separate export grant.
+- Denial and privilege logs store the actor, object, action, and reason.
+  They do not store CRM field values. Audit rows cannot be changed. Active
+  administrators are reviewed from the administrator review page.
+- **Affected phase:** 6
+- **Specification impact:** `architecture-MVP-spec.md` records versioned
+  grants, multi-team membership, and the Standard User role next to the matrix.
+- **Approval source:** Phase 6 implementation of the architecture matrix,
+  keeping the Phase 1 Standard User role.
+
+### D-019 — Task hold, activity correction, and list sorting
+
+- **Date/status:** 2026-10-11 — Confirmed by user request
+- **Decision:** A task can be completed, snoozed, put on hold, resumed, cancelled,
+  or soft-deleted. Hold is a pause: the task leaves the due lists, reminders
+  stop, and Resume returns it to Open. Cancel marks it Cancelled. Delete is a
+  soft delete and requires the delete grant plus a reason. The task list shows
+  the linked lead, contact, and deal.
+- An activity on a timeline can be edited or soft-deleted when it was added by
+  mistake. The activity body stays out of the audit snapshot.
+- Record detail pages show summary fields in two columns. List pages can sort
+  by the fields that describe the work: age, stage, rating, follow-up, owner,
+  and company for leads; amount, stage, confidence, expected close, and owner
+  for deals; name, type, and owner for accounts; account, name, and title for
+  contacts; due date, priority, owner, and title for tasks.
+- **Affected phases:** 4 and 7
+- **Specification impact:** Task status, task center, activity timeline, and
+  lead list sorting in `architecture-MVP-spec.md`. Extends D-013; it does not
+  replace the overdue, due, and upcoming buckets.
+- **Approval source:** User request to show task links, add cancel, hold, and
+  delete, edit or delete activities, use two columns on detail pages, and add
+  list sorting.
+
+### D-020 — Task lists and displayed dates
+
+- **Date/status:** 2026-10-11 — Confirmed by user request
+- **Decision:** The task page opens on every open task, so overdue work and
+  later work are both visible. Overdue means the due time has already passed.
+  Due today means the due time is still later today. Upcoming means the due
+  time is after today. Held, completed, and cancelled tasks each have their
+  own list.
+- Dates and times shown in the application use mm-dd-yyyy, hh:mm AM/PM in the
+  viewer's time zone. Stored values stay UTC. Form controls that require an
+  ISO value keep that machine format.
+- **Affected phases:** 4
+- **Specification impact:** Task center and the time-zone display rule in
+  `architecture-MVP-spec.md`. Extends D-013; the overdue, due today, and
+  upcoming lists remain.
+- **Approval source:** User request to show overdue and upcoming tasks by
+  default, to keep completed tasks visible, and to use mm-dd-yyyy, hh:mm AM/PM.
+
+### D-021 — Settings menu and Help
+
+- **Date/status:** 2026-10-11 — Confirmed by user request
+- **Decision:** Company, Teams, Users, Roles, and Audit are reached from
+  Settings. Audit remains available to every signed-in user, limited to the
+  history they can read. Teams and Users remain available to administrators
+  and sales directors. Company and Roles remain administrator-only. Help sits
+  next to Log out and explains how to use the CRM.
+- **Affected phases:** 1 and 6
+- **Specification impact:** Global shell and Admin rows in
+  `architecture-MVP-spec.md`.
+- **Approval source:** User request to group administration under Settings and
+  add Help beside Log out.
+
+### D-022 — Money display
+
+- **Date/status:** 2026-10-11 — Confirmed by user request
+- **Decision:** Amounts shown in the application are rounded to whole dollars
+  and written as `$ 12,500`. The dollar sign comes first, with a space, and
+  thousands are separated by commas. Stored amounts keep cents. The company
+  currency remains USD.
+- **Affected phases:** 2 and 3
+- **Specification impact:** Currency display rule in `architecture-MVP-spec.md`.
+- **Approval source:** User request to drop decimals, put the currency symbol
+  in front, and use thousands separators.
+
 ## Starter taxonomy — version 1
 
 The user approved a standard, admin-editable starter set. Keys are stable

@@ -7,6 +7,7 @@ from core.access import get_scoped
 from core.api import CappedPagination, parse_page_size
 from leads.models import Lead
 from leads.services import (
+    bulk_assign_leads,
     create_lead,
     delete_lead,
     filter_leads,
@@ -36,6 +37,17 @@ class LeadListView(APIView):
             request_id=getattr(request, "request_id", ""),
         )
         return Response(lead_payload(lead), status=201)
+
+
+class LeadBulkAssignView(APIView):
+    def post(self, request):
+        leads = bulk_assign_leads(
+            actor=request.user,
+            lead_ids=request.data.get("leads") or [],
+            owner=request.data.get("owner"),
+            request_id=getattr(request, "request_id", ""),
+        )
+        return Response([lead_payload(lead) for lead in leads])
 
 
 class LeadDetailView(APIView):

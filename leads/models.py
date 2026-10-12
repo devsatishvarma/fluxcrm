@@ -68,6 +68,7 @@ class Lead(AuditedRecord):
             models.Index(fields=("deleted_at", "owner")),
             models.Index(fields=("stage", "created_at")),
             models.Index(fields=("next_follow_up_at",)),
+            models.Index(fields=("rating", "created_at")),
         ]
         ordering = ("-created_at",)
 

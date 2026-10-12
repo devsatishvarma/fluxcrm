@@ -16,13 +16,14 @@ def company_logo_path(instance, filename):
 
 
 class Role(models.Model):
-    """Phase 1 grants. Finer object permissions arrive with the full matrix."""
+    """Object, action, and scope grants. ``grants_version`` bumps on each edit."""
 
     key = models.CharField(max_length=32, unique=True)
     name = models.CharField(max_length=80)
     description = models.TextField(blank=True)
     permissions = models.JSONField(default=dict)
     scope_policy = models.CharField(max_length=32, default="OWN")
+    grants_version = models.PositiveIntegerField(default=1)
 
     class Meta:
         ordering = ("name",)
@@ -71,6 +72,27 @@ class User(AbstractUser):
 
     def __str__(self) -> str:
         return self.display_name or self.username
+
+
+class Team(models.Model):
+    """Optional grouping. Record visibility still follows the manager tree."""
+
+    name = models.CharField(max_length=80, unique=True)
+    manager = models.ForeignKey(
+        User,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="managed_teams",
+    )
+    members = models.ManyToManyField(User, blank=True, related_name="teams")
+    active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("name",)
+
+    def __str__(self) -> str:
+        return self.name
 
 
 class CompanySettings(models.Model):

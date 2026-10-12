@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Help · FluxCRM{% endblock %}
+{% block content %}
+  <h1>Help</h1>
+  <p>FluxCRM keeps leads, accounts, contacts, deals, and follow-up in one place. Dates and times are shown as mm-dd-yyyy, hh:mm AM/PM in your time zone.</p>
+
+  <h2>Leads</h2>
+  <p>A lead is a person and company you have not yet converted. The list can be searched, filtered, and sorted by age, stage, rating, follow-up, owner, or company. Rating is Hot, Warm, or Cold. Lead Age is days since the lead was created. Stage-Age is days in the current stage.</p>
+  <p>Change the lead stage from the lead page. That does not move a deal or create an account. Use Convert when you want an account and contact before a deal closes.</p>
+
+  <h2>Accounts and contacts</h2>
+  <p>Contacts has its own page. Search by name, email, title, or account, and the results stay grouped under each account. An account has at most one primary contact.</p>
+
+  <h2>Deals</h2>
+  <p>A deal belongs to a lead or to an account. Amounts are shown as whole dollars, such as $ 12,500. Sort deals by age, amount, stage, confidence, expected close, or owner. Confidence is High, Medium, or Low.</p>
+  <p>Closing a deal as Closed Won or Closed Lost converts that deal’s lead: the company becomes an account (or matches an existing one by website or exact company name) and the person becomes a contact. The lead stage itself does not change. Closed Hold pauses the deal and does not convert the lead. Other deals on that lead stay where they are.</p>
+
+  <h2>Tasks</h2>
+  <p>Tasks opens on every open task. Overdue means the due time has already passed. Due today means it is still due later today. Upcoming means it is due after today. On hold, completed, and cancelled tasks are separate lists.</p>
+  <p>Each task shows the lead, contact, and deal it is linked to. You can complete, snooze, hold, resume, cancel, or delete it. Delete asks for a reason. Hold pauses reminders until you resume the task.</p>
+
+  <h2>Activities</h2>
+  <p>A call, email, meeting, or note is logged on the timeline of a lead, deal, or account. On a record page, press <kbd>A</kbd> when you are not typing in a field to jump to the activity subject. Open Edit or delete on an activity to correct it or remove one that was added by mistake.</p>
+
+  <h2>Settings</h2>
+  <p>Settings holds Company, Teams, Users, Roles, and Audit. Everyone who can sign in can open Audit for the history they are allowed to read. Teams and Users are for administrators and sales directors. Company and Roles are for administrators. A sales director sees people in their reporting line, not an unrelated branch.</p>
+{% endblock %}

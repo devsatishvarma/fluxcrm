@@ -1,0 +1,11 @@
+{% if form.non_field_errors %}{{ form.non_field_errors }}{% endif %}
+{% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
+<div class="row g-3">
+  {% for field in form.visible_fields %}
+    <div class="col-md-6">
+      {{ field.label_tag }}
+      {{ field }}
+      {{ field.errors }}
+    </div>
+  {% endfor %}
+</div>

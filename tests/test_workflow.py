@@ -271,7 +271,7 @@ def test_deal_close_rules_history_and_open_pipeline(client):
 
     client.force_login(admin)
     listed = client.get(reverse("sales:list"))
-    assert b"Open pipeline: 100.00 USD" in listed.content
+    assert b"Open pipeline: $ 100" in listed.content
     board = client.get(reverse("sales:board"))
     assert b"Open work" in board.content
     assert b"Lost work" not in board.content

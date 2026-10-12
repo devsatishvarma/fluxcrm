@@ -1,78 +1,184 @@
 {% extends "base.html" %}
+{% load crm %}
 {% block title %}Tasks · FluxCRM{% endblock %}
 {% block content %}
   <h1>Tasks</h1>
-  <h2>Add task</h2>
-  <form method="post" action="{% url 'activities:task_create' %}">
-    {% csrf_token %}
-    <label for="task-title">Title</label>
-    <input id="task-title" name="title" required>
-    <label for="task-due">Due</label>
-    <input id="task-due" name="due_at" type="datetime-local" required>
-    <label for="task-priority">Priority</label>
-    <select id="task-priority" name="priority">
-      <option value="LOW">Low</option>
-      <option value="NORMAL" selected>Normal</option>
-      <option value="HIGH">High</option>
-    </select>
-    <label for="task-lead">Lead</label>
-    <select id="task-lead" name="lead_id">
-      <option value="">None</option>
-      {% for lead in leads %}
-        <option value="{{ lead.pk }}">{{ lead.first_name }} {{ lead.last_name }} · {{ lead.company_name }}</option>
-      {% endfor %}
-    </select>
-    <label for="task-deal">Deal</label>
-    <select id="task-deal" name="deal_id">
-      <option value="">None</option>
-      {% for deal in deals %}
-        <option value="{{ deal.pk }}">{{ deal.title }}</option>
-      {% endfor %}
-    </select>
-    <button class="btn btn-primary" type="submit">Add task</button>
-  </form>
-  <nav aria-label="Task buckets">
-    {% for name in buckets %}
-      <a href="?bucket={{ name }}">{{ name|title }}</a>
+  <p>
+    Open shows every open task: overdue, still due today, and upcoming.
+    Overdue means the due time has already passed.
+    Due today means it is still due later today.
+    Upcoming means it is due after today.
+    Completed and cancelled tasks are on their own lists.
+    On hold stays out of the open list until you resume it.
+  </p>
+  <nav class="mb-3">
+    {% for key, label in buckets %}
+      {% if bucket == key %}
+        <strong>{{ label }}</strong>
+      {% else %}
+        <a href="{% url 'activities:tasks' %}?bucket={{ key }}&amp;ordering={{ ordering }}">{{ label }}</a>
+      {% endif %}
     {% endfor %}
   </nav>
-  <p>Showing {{ bucket }} tasks.</p>
+  <form class="row g-2 mb-3" method="get">
+    <input type="hidden" name="bucket" value="{{ bucket }}">
+    <div class="col-md-4">
+      <label class="form-label" for="task-sort">Sort</label>
+      <select class="form-select" id="task-sort" name="ordering" onchange="this.form.submit()">
+        <option value="due" {% if ordering == "due" %}selected{% endif %}>Due date</option>
+        <option value="-due" {% if ordering == "-due" %}selected{% endif %}>Due date, latest first</option>
+        <option value="priority" {% if ordering == "priority" %}selected{% endif %}>Priority</option>
+        <option value="owner" {% if ordering == "owner" %}selected{% endif %}>Owner</option>
+        <option value="title" {% if ordering == "title" %}selected{% endif %}>Title</option>
+      </select>
+    </div>
+  </form>
+  <form class="row g-2 mb-4" method="post" action="{% url 'activities:task_create' %}">
+    {% csrf_token %}
+    <div class="col-md-4">
+      <label class="form-label" for="task-title">Title</label>
+      <input class="form-control" id="task-title" name="title" required>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label" for="task-due">Due</label>
+      <input class="form-control" id="task-due" name="due_at" type="datetime-local" required>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label" for="task-priority">Priority</label>
+      <select class="form-select" id="task-priority" name="priority">
+        <option value="LOW">Low</option>
+        <option value="NORMAL" selected>Normal</option>
+        <option value="HIGH">High</option>
+      </select>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label" for="task-lead">Lead</label>
+      <select class="form-select" id="task-lead" name="lead_id">
+        <option value="">None</option>
+        {% for lead in leads %}
+          <option value="{{ lead.pk }}">{{ lead.company_name }} — {{ lead.first_name }} {{ lead.last_name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label" for="task-contact">Contact</label>
+      <select class="form-select" id="task-contact" name="contact_id">
+        <option value="">None</option>
+        {% for contact in contacts %}
+          <option value="{{ contact.pk }}">{{ contact.first_name }} {{ contact.last_name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label" for="task-deal">Deal</label>
+      <select class="form-select" id="task-deal" name="deal_id">
+        <option value="">None</option>
+        {% for deal in deals %}
+          <option value="{{ deal.pk }}">{{ deal.title }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-12">
+      <button class="btn btn-primary" type="submit">Add task</button>
+    </div>
+  </form>
   {% if tasks %}
     <table class="table">
-      <caption>Open tasks</caption>
       <thead>
         <tr>
-          <th scope="col">Title</th>
-          <th scope="col">Due</th>
-          <th scope="col">Owner</th>
-          <th scope="col">Actions</th>
+          <th>Title</th>
+          <th>Linked records</th>
+          <th>Due</th>
+          <th>Owner</th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody>
+        {% can "task" "U" as can_update_task %}
+        {% can "task" "D" as can_delete_task %}
         {% for task in tasks %}
           <tr>
             <td>{{ task.title }}</td>
-            <td>{{ task.due_at|date:"Y-m-d H:i" }}</td>
+            <td>
+              {% for item in task.related %}
+                <div>
+                  {% if item.kind == "lead" %}Lead{% elif item.kind == "contact" %}Contact{% elif item.kind == "deal" %}Deal{% else %}Account{% endif %}:
+                  <a href="{{ item.url }}">{{ item.label }}</a>
+                </div>
+              {% empty %}
+                —
+              {% endfor %}
+            </td>
+            <td>
+              {% if task.snooze_until %}
+                {{ task.snooze_until|date:"m-d-Y, h:i A" }}
+                <div>Snoozed from {{ task.due_at|date:"m-d-Y, h:i A" }}</div>
+              {% else %}
+                {{ task.due_at|date:"m-d-Y, h:i A" }}
+              {% endif %}
+              {% if task.status == "DONE" and task.completed_at %}
+                <div>Completed {{ task.completed_at|date:"m-d-Y, h:i A" }}</div>
+              {% endif %}
+            </td>
             <td>{{ task.owner.display_name }}</td>
             <td>
-              <form method="post" action="{% url 'activities:complete' task.pk %}">
-                {% csrf_token %}
-                <input type="hidden" name="version" value="{{ task.version }}">
-                <button type="submit">Complete</button>
-              </form>
-              <form method="post" action="{% url 'activities:snooze' task.pk %}">
-                {% csrf_token %}
-                <input type="hidden" name="version" value="{{ task.version }}">
-                <label for="snooze-{{ task.pk }}">Snooze until</label>
-                <input id="snooze-{{ task.pk }}" name="snooze_until" type="datetime-local" required>
-                <button type="submit">Snooze</button>
-              </form>
+              {% if can_update_task %}
+                {% if task.status == "OPEN" %}
+                  <form method="post" action="{% url 'activities:complete' task.pk %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="version" value="{{ task.version }}">
+                    <button class="btn btn-sm btn-primary" type="submit">Complete</button>
+                  </form>
+                  <form method="post" action="{% url 'activities:snooze' task.pk %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="version" value="{{ task.version }}">
+                    <label class="visually-hidden" for="snooze-{{ task.pk }}">Snooze until</label>
+                    <input id="snooze-{{ task.pk }}" name="snooze_until" type="datetime-local" required>
+                    <button class="btn btn-sm btn-outline-secondary" type="submit">Snooze</button>
+                  </form>
+                  <form method="post" action="{% url 'activities:hold' task.pk %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="version" value="{{ task.version }}">
+                    <button class="btn btn-sm btn-outline-secondary" type="submit">Hold</button>
+                  </form>
+                  <form method="post" action="{% url 'activities:cancel' task.pk %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="version" value="{{ task.version }}">
+                    <button class="btn btn-sm btn-outline-secondary" type="submit">Cancel</button>
+                  </form>
+                {% elif task.status == "HOLD" %}
+                  <form method="post" action="{% url 'activities:resume' task.pk %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="version" value="{{ task.version }}">
+                    <button class="btn btn-sm btn-outline-secondary" type="submit">Resume</button>
+                  </form>
+                  <form method="post" action="{% url 'activities:complete' task.pk %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="version" value="{{ task.version }}">
+                    <button class="btn btn-sm btn-primary" type="submit">Complete</button>
+                  </form>
+                  <form method="post" action="{% url 'activities:cancel' task.pk %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="version" value="{{ task.version }}">
+                    <button class="btn btn-sm btn-outline-secondary" type="submit">Cancel</button>
+                  </form>
+                {% endif %}
+              {% endif %}
+              {% if can_delete_task %}
+                <form method="post" action="{% url 'activities:delete' task.pk %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="version" value="{{ task.version }}">
+                  <label class="visually-hidden" for="delete-{{ task.pk }}">Delete reason</label>
+                  <input id="delete-{{ task.pk }}" name="delete_reason" placeholder="Delete reason" required minlength="3">
+                  <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+                </form>
+              {% endif %}
             </td>
           </tr>
         {% endfor %}
       </tbody>
     </table>
   {% else %}
-    <p>No tasks in this bucket.</p>
+    <p>No tasks in this list.</p>
   {% endif %}
 {% endblock %}

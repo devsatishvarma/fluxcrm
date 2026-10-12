@@ -4,84 +4,116 @@
 {% block content %}
   <h1>{{ deal.title }}</h1>
   <p><a href="{% url 'sales:edit' deal.pk %}">Edit</a></p>
-  <dl>
-    <dt>Lead</dt>
-    <dd>
-      {% if deal.lead %}
-        <a href="{% url 'leads:detail' deal.lead.pk %}">{{ deal.lead.company_name }}</a>
-      {% else %}
-        —
-      {% endif %}
-    </dd>
+  <dl class="detail-fields">
+    <div>
+      <dt>Lead</dt>
+      <dd>
+        {% if deal.lead %}
+          <a href="{% url 'leads:detail' deal.lead.pk %}">{{ deal.lead.company_name }}</a>
+        {% else %}
+          —
+        {% endif %}
+      </dd>
+    </div>
     {% if deal.account %}
-      <dt>Account</dt>
-      <dd><a href="{% url 'accounts:detail' deal.account.pk %}">{{ deal.account.name }}</a></dd>
+      <div>
+        <dt>Account</dt>
+        <dd><a href="{% url 'accounts:detail' deal.account.pk %}">{{ deal.account.name }}</a></dd>
+      </div>
     {% endif %}
     {% if deal.primary_contact %}
-      <dt>Contact</dt>
-      <dd>{{ deal.primary_contact.first_name }} {{ deal.primary_contact.last_name }}</dd>
+      <div>
+        <dt>Contact</dt>
+        <dd>{{ deal.primary_contact.first_name }} {{ deal.primary_contact.last_name }}</dd>
+      </div>
     {% endif %}
     {% if deal.converted_from_lead %}
-      <dt>Converted from</dt>
-      <dd>
-        <a href="{% url 'leads:detail' deal.converted_from_lead.pk %}">
-          {{ deal.converted_from_lead.company_name }}
-        </a>
-      </dd>
+      <div>
+        <dt>Converted from</dt>
+        <dd>
+          <a href="{% url 'leads:detail' deal.converted_from_lead.pk %}">
+            {{ deal.converted_from_lead.company_name }}
+          </a>
+        </dd>
+      </div>
     {% endif %}
-    <dt>Amount</dt><dd>{{ deal.amount }} {{ deal.currency }}</dd>
-    <dt>Deal confidence</dt><dd>{{ deal.confidence|choice_label }}</dd>
-    <dt>Created</dt><dd>{{ deal.created_at|date:"Y-m-d" }}</dd>
-    <dt>Deal Age</dt><dd>{{ deal.created_at|elapsed }}</dd>
-    <dt>Deal stage</dt><dd>{{ deal.stage }}</dd>
-    <dt>Stage-Age</dt><dd>{{ deal.stage_entered_at|elapsed }}</dd>
-    <dt>Probability</dt><dd>{{ deal.probability }}</dd>
-    <dt>Expected close</dt><dd>{{ deal.expected_close_date|default:"—" }}</dd>
-    <dt>Owner</dt><dd>{{ deal.owner.display_name }}</dd>
-    <dt>External ID</dt><dd>{{ deal.external_id }}</dd>
+    <div><dt>Amount</dt><dd>{{ deal.amount|money }}</dd></div>
+    <div><dt>Deal confidence</dt><dd>{{ deal.confidence|choice_label }}</dd></div>
+    <div><dt>Created</dt><dd>{{ deal.created_at|date:"m-d-Y, h:i A" }}</dd></div>
+    <div><dt>Deal Age</dt><dd>{{ deal.created_at|elapsed }}</dd></div>
+    <div><dt>Deal stage</dt><dd>{{ deal.stage }}</dd></div>
+    <div><dt>Stage-Age</dt><dd>{{ deal.stage_entered_at|elapsed }}</dd></div>
+    <div><dt>Probability</dt><dd>{{ deal.probability }}</dd></div>
+    <div><dt>Expected close</dt><dd>{% if deal.expected_close_date %}{{ deal.expected_close_date|date:"m-d-Y" }}{% else %}—{% endif %}</dd></div>
+    <div><dt>Owner</dt><dd>{{ deal.owner.display_name }}</dd></div>
+    <div><dt>External ID</dt><dd>{{ deal.external_id }}</dd></div>
   </dl>
   {% if deal.notes %}<h2>Notes</h2><p>{{ deal.notes }}</p>{% endif %}
   <h2>Move deal stage</h2>
   <form method="post" action="{% url 'sales:transition' deal.pk %}">
     {% csrf_token %}
     <input type="hidden" name="version" value="{{ deal.version }}">
-    <label for="deal-next-stage">Next stage</label>
-    <select id="deal-next-stage" name="to_stage">
-      {% for stage in allowed_stages %}
-        <option value="{{ stage }}">{{ stage }}</option>
-      {% endfor %}
-    </select>
-    <label for="deal-move-reason">Reason</label>
-    <input id="deal-move-reason" name="reason">
-    <label for="deal-amount">Amount</label>
-    <input id="deal-amount" name="amount">
-    <label for="deal-close-date">Expected close date</label>
-    <input id="deal-close-date" name="expected_close_date" type="date">
-    <label for="deal-close-reason">Close reason</label>
-    <input id="deal-close-reason" name="close_reason">
-    <label for="deal-budget-status">Budget status</label>
-    <select id="deal-budget-status" name="bant_budget_status">
-      {% for key, label in bant_choices %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
-    </select>
-    <label for="deal-authority-status">Authority status</label>
-    <select id="deal-authority-status" name="bant_authority_status">
-      {% for key, label in bant_choices %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
-    </select>
-    <label for="deal-need-status">Need status</label>
-    <select id="deal-need-status" name="bant_need_status">
-      {% for key, label in bant_choices %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
-    </select>
-    <label for="deal-timeline-status">Timeline status</label>
-    <select id="deal-timeline-status" name="bant_timeline_status">
-      {% for key, label in bant_choices %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
-    </select>
-    {% if user.is_company_admin %}
-      <label for="deal-probability">Probability override</label>
-      <input id="deal-probability" name="probability" type="number" min="0" max="100" step="0.01">
-      <label for="deal-probability-reason">Probability reason</label>
-      <input id="deal-probability-reason" name="probability_reason">
-    {% endif %}
-    <button class="btn btn-primary" type="submit">Move stage</button>
+    <div class="row g-2">
+      <div class="col-md-6">
+        <label class="form-label" for="deal-next-stage">Next stage</label>
+        <select class="form-select" id="deal-next-stage" name="to_stage">
+          {% for stage in allowed_stages %}
+            <option value="{{ stage }}">{{ stage }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="deal-move-reason">Reason</label>
+        <input class="form-control" id="deal-move-reason" name="reason">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="deal-amount">Amount</label>
+        <input class="form-control" id="deal-amount" name="amount">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="deal-close-date">Expected close date</label>
+        <input class="form-control" id="deal-close-date" name="expected_close_date" type="date">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="deal-close-reason">Close reason</label>
+        <input class="form-control" id="deal-close-reason" name="close_reason">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="deal-budget-status">Budget status</label>
+        <select class="form-select" id="deal-budget-status" name="bant_budget_status">
+          {% for key, label in bant_choices %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="deal-authority-status">Authority status</label>
+        <select class="form-select" id="deal-authority-status" name="bant_authority_status">
+          {% for key, label in bant_choices %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="deal-need-status">Need status</label>
+        <select class="form-select" id="deal-need-status" name="bant_need_status">
+          {% for key, label in bant_choices %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="deal-timeline-status">Timeline status</label>
+        <select class="form-select" id="deal-timeline-status" name="bant_timeline_status">
+          {% for key, label in bant_choices %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      {% if user.is_company_admin %}
+        <div class="col-md-6">
+          <label class="form-label" for="deal-probability">Probability override</label>
+          <input class="form-control" id="deal-probability" name="probability" type="number" min="0" max="100" step="0.01">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" for="deal-probability-reason">Probability reason</label>
+          <input class="form-control" id="deal-probability-reason" name="probability_reason">
+        </div>
+      {% endif %}
+    </div>
+    <button class="btn btn-primary mt-2" type="submit">Move stage</button>
   </form>
   {% if correction_stages %}
     <h3>Administrator correction</h3>
@@ -111,11 +143,11 @@
         <li>
           {% if row.from_stage %}
             Moved from {{ row.from_stage }} to {{ row.to_stage }}
-            on {{ row.changed_at|date:"Y-m-d H:i" }}.
+            on {{ row.changed_at|date:"m-d-Y, h:i A" }}.
             Spent {{ row.duration_seconds|duration }} in {{ row.from_stage }}.
           {% else %}
             Started in {{ row.to_stage }}
-            on {{ row.changed_at|date:"Y-m-d H:i" }}.
+            on {{ row.changed_at|date:"m-d-Y, h:i A" }}.
           {% endif %}
           {% if row.changed_by %}Recorded by {{ row.changed_by.display_name }}.{% endif %}
           {% if row.probability_snapshot != None %}Probability {{ row.probability_snapshot }}.{% endif %}

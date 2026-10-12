@@ -73,6 +73,7 @@ class Task(AuditedRecord):
 
     class Status(models.TextChoices):
         OPEN = "OPEN", "Open"
+        HOLD = "HOLD", "On hold"
         DONE = "DONE", "Done"
         CANCELLED = "CANCELLED", "Cancelled"
 

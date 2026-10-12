@@ -39,6 +39,14 @@ LEAD_ORDERING = {
     "-company_name": "-company_name",
     "stage": "stage",
     "-stage": "-stage",
+    "rating": "rating",
+    "-rating": "-rating",
+    "follow_up": "next_follow_up_at",
+    "-follow_up": "-next_follow_up_at",
+    "owner": "owner__display_name",
+    "-owner": "-owner__display_name",
+    "age": "created_at",
+    "-age": "-created_at",
 }
 UPDATABLE = (
     "first_name",
@@ -203,6 +211,7 @@ def normalize_lead(actor, data, *, current=None):
         normalized["owner"] = clean_owner(
             actor,
             data.get("owner", None if current is None else current.owner_id),
+            object_key="lead",
         )
     if not partial or "employee_count" in data:
         raw_count = _value(
@@ -304,7 +313,9 @@ def filter_leads(user, params):
             rating=clean_known_key("LEAD_RATING", params.get("rating"), "rating")
         )
     if params.get("owner"):
-        queryset = queryset.filter(owner=clean_owner(user, params.get("owner")))
+        queryset = queryset.filter(
+            owner=clean_owner(user, params.get("owner"), object_key="lead")
+        )
     if params.get("created_after"):
         queryset = queryset.filter(
             created_at__date__gte=clean_date(
@@ -325,6 +336,9 @@ def filter_leads(user, params):
 
 @transaction.atomic
 def create_lead(*, actor, data, request_id=""):
+    from core.policy import require_action
+
+    require_action(actor, "lead", "C")
     requested_stage = str(data.get("stage") or "NEW").strip().upper()
     if requested_stage != "NEW":
         raise ValidationError(
@@ -349,6 +363,9 @@ def create_lead(*, actor, data, request_id=""):
 
 @transaction.atomic
 def update_lead(*, actor, lead_id, version, data, request_id=""):
+    from core.policy import require_action
+
+    require_action(actor, "lead", "U", object_id=lead_id)
     lead = get_scoped(Lead, actor, lead_id, for_update=True)
     if require_version(version) != lead.version:
         raise VersionConflict
@@ -372,8 +389,10 @@ def update_lead(*, actor, lead_id, version, data, request_id=""):
 
 @transaction.atomic
 def delete_lead(*, actor, lead_id, version, delete_reason, request_id=""):
+    from core.policy import require_action
     from sales.models import Deal
 
+    require_action(actor, "lead", "D", object_id=lead_id)
     lead = get_scoped(Lead, actor, lead_id, for_update=True)
     if require_version(version) != lead.version:
         raise VersionConflict
@@ -394,10 +413,9 @@ def delete_lead(*, actor, lead_id, version, delete_reason, request_id=""):
 
 @transaction.atomic
 def restore_lead(*, actor, lead_id, version, request_id=""):
-    if not actor.is_company_admin:
-        from django.core.exceptions import PermissionDenied
+    from core.policy import require_action
 
-        raise PermissionDenied
+    require_action(actor, "lead", "A", object_id=lead_id)
     try:
         lead = Lead.all_objects.select_for_update().get(pk=lead_id)
     except Lead.DoesNotExist as exc:
@@ -491,8 +509,10 @@ def transition_lead(
     from django.core.exceptions import PermissionDenied
 
     from core.models import StageHistory
+    from core.policy import can_correct, require_action
     from core.workflow import LEAD_GRAPH, lead_gate_gaps, stage_is_active
 
+    require_action(actor, "lead", "U", object_id=lead_id)
     lead = get_scoped(Lead, actor, lead_id, for_update=True)
     if require_version(version) != lead.version:
         raise VersionConflict
@@ -502,7 +522,7 @@ def transition_lead(
     if not stage_is_active("LEAD_STAGE", destination):
         raise ValidationError({"to_stage": "That stage is unknown or retired."})
     if correction:
-        if not actor.is_company_admin:
+        if not can_correct(actor):
             raise PermissionDenied
         if not note:
             raise ValidationError({"reason": "A correction requires a reason."})
@@ -554,3 +574,30 @@ def transition_lead(
         request_id,
     )
     return lead
+
+
+@transaction.atomic
+def bulk_assign_leads(*, actor, lead_ids, owner, request_id=""):
+    """Assign many visible leads to one owner inside the actor's scope."""
+    from core.policy import require_action
+
+    require_action(actor, "lead", "U")
+    if not lead_ids:
+        raise ValidationError({"lead": "Select at least one lead."})
+    if len(lead_ids) > 50:
+        raise ValidationError({"lead": "Assign up to 50 leads at a time."})
+    target = clean_owner(actor, owner, object_key="lead")
+    updated = []
+    for lead_id in lead_ids:
+        lead = get_scoped(Lead, actor, lead_id, for_update=True)
+        if lead.owner_id == target.pk:
+            updated.append(lead)
+            continue
+        before = lead_snapshot(lead)
+        lead.owner = target
+        lead.updated_by = actor
+        lead.version += 1
+        lead.save()
+        _record(actor, "lead.updated", lead, before, request_id)
+        updated.append(lead)
+    return updated

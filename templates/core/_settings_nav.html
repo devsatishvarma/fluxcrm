@@ -1,0 +1,14 @@
+<nav class="mb-3" aria-label="Settings">
+  <a href="{% url 'core:settings' %}">Settings</a>
+  {% if user.is_company_admin %}
+    · <a href="{% url 'core:company_settings' %}">Company</a>
+  {% endif %}
+  {% if user.is_company_admin or user.role.key == "SALES_DIRECTOR" %}
+    · <a href="{% url 'core:teams' %}">Teams</a>
+    · <a href="{% url 'core:user_list' %}">Users</a>
+  {% endif %}
+  {% if user.is_company_admin %}
+    · <a href="{% url 'core:roles' %}">Roles</a>
+  {% endif %}
+  · <a href="{% url 'core:audit' %}">Audit</a>
+</nav>

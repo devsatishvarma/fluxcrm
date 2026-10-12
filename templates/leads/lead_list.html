@@ -63,6 +63,18 @@
       <label class="form-label" for="lead-created-before">Created before</label>
       <input class="form-control" id="lead-created-before" name="created_before" type="date" value="{{ query.created_before }}">
     </div>
+    <div class="col-md-3">
+      <label class="form-label" for="lead-sort">Sort</label>
+      <select class="form-select" id="lead-sort" name="ordering">
+        <option value="-created_at"{% if query.ordering == "-created_at" or not query.ordering %} selected{% endif %}>Age, newest</option>
+        <option value="created_at"{% if query.ordering == "created_at" %} selected{% endif %}>Age, oldest</option>
+        <option value="stage"{% if query.ordering == "stage" %} selected{% endif %}>Stage</option>
+        <option value="rating"{% if query.ordering == "rating" %} selected{% endif %}>Rating</option>
+        <option value="follow_up"{% if query.ordering == "follow_up" %} selected{% endif %}>Follow-up</option>
+        <option value="owner"{% if query.ordering == "owner" %} selected{% endif %}>Owner</option>
+        <option value="company_name"{% if query.ordering == "company_name" %} selected{% endif %}>Company</option>
+      </select>
+    </div>
     <div class="col-md-2">
       <button class="btn btn-outline-primary" type="submit">Filter</button>
     </div>

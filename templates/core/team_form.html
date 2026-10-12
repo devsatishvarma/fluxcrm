@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Team · FluxCRM{% endblock %}
+{% block content %}
+  {% include "core/_settings_nav.html" %}
+  <h1>{% if team.pk %}Edit team{% else %}Add team{% endif %}</h1>
+  {% if error %}<p role="alert">{{ error }}</p>{% endif %}
+  <form method="post">
+    {% csrf_token %}
+    <p>
+      <label for="name">Name</label>
+      <input class="form-control" id="name" name="name" value="{{ team.name }}" required>
+    </p>
+    <p>
+      <label for="manager">Manager</label>
+      <select class="form-select" id="manager" name="manager">
+        <option value="">No manager</option>
+        {% for person in users %}
+          <option value="{{ person.pk }}" {% if team.manager_id == person.pk %}selected{% endif %}>{{ person.display_name }}</option>
+        {% endfor %}
+      </select>
+    </p>
+    <fieldset>
+      <legend>Members</legend>
+      {% for person in users %}
+        <label class="d-block">
+          <input type="checkbox" name="members" value="{{ person.pk }}" {% if person.pk in selected %}checked{% endif %}>
+          {{ person.display_name }}
+        </label>
+      {% endfor %}
+    </fieldset>
+    <p>
+      <label>
+        <input type="checkbox" name="active" value="1" {% if team.active or not team.pk %}checked{% endif %}>
+        Active
+      </label>
+    </p>
+    <button class="btn btn-primary" type="submit">Save team</button>
+  </form>
+{% endblock %}

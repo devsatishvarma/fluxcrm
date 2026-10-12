@@ -299,7 +299,7 @@ def test_seed_values_reconcile_and_lists_do_not_query_per_row(client, caplog):
     page = client.get(reverse("leads:detail", args=[lead.pk]))
     assert b"Northstar Robotics" in page.content
     deal_page = client.get(reverse("sales:detail", args=[deal.pk]))
-    assert b"12500.00" in deal_page.content
+    assert b"$ 12,500" in deal_page.content
     assert b"Northstar endpoint security renewal" in deal_page.content
 
     caplog.set_level(logging.INFO)

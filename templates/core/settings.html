@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Settings · FluxCRM{% endblock %}
+{% block content %}
+  <h1>Settings</h1>
+  {% include "core/_settings_nav.html" %}
+  <div class="row g-3">
+    {% if user.is_company_admin %}
+      <div class="col-md-6">
+        <h2 class="h5">Company</h2>
+        <p>Company name, address, currency, fiscal year, time zone, and stale-record thresholds.</p>
+        <a href="{% url 'core:company_settings' %}">Open company settings</a>
+      </div>
+    {% endif %}
+    {% if user.is_company_admin or user.role.key == "SALES_DIRECTOR" %}
+      <div class="col-md-6">
+        <h2 class="h5">Teams</h2>
+        <p>Groups of people who share records. A person can belong to more than one team.</p>
+        <a href="{% url 'core:teams' %}">Open teams</a>
+      </div>
+      <div class="col-md-6">
+        <h2 class="h5">Users</h2>
+        <p>People who can sign in, their manager, and whether the account is active.</p>
+        <a href="{% url 'core:user_list' %}">Open users</a>
+      </div>
+    {% endif %}
+    {% if user.is_company_admin %}
+      <div class="col-md-6">
+        <h2 class="h5">Roles</h2>
+        <p>What each role can create, read, update, delete, export, or administer.</p>
+        <a href="{% url 'core:roles' %}">Open roles</a>
+      </div>
+    {% endif %}
+    <div class="col-md-6">
+      <h2 class="h5">Audit</h2>
+      <p>History of changes you are allowed to see. Audit rows cannot be edited.</p>
+      <a href="{% url 'core:audit' %}">Open audit</a>
+    </div>
+  </div>
+{% endblock %}

@@ -9,6 +9,25 @@
       rel="stylesheet"
     >
     <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.4/dist/htmx.min.js"></script>
+    <style>
+      .detail-fields {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.75rem 2rem;
+        margin-bottom: 1.5rem;
+      }
+      .detail-fields div {
+        display: grid;
+        grid-template-columns: 8.5rem minmax(0, 1fr);
+        gap: 0.25rem 0.75rem;
+        align-items: baseline;
+      }
+      .detail-fields dt { margin: 0; color: #495057; }
+      .detail-fields dd { margin: 0; }
+      @media (max-width: 767.98px) {
+        .detail-fields { grid-template-columns: 1fr; }
+      }
+    </style>
   </head>
   <body>
     <header class="navbar navbar-expand-lg bg-body-tertiary border-bottom">
@@ -31,19 +50,17 @@
             <li class="nav-item">
               <a class="nav-link" href="{% url 'activities:tasks' %}">Tasks</a>
             </li>
-            {% if user.is_company_admin %}
-              <li class="nav-item">
-                <a class="nav-link" href="{% url 'core:company_settings' %}">Company</a>
-              </li>
-              <li class="nav-item">
-                <a class="nav-link" href="{% url 'core:user_list' %}">Users</a>
-              </li>
-            {% endif %}
+            <li class="nav-item">
+              <a class="nav-link" href="{% url 'core:settings' %}">Settings</a>
+            </li>
           </ul>
-          <form method="post" action="{% url 'core:logout' %}">
-            {% csrf_token %}
-            <button class="btn btn-outline-secondary btn-sm" type="submit">Log out</button>
-          </form>
+          <div class="d-flex align-items-center gap-2">
+            <a class="btn btn-outline-secondary btn-sm" href="{% url 'core:help' %}">Help</a>
+            <form method="post" action="{% url 'core:logout' %}">
+              {% csrf_token %}
+              <button class="btn btn-outline-secondary btn-sm" type="submit">Log out</button>
+            </form>
+          </div>
         {% endif %}
       </nav>
     </header>

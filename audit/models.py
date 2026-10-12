@@ -1,5 +1,17 @@
 from django.conf import settings
+from django.core.exceptions import PermissionDenied
 from django.db import models
+
+
+class AuditQuerySet(models.QuerySet):
+    def update(self, **kwargs):
+        raise PermissionDenied("Audit history cannot be changed.")
+
+    def delete(self):
+        raise PermissionDenied("Audit history cannot be changed.")
+
+    def bulk_update(self, objs, fields, batch_size=None):
+        raise PermissionDenied("Audit history cannot be changed.")
 
 
 class AuditEvent(models.Model):
@@ -20,6 +32,7 @@ class AuditEvent(models.Model):
     after_json = models.JSONField(null=True, blank=True)
     request_id = models.CharField(max_length=64, blank=True)
     source = models.CharField(max_length=32, default="web")
+    objects = AuditQuerySet.as_manager()
 
     class Meta:
         ordering = ("-occurred_at",)
@@ -30,3 +43,11 @@ class AuditEvent(models.Model):
 
     def __str__(self) -> str:
         return f"{self.action} {self.object_type}:{self.object_id}"
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise PermissionDenied("Audit history cannot be changed.")
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise PermissionDenied("Audit history cannot be changed.")

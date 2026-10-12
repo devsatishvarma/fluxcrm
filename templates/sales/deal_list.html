@@ -1,10 +1,11 @@
 {% extends "base.html" %}
+{% load crm %}
 {% block title %}Deals · FluxCRM{% endblock %}
 {% block content %}
   <div class="d-flex justify-content-between align-items-center mb-3">
     <h1 class="mb-0">Deals</h1>
     <p class="mb-0">
-      Open pipeline: {{ open_total }} USD
+      Open pipeline: {{ open_total|money }}
       <a href="{% url 'sales:board' %}">Board</a>
       <a class="btn btn-primary" href="{% url 'sales:create' %}">Add deal</a>
     </p>
@@ -62,6 +63,19 @@
     <div class="col-md-2">
       <label class="form-label" for="deal-close-before">Close before</label>
       <input class="form-control" id="deal-close-before" name="close_before" type="date" value="{{ query.close_before }}">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label" for="deal-sort">Sort</label>
+      <select class="form-select" id="deal-sort" name="ordering">
+        <option value="-created_at"{% if query.ordering == "-created_at" or not query.ordering %} selected{% endif %}>Age, newest</option>
+        <option value="created_at"{% if query.ordering == "created_at" %} selected{% endif %}>Age, oldest</option>
+        <option value="-amount"{% if query.ordering == "-amount" %} selected{% endif %}>Amount, high to low</option>
+        <option value="amount"{% if query.ordering == "amount" %} selected{% endif %}>Amount, low to high</option>
+        <option value="stage"{% if query.ordering == "stage" %} selected{% endif %}>Stage</option>
+        <option value="confidence"{% if query.ordering == "confidence" %} selected{% endif %}>Confidence</option>
+        <option value="expected_close_date"{% if query.ordering == "expected_close_date" %} selected{% endif %}>Expected close</option>
+        <option value="owner"{% if query.ordering == "owner" %} selected{% endif %}>Owner</option>
+      </select>
     </div>
     <div class="col-md-2">
       <button class="btn btn-outline-primary" type="submit">Filter</button>

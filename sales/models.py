@@ -75,6 +75,7 @@ class Deal(AuditedRecord):
             models.Index(fields=("account", "stage")),
             models.Index(fields=("expected_close_date",)),
             models.Index(fields=("stage", "created_at")),
+            models.Index(fields=("confidence", "amount")),
         ]
         constraints = [
             models.CheckConstraint(

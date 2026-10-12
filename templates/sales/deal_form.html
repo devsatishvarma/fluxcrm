@@ -4,7 +4,7 @@
   <h1>{% if deal %}Edit deal{% else %}Add deal{% endif %}</h1>
   <form method="post">
     {% csrf_token %}
-    {{ form.as_p }}
+    {% include "crm/_form_fields.html" %}
     <button class="btn btn-primary" type="submit">Save deal</button>
     {% if deal %}<a href="{% url 'sales:detail' deal.pk %}">Cancel</a>{% endif %}
   </form>

@@ -4,6 +4,7 @@ import json
 import logging
 from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 import pytest
 from django.core.management import call_command
@@ -15,7 +16,7 @@ from activities.services import create_activity, create_task
 from audit.models import AuditEvent
 from core.models import JobRun
 from core.taxonomy import ensure_picklists
-from identity.models import User
+from identity.models import Role, User
 from leads.models import Lead
 from leads.services import create_lead
 from sales.models import Deal
@@ -79,9 +80,9 @@ def test_one_activity_appears_once_on_every_linked_record(client):
     client.force_login(admin)
     lead_page = client.get(reverse("leads:detail", args=[lead.pk]))
     deal_page = client.get(reverse("sales:detail", args=[deal.pk]))
-    assert lead_page.content.count(b"Shared discovery call") == 1
-    assert deal_page.content.count(b"Shared discovery call") == 1
-    assert b"private call notes" not in lead_page.content
+    assert lead_page.content.count(b"<strong>Shared discovery call</strong>") == 1
+    assert deal_page.content.count(b"<strong>Shared discovery call</strong>") == 1
+    assert lead_page.content.count(b"private call notes") == 1
     event = AuditEvent.objects.get(
         action="activity.created", object_id=str(activity.pk)
     )
@@ -158,13 +159,21 @@ def test_due_times_render_across_dst_boundaries(client):
     assert admin.timezone == "America/Los_Angeles"
     lead = make_lead(admin)
     samples = (
-        ("Summer check", datetime(2026, 7, 15, 17, 0, tzinfo=UTC), "2026-07-15 10:00"),
+        (
+            "Summer check",
+            datetime(2026, 7, 15, 17, 0, tzinfo=UTC),
+            "07-15-2026, 10:00 AM",
+        ),
         (
             "Fallback check",
             datetime(2026, 11, 1, 9, 30, tzinfo=UTC),
-            "2026-11-01 01:30",
+            "11-01-2026, 01:30 AM",
         ),
-        ("Spring check", datetime(2026, 3, 8, 10, 30, tzinfo=UTC), "2026-03-08 03:30"),
+        (
+            "Spring check",
+            datetime(2026, 3, 8, 10, 30, tzinfo=UTC),
+            "03-08-2026, 03:30 AM",
+        ),
     )
     for subject, occurred_at, _rendered in samples:
         create_activity(
@@ -291,9 +300,15 @@ def test_task_buckets_and_stale_badges_stay_flat(client):
         created_at=timezone.now() - timedelta(days=30)
     )
     now = timezone.now()
-    create_task(
+    zone = ZoneInfo("America/Los_Angeles")
+    local_now = now.astimezone(zone)
+    start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    later_today = create_task(
         actor=admin,
-        data={"title": "Due now", "due_at": now},
+        data={
+            "title": "Later today",
+            "due_at": start + timedelta(days=1) - timedelta(minutes=1),
+        },
         links=[{"kind": "lead", "id": lead.pk}],
         request_id="test",
     )
@@ -310,13 +325,28 @@ def test_task_buckets_and_stale_badges_stay_flat(client):
         request_id="test",
     )
     client.force_login(admin)
-    due = client.get(reverse("activities:tasks"))
+    opened = client.get(reverse("activities:tasks"))
+    due = client.get(reverse("activities:tasks") + "?bucket=due")
     overdue = client.get(reverse("activities:tasks") + "?bucket=overdue")
     upcoming = client.get(reverse("activities:tasks") + "?bucket=upcoming")
-    assert b"Due now" in due.content
+    assert b"Later today" in opened.content
+    assert b"Already late" in opened.content
+    assert b"Next week" in opened.content
+    assert b"Later today" in due.content
     assert b"Already late" not in due.content
+    assert b"Next week" not in due.content
     assert b"Already late" in overdue.content
+    assert b"Later today" not in overdue.content
     assert b"Next week" in upcoming.content
+    client.post(
+        reverse("activities:complete", args=[later_today.pk]),
+        {"version": later_today.version},
+    )
+    done = client.get(reverse("activities:tasks") + "?bucket=done")
+    assert b"Later today" in done.content
+    assert b"Completed" in done.content
+    opened_again = client.get(reverse("activities:tasks"))
+    assert b"Later today" not in opened_again.content
     listed = client.get(reverse("leads:list"))
     assert b"Quiet Co" in listed.content
     assert b"Stale" in listed.content
@@ -325,3 +355,139 @@ def test_task_buckets_and_stale_badges_stay_flat(client):
     assert anonymous.get(reverse("activities:tasks")).status_code == 302
     assert User.objects.filter(username="jordan").exists()
     assert Deal.objects.filter(lead=lead).count() == 0
+
+
+def test_task_links_and_hold_cancel_delete(client):
+    admin = make_user("jordan", admin=True)
+    lead = make_lead(admin)
+    deal = make_deal(admin, lead)
+    now = timezone.now()
+    task = create_task(
+        actor=admin,
+        data={"title": "Call Jamie", "due_at": now - timedelta(days=1)},
+        links=[
+            {"kind": "lead", "id": lead.pk},
+            {"kind": "deal", "id": deal.pk},
+        ],
+        request_id="test",
+    )
+    client.force_login(admin)
+    overdue = client.get(reverse("activities:tasks") + "?bucket=overdue")
+    assert b"Jamie Ng" in overdue.content
+    assert b"Security assessment" in overdue.content
+    assert b"Cancel" in overdue.content
+    assert b"Hold" in overdue.content
+    assert b"Delete" in overdue.content
+    held = client.post(
+        reverse("activities:hold", args=[task.pk]),
+        {"version": task.version},
+    )
+    assert held.status_code == 302
+    task.refresh_from_db()
+    assert task.status == Task.Status.HOLD
+    held_page = client.get(reverse("activities:tasks") + "?bucket=held")
+    assert b"Call Jamie" in held_page.content
+    assert b"Resume" in held_page.content
+    still_overdue = client.get(reverse("activities:tasks") + "?bucket=overdue")
+    assert b"Call Jamie" not in still_overdue.content
+    cancelled = client.post(
+        reverse("activities:cancel", args=[task.pk]),
+        {"version": task.version},
+    )
+    assert cancelled.status_code == 302
+    task.refresh_from_db()
+    assert task.status == Task.Status.CANCELLED
+    removed = client.post(
+        reverse("activities:delete", args=[task.pk]),
+        {"version": task.version, "delete_reason": "Added on the wrong lead"},
+    )
+    assert removed.status_code == 302
+    assert Task.objects.filter(pk=task.pk).count() == 0
+    reader = User.objects.create_user(
+        username="executive",
+        email="executive@example.test",
+        password="another-strong-pass",
+        display_name="Executive",
+        role=Role.objects.get(key="READ_ONLY"),
+    )
+    other = create_task(
+        actor=admin,
+        data={"title": "Keep this", "due_at": now - timedelta(hours=2)},
+        links=[{"kind": "lead", "id": lead.pk}],
+        request_id="test",
+    )
+    client.force_login(reader)
+    denied = client.post(
+        reverse("activities:delete", args=[other.pk]),
+        {"version": other.version, "delete_reason": "Should not delete"},
+    )
+    assert denied.status_code == 403
+    assert Task.objects.filter(pk=other.pk).exists()
+
+
+def test_activity_can_be_edited_and_deleted(client):
+    admin = make_user("jordan", admin=True)
+    lead = make_lead(admin)
+    activity = create_activity(
+        actor=admin,
+        data={
+            "activity_type": "NOTE",
+            "subject": "Wrong company note",
+            "body": "private notebook",
+            "occurred_at": datetime(2026, 8, 1, 16, 0, tzinfo=UTC),
+        },
+        links=[{"kind": "lead", "id": lead.pk}],
+        request_id="test",
+    )
+    client.force_login(admin)
+    page = client.get(reverse("leads:detail", args=[lead.pk]))
+    assert b"detail-fields" in page.content
+    assert b"Edit or delete" in page.content
+    updated = client.post(
+        reverse("activities:activity_update", args=[activity.pk]),
+        {
+            "version": activity.version,
+            "kind": "lead",
+            "object_id": str(lead.pk),
+            "activity_type": "CALL",
+            "subject": "Corrected call",
+            "body": "private notebook",
+            "outcome": "Reached Jamie",
+        },
+    )
+    assert updated.status_code == 302
+    activity.refresh_from_db()
+    assert activity.subject == "Corrected call"
+    event = AuditEvent.objects.filter(action="activity.updated").get()
+    assert "private notebook" not in json.dumps(event.after_json)
+    deleted = client.post(
+        reverse("activities:activity_delete", args=[activity.pk]),
+        {
+            "version": activity.version,
+            "kind": "lead",
+            "object_id": str(lead.pk),
+            "delete_reason": "Added on the wrong record",
+        },
+    )
+    assert deleted.status_code == 302
+    assert Activity.objects.filter(pk=activity.pk).count() == 0
+
+
+def test_lists_sort_by_rating_and_amount(client):
+    admin = make_user("jordan", admin=True)
+    cold = make_lead(admin, "Cold Co")
+    hot = make_lead(admin, "Hot Co")
+    Lead.objects.filter(pk=cold.pk).update(rating="COLD")
+    Lead.objects.filter(pk=hot.pk).update(rating="HOT")
+    small = make_deal(admin, cold)
+    large = make_deal(admin, hot)
+    Deal.objects.filter(pk=small.pk).update(amount="10.00", title="Small deal")
+    Deal.objects.filter(pk=large.pk).update(amount="900.00", title="Large deal")
+    client.force_login(admin)
+    leads = client.get(reverse("leads:list") + "?ordering=rating")
+    assert leads.status_code == 200
+    assert leads.content.index(b"Cold Co") < leads.content.index(b"Hot Co")
+    deals = client.get(reverse("sales:list") + "?ordering=-amount")
+    assert deals.content.index(b"Large deal") < deals.content.index(b"Small deal")
+    accounts = client.get(reverse("accounts:list") + "?ordering=name")
+    assert b"Sort" in accounts.content

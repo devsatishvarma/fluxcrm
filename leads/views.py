@@ -3,18 +3,24 @@
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db.models import Q
-from django.http import Http404
+from django.http import Http404, HttpResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_http_methods, require_POST
 
 from core.access import activate_viewer_timezone, get_scoped, scoped
 from core.exceptions import VersionConflict
+from core.policy import assignable_users, can_correct, require_action
 from core.taxonomy import choice_pairs
 from core.validation import add_form_errors
-from identity.models import User
 from leads.forms import LeadDeleteForm, LeadForm
 from leads.models import Lead
-from leads.services import create_lead, delete_lead, filter_leads, update_lead
+from leads.services import (
+    bulk_assign_leads,
+    create_lead,
+    delete_lead,
+    filter_leads,
+    update_lead,
+)
 from sales.models import Deal
 
 PAGE_SIZE = 50
@@ -54,8 +60,8 @@ def lead_list(request):
         "stage_choices": choice_pairs("LEAD_STAGE"),
         "rating_choices": choice_pairs("LEAD_RATING"),
         "owner_choices": (
-            User.objects.filter(is_active=True).order_by("display_name")
-            if request.user.is_company_admin
+            assignable_users(request.user, "lead")
+            if assignable_users(request.user, "lead").count() > 1
             else ()
         ),
     }
@@ -66,6 +72,11 @@ def lead_list(request):
 @require_http_methods(["GET", "POST"])
 def lead_create(request):
     activate_viewer_timezone(request.user)
+    if request.method == "POST":
+        try:
+            require_action(request.user, "lead", "C")
+        except PermissionDenied:
+            return render(request, "crm/forbidden.html", status=403)
     form = LeadForm(request.POST or None, user=request.user)
     status = 200
     if request.method == "POST" and form.is_valid():
@@ -123,7 +134,7 @@ def lead_detail(request, lead_id):
             "nurture_reason_choices": choice_pairs("NURTURE_REASON"),
             "disqualification_reason_choices": choice_pairs("DISQUALIFICATION_REASON"),
             "correction_stages": (
-                tuple(LEAD_BOARD_STAGES) if request.user.is_company_admin else ()
+                tuple(LEAD_BOARD_STAGES) if can_correct(request.user) else ()
             ),
             "delete_form": LeadDeleteForm(initial={"version": lead.version}),
         },
@@ -137,6 +148,11 @@ def lead_edit(request, lead_id):
         lead = get_scoped(Lead, request.user, lead_id)
     except PermissionDenied:
         return render(request, "crm/forbidden.html", status=403)
+    if request.method == "POST":
+        try:
+            require_action(request.user, "lead", "U", object_id=lead_id)
+        except PermissionDenied:
+            return render(request, "crm/forbidden.html", status=403)
     form = LeadForm(request.POST or None, user=request.user, instance=lead)
     status = 200
     if request.method == "POST" and form.is_valid():
@@ -167,6 +183,22 @@ def lead_edit(request, lead_id):
         {"form": form, "lead": lead},
         status=status,
     )
+
+
+@require_POST
+def lead_bulk_assign(request):
+    try:
+        bulk_assign_leads(
+            actor=request.user,
+            lead_ids=request.POST.getlist("lead"),
+            owner=request.POST.get("owner"),
+            request_id=_request_id(request),
+        )
+    except PermissionDenied:
+        return render(request, "crm/forbidden.html", status=403)
+    except ValidationError as exc:
+        return HttpResponse("; ".join(exc.messages), status=422)
+    return redirect("leads:list")
 
 
 @require_POST

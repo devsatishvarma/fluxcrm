@@ -10,6 +10,15 @@
       <label class="form-label" for="account-q">Search</label>
       <input class="form-control" id="account-q" name="q" value="{{ query }}">
     </div>
+    <div class="col-md-3">
+      <label class="form-label" for="account-sort">Sort</label>
+      <select class="form-select" id="account-sort" name="ordering">
+        <option value="name"{% if ordering == "name" %} selected{% endif %}>Name</option>
+        <option value="-name"{% if ordering == "-name" %} selected{% endif %}>Name, Z to A</option>
+        <option value="type"{% if ordering == "type" %} selected{% endif %}>Type</option>
+        <option value="owner"{% if ordering == "owner" %} selected{% endif %}>Owner</option>
+      </select>
+    </div>
     <div class="col-md-2">
       <button class="btn btn-secondary" type="submit">Search</button>
     </div>

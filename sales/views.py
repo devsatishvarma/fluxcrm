@@ -7,9 +7,9 @@ from django.views.decorators.http import require_http_methods, require_POST
 
 from core.access import activate_viewer_timezone, get_scoped
 from core.exceptions import VersionConflict
+from core.policy import assignable_users, can_correct
 from core.taxonomy import choice_pairs
 from core.validation import add_form_errors
-from identity.models import User
 from sales.forms import DealDeleteForm, DealForm
 from sales.models import Deal
 from sales.services import (
@@ -60,8 +60,8 @@ def deal_list(request):
         "type_choices": choice_pairs("DEAL_TYPE"),
         "confidence_choices": choice_pairs("DEAL_CONFIDENCE"),
         "owner_choices": (
-            User.objects.filter(is_active=True).order_by("display_name")
-            if request.user.is_company_admin
+            assignable_users(request.user, "deal")
+            if assignable_users(request.user, "deal").count() > 1
             else ()
         ),
     }
@@ -121,7 +121,7 @@ def deal_detail(request, deal_id):
             "lost_reason_choices": choice_pairs("CLOSED_LOST_REASON"),
             "hold_reason_choices": choice_pairs("CLOSED_HOLD_REASON"),
             "correction_stages": (
-                tuple(DEAL_STAGE_PROBABILITY) if request.user.is_company_admin else ()
+                tuple(DEAL_STAGE_PROBABILITY) if can_correct(request.user) else ()
             ),
             "delete_form": DealDeleteForm(initial={"version": deal.version}),
         },

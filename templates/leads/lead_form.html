@@ -4,7 +4,7 @@
   <h1>{% if lead %}Edit lead{% else %}Add lead{% endif %}</h1>
   <form method="post">
     {% csrf_token %}
-    {{ form.as_p }}
+    {% include "crm/_form_fields.html" %}
     <button class="btn btn-primary" type="submit">Save lead</button>
     {% if lead %}<a href="{% url 'leads:detail' lead.pk %}">Cancel</a>{% endif %}
   </form>

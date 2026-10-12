@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Teams · FluxCRM{% endblock %}
+{% block content %}
+  {% include "core/_settings_nav.html" %}
+  <h1>Teams</h1>
+  {% if can_administer %}
+    <p><a href="{% url 'core:team_create' %}">Add team</a></p>
+  {% endif %}
+  <table class="table">
+    <caption>Teams</caption>
+    <thead>
+      <tr>
+        <th scope="col">Name</th>
+        <th scope="col">Manager</th>
+        <th scope="col">Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for team in teams %}
+        <tr>
+          <td>
+            {% if can_administer %}
+              <a href="{% url 'core:team_edit' team.pk %}">{{ team.name }}</a>
+            {% else %}
+              {{ team.name }}
+            {% endif %}
+          </td>
+          <td>{{ team.manager.display_name|default:"—" }}</td>
+          <td>{% if team.active %}Active{% else %}Inactive{% endif %}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="3">No teams.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endblock %}
