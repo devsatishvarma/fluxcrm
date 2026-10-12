@@ -18,8 +18,8 @@
             data-url="{% url 'sales:transition' deal.pk %}"
           >
             <a href="{% url 'sales:detail' deal.pk %}">{{ deal.title }}</a>
-            <p class="mb-1">{{ deal.amount|default:"—" }} {{ deal.currency }} · {{ deal.temperature|temperature_label }}</p>
-            <p class="mb-1">Age {{ deal.created_at|elapsed }} · {{ deal.stage_entered_at|elapsed }} in stage</p>
+            <p class="mb-1">{{ deal.amount|default:"—" }} {{ deal.currency }} · {{ deal.confidence|choice_label }}</p>
+            <p class="mb-1">Deal Age {{ deal.created_at|elapsed }} · Stage-Age {{ deal.stage_entered_at|elapsed }}</p>
             <form method="post" action="{% url 'sales:transition' deal.pk %}">
               {% csrf_token %}
               <input type="hidden" name="version" value="{{ deal.version }}">

@@ -37,10 +37,10 @@
       </select>
     </div>
     <div class="col-md-2">
-      <label class="form-label" for="deal-temperature">Temperature</label>
-      <select class="form-select" id="deal-temperature" name="temperature">
-        {% for key, label in temperature_choices %}
-          <option value="{{ key }}"{% if query.temperature == key %} selected{% endif %}>{{ label }}</option>
+      <label class="form-label" for="deal-confidence">Deal confidence</label>
+      <select class="form-select" id="deal-confidence" name="confidence">
+        {% for key, label in confidence_choices %}
+          <option value="{{ key }}"{% if query.confidence == key %} selected{% endif %}>{{ label }}</option>
         {% endfor %}
       </select>
     </div>

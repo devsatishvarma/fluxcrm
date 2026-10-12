@@ -8,11 +8,11 @@
     <dt>Lead</dt>
     <dd><a href="{% url 'leads:detail' deal.lead.pk %}">{{ deal.lead.company_name }}</a></dd>
     <dt>Amount</dt><dd>{{ deal.amount }} {{ deal.currency }}</dd>
-    <dt>Temperature</dt><dd>{{ deal.temperature|temperature_label }}</dd>
+    <dt>Deal confidence</dt><dd>{{ deal.confidence|choice_label }}</dd>
     <dt>Created</dt><dd>{{ deal.created_at|date:"Y-m-d" }}</dd>
-    <dt>Age</dt><dd>{{ deal.created_at|elapsed }}</dd>
+    <dt>Deal Age</dt><dd>{{ deal.created_at|elapsed }}</dd>
     <dt>Stage</dt><dd>{{ deal.stage }}</dd>
-    <dt>Time in this stage</dt><dd>{{ deal.stage_entered_at|elapsed }}</dd>
+    <dt>Stage-Age</dt><dd>{{ deal.stage_entered_at|elapsed }}</dd>
     <dt>Probability</dt><dd>{{ deal.probability }}</dd>
     <dt>Expected close</dt><dd>{{ deal.expected_close_date|default:"—" }}</dd>
     <dt>Owner</dt><dd>{{ deal.owner.display_name }}</dd>

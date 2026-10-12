@@ -4,7 +4,14 @@ from core.display import duration_phrase, elapsed_phrase
 
 register = template.Library()
 
-TEMPERATURE_LABELS = {"HOT": "Hot", "WARM": "Warm", "COLD": "Cold"}
+CHOICE_LABELS = {
+    "HOT": "Hot",
+    "WARM": "Warm",
+    "COLD": "Cold",
+    "HIGH": "High",
+    "MEDIUM": "Medium",
+    "LOW": "Low",
+}
 
 
 @register.filter
@@ -18,5 +25,5 @@ def duration(value):
 
 
 @register.filter
-def temperature_label(value):
-    return TEMPERATURE_LABELS.get(value, value or "—")
+def choice_label(value):
+    return CHOICE_LABELS.get(value, value or "—")

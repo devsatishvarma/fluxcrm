@@ -11,10 +11,10 @@
       <tr>
         <th scope="col">Title</th>
         <th scope="col">Lead company</th>
-        <th scope="col">Temperature</th>
+        <th scope="col">Deal confidence</th>
         <th scope="col">Stage</th>
-        <th scope="col">Age</th>
-        <th scope="col">In stage</th>
+        <th scope="col">Deal Age</th>
+        <th scope="col">Stage-Age</th>
         <th scope="col">Amount</th>
         <th scope="col">Owner</th>
         <th scope="col">Follow-up</th>
@@ -25,7 +25,7 @@
         <tr>
           <td><a href="{% url 'sales:detail' deal.pk %}">{{ deal.title }}</a></td>
           <td>{{ deal.lead.company_name }}</td>
-          <td>{{ deal.temperature|temperature_label }}</td>
+          <td>{{ deal.confidence|choice_label }}</td>
           <td>{{ deal.stage }}</td>
           <td>{{ deal.created_at|elapsed }}</td>
           <td>{{ deal.stage_entered_at|elapsed }}</td>

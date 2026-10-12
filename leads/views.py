@@ -51,7 +51,7 @@ def lead_list(request):
         "filter_query": filters.urlencode(),
         "source_choices": choice_pairs("LEAD_SOURCE"),
         "stage_choices": choice_pairs("LEAD_STAGE"),
-        "temperature_choices": choice_pairs("TEMPERATURE"),
+        "rating_choices": choice_pairs("LEAD_RATING"),
         "owner_choices": (
             User.objects.filter(is_active=True).order_by("display_name")
             if request.user.is_company_admin

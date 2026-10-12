@@ -15,7 +15,7 @@ class DealForm(forms.Form):
     deal_type = forms.ChoiceField()
     amount = forms.DecimalField(max_digits=18, decimal_places=2, required=False)
     currency = forms.CharField(max_length=3, initial="USD")
-    temperature = forms.ChoiceField()
+    confidence = forms.ChoiceField(label="Deal confidence")
     expected_close_date = forms.DateField(
         required=False,
         widget=forms.DateInput(attrs={"type": "date"}),
@@ -31,7 +31,7 @@ class DealForm(forms.Form):
             Lead.objects.select_related("owner"), user
         ).order_by("company_name", "last_name")
         self.fields["deal_type"].choices = choice_pairs("DEAL_TYPE")
-        self.fields["temperature"].choices = choice_pairs("TEMPERATURE")
+        self.fields["confidence"].choices = choice_pairs("DEAL_CONFIDENCE")
         self.fields["owner"].queryset = User.objects.filter(is_active=True).order_by(
             "display_name"
         )
@@ -45,7 +45,7 @@ class DealForm(forms.Form):
                     "deal_type": instance.deal_type,
                     "amount": instance.amount,
                     "currency": instance.currency,
-                    "temperature": instance.temperature,
+                    "confidence": instance.confidence,
                     "expected_close_date": instance.expected_close_date,
                     "probability": instance.probability,
                     "notes": instance.notes,

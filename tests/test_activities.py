@@ -48,7 +48,7 @@ def make_deal(actor, lead):
             "title": "Security assessment",
             "lead": str(lead.pk),
             "deal_type": "CONSULTING_SERVICES",
-            "temperature": "WARM",
+            "confidence": "MEDIUM",
             "amount": "100.00",
             "currency": "USD",
         },

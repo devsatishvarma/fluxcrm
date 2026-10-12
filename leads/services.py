@@ -71,7 +71,7 @@ def lead_snapshot(lead: Lead) -> dict:
         "external_id": lead.external_id,
         "stage": lead.stage,
         "source": lead.source,
-        "temperature": lead.temperature,
+        "rating": lead.rating,
         "owner_id": lead.owner_id,
         "version": lead.version,
         "company_name": lead.company_name,
@@ -146,16 +146,14 @@ def normalize_lead(actor, data, *, current=None):
             _value(data, "source", getattr(current, "source", "")),
             "source",
         )
-    if not partial or "temperature" in data:
-        raw_temperature = _value(
-            data, "temperature", getattr(current, "temperature", "WARM")
-        )
-        if raw_temperature in (None, ""):
-            raw_temperature = "WARM"
-        normalized["temperature"] = clean_required_key(
-            "TEMPERATURE",
-            raw_temperature,
-            "temperature",
+    if not partial or "rating" in data:
+        raw_rating = _value(data, "rating", getattr(current, "rating", "WARM"))
+        if raw_rating in (None, ""):
+            raw_rating = "WARM"
+        normalized["rating"] = clean_required_key(
+            "LEAD_RATING",
+            raw_rating,
+            "rating",
         )
     if not partial or "stage" in data:
         normalized["stage"] = clean_required_key(
@@ -299,11 +297,9 @@ def filter_leads(user, params):
         queryset = queryset.filter(
             stage=clean_known_key("LEAD_STAGE", params.get("stage"), "stage")
         )
-    if params.get("temperature"):
+    if params.get("rating"):
         queryset = queryset.filter(
-            temperature=clean_known_key(
-                "TEMPERATURE", params.get("temperature"), "temperature"
-            )
+            rating=clean_known_key("LEAD_RATING", params.get("rating"), "rating")
         )
     if params.get("owner"):
         queryset = queryset.filter(owner=clean_owner(user, params.get("owner")))
@@ -438,7 +434,7 @@ def lead_payload(lead: Lead) -> dict:
             None if lead.annual_revenue is None else str(lead.annual_revenue)
         ),
         "source": lead.source,
-        "temperature": lead.temperature,
+        "rating": lead.rating,
         "age_days": age_days(lead.created_at),
         "stage_age_days": age_days(lead.stage_entered_at),
         "stage": lead.stage,

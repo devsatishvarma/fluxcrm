@@ -1,4 +1,4 @@
-"""Age, stage duration, lead temperature, and task creation."""
+"""Age, stage duration, lead rating, and task creation."""
 
 from datetime import timedelta
 
@@ -17,20 +17,21 @@ from tests.test_pipeline import lead_form, make_user
 pytestmark = pytest.mark.django_db
 
 
-def test_duration_phrases_skip_zero_seconds():
-    assert duration_phrase(0) == "less than a minute"
-    assert duration_phrase(180) == "3 minutes"
+def test_ages_are_whole_days():
+    assert duration_phrase(0) == "0 days"
+    assert duration_phrase(180) == "0 days"
+    assert duration_phrase(86400) == "1 day"
     start = timezone.now() - timedelta(days=3, hours=5)
-    assert elapsed_phrase(start) == "3 days, 5 hours"
+    assert elapsed_phrase(start) == "3 days"
 
 
-def test_lead_temperature_age_and_stage_time_are_visible(client):
+def test_lead_rating_age_and_stage_time_are_visible(client):
     ensure_picklists()
     admin = make_user("jordan", admin=True)
     client.force_login(admin)
     created = client.post(
         reverse("leads:create"),
-        lead_form(email="hot@example.test", temperature="HOT"),
+        lead_form(email="hot@example.test", rating="HOT"),
     )
     assert created.status_code == 302
     lead = Lead.objects.get(email="hot@example.test")
@@ -49,21 +50,26 @@ def test_lead_temperature_age_and_stage_time_are_visible(client):
         reason="Phase 3 baseline",
     )
     page = client.get(reverse("leads:detail", args=[lead.pk]))
+    assert b"Lead rating" in page.content
     assert b"Hot" in page.content
+    assert b"Lead Age" in page.content
+    assert b"Stage-Age" in page.content
     assert b"3 days" in page.content
-    assert b"5 hours" in page.content
+    assert b"0 days" in page.content
+    assert b"hour" not in page.content
+    assert b"minute" not in page.content
     assert b"Started in NEW" in page.content
     assert b"Phase 3 baseline" not in page.content
     assert b"0 seconds" not in page.content
     assert b"by after" not in page.content
-    listed = client.get(reverse("leads:list"), {"temperature": "HOT"})
+    listed = client.get(reverse("leads:list"), {"rating": "HOT"})
     assert b"Ada" in listed.content
     assert b"Hot" in listed.content
-    cold = client.get(reverse("leads:list"), {"temperature": "COLD"})
+    cold = client.get(reverse("leads:list"), {"rating": "COLD"})
     assert lead.first_name.encode() not in cold.content
     rejected = client.post(
         "/api/v1/leads/",
-        lead_form(email="bad-temp@example.test", temperature="LUKEWARM"),
+        lead_form(email="bad-temp@example.test", rating="LUKEWARM"),
         content_type="application/json",
     )
     assert rejected.status_code == 422
@@ -104,11 +110,14 @@ def test_deal_history_explains_a_baseline_and_a_real_move(client):
     assert "Phase 3 baseline" not in text
     assert "0 seconds" not in text
     assert "Moved from DISCOVERY to PROPOSAL" in text
-    assert "Spent 3 minutes in DISCOVERY" in text
+    assert "Spent 0 days in DISCOVERY" in text
     assert f"Recorded by {admin.display_name}" in text
     assert "9 days" in text
     assert "2 days" in text
-    assert "Warm" in text
+    assert "Deal confidence" in text
+    assert "Medium" in text
+    assert "Temperature" not in text
+    assert "Warm" not in text
 
 
 def test_task_can_be_added_from_a_record_and_the_task_list(client):

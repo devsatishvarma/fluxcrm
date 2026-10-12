@@ -12,10 +12,10 @@
         <th scope="col">Name</th>
         <th scope="col">Company</th>
         <th scope="col">Source</th>
-        <th scope="col">Temperature</th>
+        <th scope="col">Lead rating</th>
         <th scope="col">Stage</th>
-        <th scope="col">Age</th>
-        <th scope="col">In stage</th>
+        <th scope="col">Lead Age</th>
+        <th scope="col">Stage-Age</th>
         <th scope="col">Owner</th>
         <th scope="col">Follow-up</th>
       </tr>
@@ -26,7 +26,7 @@
           <td><a href="{% url 'leads:detail' lead.pk %}">{{ lead.first_name }} {{ lead.last_name }}</a></td>
           <td>{{ lead.company_name }}</td>
           <td>{{ lead.source }}</td>
-          <td>{{ lead.temperature|temperature_label }}</td>
+          <td>{{ lead.rating|choice_label }}</td>
           <td>{{ lead.stage }}</td>
           <td>{{ lead.created_at|elapsed }}</td>
           <td>{{ lead.stage_entered_at|elapsed }}</td>

@@ -106,10 +106,15 @@ TAXONOMY = {
         ("OEM_RESALE", "OEM Resale"),
         ("SOFTWARE_SERVICES", "Software Services"),
     ),
-    "TEMPERATURE": (
+    "LEAD_RATING": (
         ("HOT", "Hot"),
         ("WARM", "Warm"),
         ("COLD", "Cold"),
+    ),
+    "DEAL_CONFIDENCE": (
+        ("HIGH", "High"),
+        ("MEDIUM", "Medium"),
+        ("LOW", "Low"),
     ),
     "BANT_STATUS": (
         ("UNKNOWN", "Unknown"),

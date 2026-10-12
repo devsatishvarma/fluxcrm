@@ -135,11 +135,11 @@ def normalize_deal(actor, data, *, current=None):
             data.get("stage", "" if current is None else current.stage),
             "stage",
         )
-    if not partial or "temperature" in data:
-        normalized["temperature"] = clean_required_key(
-            "TEMPERATURE",
-            data.get("temperature", "" if current is None else current.temperature),
-            "temperature",
+    if not partial or "confidence" in data:
+        normalized["confidence"] = clean_required_key(
+            "DEAL_CONFIDENCE",
+            data.get("confidence", "" if current is None else current.confidence),
+            "confidence",
         )
     if not partial or "currency" in data:
         normalized["currency"] = clean_currency(
@@ -198,10 +198,10 @@ def filter_deals(user, params):
         queryset = queryset.filter(
             deal_type=clean_known_key("DEAL_TYPE", params.get("deal_type"), "deal_type")
         )
-    if params.get("temperature"):
+    if params.get("confidence"):
         queryset = queryset.filter(
-            temperature=clean_known_key(
-                "TEMPERATURE", params.get("temperature"), "temperature"
+            confidence=clean_known_key(
+                "DEAL_CONFIDENCE", params.get("confidence"), "confidence"
             )
         )
     if params.get("owner"):
@@ -312,7 +312,7 @@ def deal_payload(deal: Deal) -> dict:
         "deal_type": deal.deal_type,
         "amount": None if deal.amount is None else str(deal.amount),
         "currency": deal.currency,
-        "temperature": deal.temperature,
+        "confidence": deal.confidence,
         "age_days": age_days(deal.created_at),
         "stage_age_days": age_days(deal.stage_entered_at),
         "expected_close_date": (

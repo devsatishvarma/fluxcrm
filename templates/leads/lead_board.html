@@ -18,7 +18,7 @@
           >
             <a href="{% url 'leads:detail' lead.pk %}">{{ lead.first_name }} {{ lead.last_name }}</a>
             <p class="mb-1">{{ lead.company_name }}</p>
-            <p class="mb-1">{{ lead.temperature|temperature_label }} · Age {{ lead.created_at|elapsed }} · {{ lead.stage_entered_at|elapsed }} in stage</p>
+            <p class="mb-1">{{ lead.rating|choice_label }} · Lead Age {{ lead.created_at|elapsed }} · Stage-Age {{ lead.stage_entered_at|elapsed }}</p>
             <form method="post" action="{% url 'leads:transition' lead.pk %}">
               {% csrf_token %}
               <input type="hidden" name="version" value="{{ lead.version }}">

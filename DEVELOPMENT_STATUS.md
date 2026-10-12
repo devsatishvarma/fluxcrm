@@ -10,7 +10,7 @@
 - **Phase status:** Not started
 - **Phase completion:** 0% (0 of 7 gate items verified)
 - **Planning baseline:** Complete
-- **Code baseline:** Phases 0–4, tag `phase-4-baseline`. Phase 5 has not started.
+- **Code baseline:** Tag `pre-phase-5`. Includes follow-ups, Lead rating, Deal confidence, and day-based ages. Phase 5 starts after this tag.
 - **Last updated:** 2026-10-11
 - **Last verified result:** Phase 4 and the follow-up record display passed 45
   MySQL tests, system checks, migration-drift checks, and live page checks.
@@ -230,7 +230,8 @@ See D-013.
 - 2026-10-11: Lead and deal pages show age from the created date and time in the
   current stage. Stage history now says “Started in PROPOSAL” instead of
   “to PROPOSAL by after 0 seconds” and hides the internal baseline label.
-  Leads have Hot, Warm, and Cold. Tasks can be added from a lead, a deal, or
+  Leads have a Lead rating of Hot, Warm, or Cold. Deals have Deal confidence
+  of High, Medium, or Low. Tasks can be added from a lead, a deal, or
   the task list. 45 MySQL tests passed. See D-014.
 
 ## Recent decision/change log

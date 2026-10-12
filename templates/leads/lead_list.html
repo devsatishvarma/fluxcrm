@@ -47,10 +47,10 @@
       </div>
     {% endif %}
     <div class="col-md-2">
-      <label class="form-label" for="lead-temperature">Temperature</label>
-      <select class="form-select" id="lead-temperature" name="temperature">
-        {% for key, label in temperature_choices %}
-          <option value="{{ key }}"{% if query.temperature == key %} selected{% endif %}>{{ label }}</option>
+      <label class="form-label" for="lead-rating">Lead rating</label>
+      <select class="form-select" id="lead-rating" name="rating">
+        {% for key, label in rating_choices %}
+          <option value="{{ key }}"{% if query.rating == key %} selected{% endif %}>{{ label }}</option>
         {% endfor %}
       </select>
     </div>

@@ -52,7 +52,7 @@ def deal_list(request):
         "open_total": open_pipeline_total(request.user),
         "stage_choices": choice_pairs("DEAL_STAGE"),
         "type_choices": choice_pairs("DEAL_TYPE"),
-        "temperature_choices": choice_pairs("TEMPERATURE"),
+        "confidence_choices": choice_pairs("DEAL_CONFIDENCE"),
         "owner_choices": (
             User.objects.filter(is_active=True).order_by("display_name")
             if request.user.is_company_admin

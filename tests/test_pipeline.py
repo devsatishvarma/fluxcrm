@@ -100,7 +100,7 @@ def test_ui_and_api_cover_search_filter_pagination_and_delete(client):
             "deal_type": "CONSULTING_SERVICES",
             "amount": "1500.00",
             "currency": "USD",
-            "temperature": "WARM",
+            "confidence": "MEDIUM",
             "stage": "NEW",
             "expected_close_date": "2026-12-01",
         },
@@ -138,7 +138,7 @@ def test_invalid_values_and_account_links_are_rejected(client):
             "title": "Missing lead",
             "deal_type": "CONSULTING_SERVICES",
             "currency": "USD",
-            "temperature": "WARM",
+            "confidence": "MEDIUM",
             "stage": "NEW",
         },
         format="json",
@@ -152,7 +152,7 @@ def test_invalid_values_and_account_links_are_rejected(client):
             "account": "northstar",
             "deal_type": "CONSULTING_SERVICES",
             "currency": "USD",
-            "temperature": "WARM",
+            "confidence": "MEDIUM",
             "stage": "NEW",
         },
         format="json",
@@ -165,7 +165,7 @@ def test_invalid_values_and_account_links_are_rejected(client):
         "deal_type": "CONSULTING_SERVICES",
         "amount": "10.00",
         "currency": "USD",
-        "temperature": "WARM",
+        "confidence": "MEDIUM",
         "stage": "NEW",
         "expected_close_date": "2026-12-01",
     }
@@ -236,7 +236,7 @@ def test_stale_versions_conflict_and_owner_scope_holds(client):
             "lead": lead_id,
             "deal_type": "CONSULTING_SERVICES",
             "currency": "USD",
-            "temperature": "WARM",
+            "confidence": "MEDIUM",
             "stage": "NEW",
             "owner": owner.pk,
         },
@@ -276,7 +276,7 @@ def test_stale_versions_conflict_and_owner_scope_holds(client):
             "lead": lead_id,
             "deal_type": "CONSULTING_SERVICES",
             "currency": "USD",
-            "temperature": "WARM",
+            "confidence": "MEDIUM",
             "stage": "NEW",
         },
         format="json",
@@ -335,7 +335,7 @@ def test_seed_values_reconcile_and_lists_do_not_query_per_row(client, caplog):
             deal_type="CONSULTING_SERVICES",
             amount=Decimal("100.00"),
             currency="USD",
-            temperature="WARM",
+            confidence="MEDIUM",
             stage="NEW",
             stage_entered_at=lead.stage_entered_at,
             probability=Decimal("5.00"),
@@ -371,7 +371,7 @@ def test_deal_ui_crud_filters_errors_and_lead_delete_guard(client):
             "deal_type": "CONSULTING_SERVICES",
             "amount": "2500.00",
             "currency": "USD",
-            "temperature": "HOT",
+            "confidence": "HIGH",
             "expected_close_date": "2026-12-15",
             "stage": "NEW",
             "probability": "5.00",
@@ -384,7 +384,7 @@ def test_deal_ui_crud_filters_errors_and_lead_delete_guard(client):
         reverse("sales:list"),
         {
             "deal_type": "CONSULTING_SERVICES",
-            "temperature": "HOT",
+            "confidence": "HIGH",
             "owner": admin.pk,
             "close_after": "2026-12-01",
             "close_before": "2026-12-31",
@@ -393,7 +393,7 @@ def test_deal_ui_crud_filters_errors_and_lead_delete_guard(client):
     assert listed.status_code == 200
     assert b"UI consulting" in listed.content
     assert b"Close after" in listed.content
-    empty = client.get(reverse("sales:list"), {"temperature": "COLD"})
+    empty = client.get(reverse("sales:list"), {"confidence": "LOW"})
     assert b"No deals match these filters." in empty.content
 
     invalid_delete = client.post(

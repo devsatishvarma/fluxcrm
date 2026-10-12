@@ -8,11 +8,11 @@
     <dt>Company</dt><dd>{{ lead.company_name }}</dd>
     <dt>Email</dt><dd>{{ lead.email|default:"—" }}</dd>
     <dt>Source</dt><dd>{{ lead.source }}</dd>
-    <dt>Temperature</dt><dd>{{ lead.temperature|temperature_label }}</dd>
+    <dt>Lead rating</dt><dd>{{ lead.rating|choice_label }}</dd>
     <dt>Created</dt><dd>{{ lead.created_at|date:"Y-m-d" }}</dd>
-    <dt>Age</dt><dd>{{ lead.created_at|elapsed }}</dd>
+    <dt>Lead Age</dt><dd>{{ lead.created_at|elapsed }}</dd>
     <dt>Stage</dt><dd>{{ lead.stage }}</dd>
-    <dt>Time in this stage</dt><dd>{{ lead.stage_entered_at|elapsed }}</dd>
+    <dt>Stage-Age</dt><dd>{{ lead.stage_entered_at|elapsed }}</dd>
     <dt>Owner</dt><dd>{{ lead.owner.display_name }}</dd>
     <dt>External ID</dt><dd>{{ lead.external_id }}</dd>
   </dl>

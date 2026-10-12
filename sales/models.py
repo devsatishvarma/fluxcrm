@@ -20,7 +20,7 @@ class Deal(AuditedRecord):
         blank=True,
     )
     currency = models.CharField(max_length=3, default="USD")
-    temperature = models.CharField(max_length=16)
+    confidence = models.CharField(max_length=16)
     expected_close_date = models.DateField(null=True, blank=True)
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,

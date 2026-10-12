@@ -27,7 +27,7 @@ def deal_form(lead_id, **overrides):
         "deal_type": "CONSULTING_SERVICES",
         "amount": "100.00",
         "currency": "USD",
-        "temperature": "WARM",
+        "confidence": "MEDIUM",
         "stage": "NEW",
     }
     payload.update(overrides)

@@ -249,14 +249,27 @@ here before implementing it.
   started, or the move and the time spent in the previous stage. A baseline
   row with no previous stage does not say “by after 0 seconds” or show the
   internal “Phase 3 baseline” label.
-- Leads use the existing Hot, Warm, and Cold list. The architecture defined
-  that list on deals; leads now use the same values, defaulting to Warm when
-  a create request omits one. Sample leads are Hot, Warm, or Cold as seeded.
+- Leads use Hot, Warm, and Cold, defaulting to Warm when a create request
+  omits one. Sample leads are Hot, Warm, or Cold as seeded. D-015 renames
+  this field to Lead rating and gives deals a separate confidence list.
 - A task can be added from the lead, the deal, or the task list.
 - **Affected phases:** 2, 3, and 4
 - **Specification impact:** Adds lead temperature, which the architecture
   model lists on deals only.
 - **Approval source:** User request after using the lead and deal pages.
+
+### D-015 — Lead rating and deal confidence
+
+- **Date/status:** 2026-10-11 — Confirmed by user request
+- **Decision:** The lead field is Lead rating and keeps Hot, Warm, and Cold.
+  The deal field is Deal confidence. Stored deal values move from Hot, Warm,
+  and Cold to High, Medium, and Low (`HOT` to `HIGH`, `WARM` to `MEDIUM`,
+  `COLD` to `LOW`). The shared temperature list is retired.
+- **Affected phases:** 2 and 4
+- **Specification impact:** Replaces the architecture's deal temperature field
+  and the Hot/Warm/Cold report category for deals. Lead rating remains the
+  D-014 addition under the new name.
+- **Approval source:** User request to rename the fields and deal values.
 
 ## Starter taxonomy — version 1
 
