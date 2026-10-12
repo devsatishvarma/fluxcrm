@@ -40,4 +40,9 @@ urlpatterns = [
         identity_views.user_set_active,
         name="user_set_active",
     ),
+    path(
+        "users/<int:user_id>/password-reset/",
+        identity_views.user_send_password_reset,
+        name="user_send_password_reset",
+    ),
 ]

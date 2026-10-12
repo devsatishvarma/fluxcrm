@@ -5,25 +5,35 @@
 
 ## Current position
 
-- **MVP completion:** 30% (21 of 69 Phase 0–9 gate items verified)
-- **Current phase:** Phase 3 — Lead and Deal workflow
+- **MVP completion:** 41% (28 of 69 Phase 0–9 gate items verified)
+- **Current phase:** Phase 4 — Activities and tasks
 - **Phase status:** Not started
-- **Phase completion:** 0% (0 of 7 gate items verified)
+- **Phase completion:** 0% (0 of 6 gate items verified)
 - **Planning baseline:** Complete
 - **Last updated:** 2026-10-11
-- **Last verified result:** Phase 2 lead and deal gates passed. The 500,000-row
-  list timing stays with Phase 9, accepted because that volume is not expected
-  soon.
+- **Last verified result:** Phases 1–3 passed the architecture/gate audit and
+  hardening suite: 34 MySQL tests, system checks, migration-drift checks, and
+  live HTTP verification passed.
 
-## Current phase gate — Phase 3
+## Current phase gate — Phase 4
 
-- [ ] Every allowed and rejected transition is covered at the service, UI, and API.
-- [ ] Drag and drop cannot bypass stage gates and explains missing fields.
-- [ ] Terminal outcome reasons and Won amount and close date are enforced.
-- [ ] Concurrent changes conflict instead of overwriting newer data.
-- [ ] History records actor, time, duration, reason, and probability.
-- [ ] Closed and held Deals are excluded from open pipeline totals.
-- [ ] Admin correction is reversible where possible and always audited.
+- [ ] One activity appears once on every linked record.
+- [ ] Complete and snooze operations and their audit events stay consistent.
+- [ ] Due times render correctly per user, including DST boundaries.
+- [ ] Repeated scheduler runs do not duplicate reminders.
+- [ ] Failed jobs retry safely, and missed or repeated failures are observable.
+- [ ] Quick-add defaults the source record and keeps the documented keyboard
+      interaction from interfering with form fields.
+
+## Completed phase gate — Phase 3
+
+- [x] Every allowed and rejected transition is covered at the service, UI, and API.
+- [x] Drag and drop cannot bypass stage gates and explains missing fields.
+- [x] Terminal outcome reasons and Won amount and close date are enforced.
+- [x] Concurrent changes conflict instead of overwriting newer data.
+- [x] History records actor, time, duration, reason, and probability.
+- [x] Closed and held Deals are excluded from open pipeline totals.
+- [x] Admin correction is reversible where possible and always audited.
 
 ## Completed phase gate — Phase 2
 
@@ -33,7 +43,8 @@
 - [x] Stale versions return a conflict without overwriting newer data.
 - [x] Direct URL and API attempts cannot cross owner scope.
 - [x] Displayed fixture values reconcile to database values.
-- [x] Representative lists avoid N+1 queries and meet the phase performance budget.
+- [x] Representative Lead and Deal lists avoid N+1 queries; the accepted
+      500,000-row timing measurement remains in Phase 9.
 
 ## Completed phase gate — Phase 1
 
@@ -51,8 +62,9 @@
 - **Phase 1 — Company and identity:** 7/7, complete.
 - **Phase 2 — Leads and lead-linked Deals:** 7/7, complete. List queries stayed
   flat. The 500,000-row clock is a Phase 9 measurement, accepted on 2026-10-11.
-- **Phase 3 — Workflow:** 0/7, not started.
-- **Phase 4 — Activities and tasks:** 0/6, waiting for Phase 3.
+- **Phase 3 — Workflow:** 7/7, complete. Graphs, history, Kanban, close rules,
+  and admin correction share one transition service. See D-012.
+- **Phase 4 — Activities and tasks:** 0/6, not started.
 - **Phase 5 — Accounts, Contacts, conversion:** 0/7, waiting for Phase 4.
 - **Phase 6 — Teams, RBAC, audit:** 0/7, waiting for Phase 5.
 - **Phase 7 — Reports and dashboards:** 0/7, waiting for Phase 6.
@@ -62,7 +74,8 @@
 
 ## Active blockers
 
-None for starting Phase 3.
+None for starting Phase 4. Activity and task side effects were intentionally
+left out of the Phase 3 stage gates.
 
 ## Decisions needed later
 
@@ -79,9 +92,10 @@ None for starting Phase 3.
 
 ## Next three actions
 
-1. Encode allowed lead and deal transitions, required reasons, and close rules.
-2. Record append-only stage history through one transition service.
-3. Add list and Kanban moves that call that same service.
+1. Define activity and task links, quick-add defaults, reminder policy, and
+   scheduler run rules.
+2. Implement Activity, ActivityLink, Task, and the linked timeline.
+3. Add due, overdue, and upcoming views with complete and snooze.
 
 ## Latest evidence
 
@@ -151,6 +165,47 @@ None for starting Phase 3.
   at 12500.00.
 - 2026-10-11: The user accepted leaving the 500,000-row list timing for Phase 9.
   Phase 2's list gate is complete on the flat query-count evidence.
+- 2026-10-11: Ruff, Django system check, and migration-drift check passed.
+  MySQL pytest covered every lead and deal graph pair in the transition
+  service, plus UI and API allowed and rejected moves, drag posts that leave
+  the stage unchanged and name the missing field, won amount and close date,
+  loss and hold reasons, stale-version 409, history actor/duration/reason/
+  probability, an open-pipeline total of 100.00 that excludes won, lost, and
+  held deals, reversible audited admin correction, admin-only unqualified
+  reopen, retired targets, and admin-only probability override.
+- 2026-10-11: Applied `core.0003_phase3_workflow` and `sales.0002_phase3_workflow`
+  to the local database. `identity.0002_alter_user_manager` aligns the manager
+  foreign key with Django's swappable-user migration state. Twenty-four pytest
+  tests passed.
+- 2026-10-11: Signed-in local check: a new lead rejected `SQL_READY` with the
+  stage unchanged, then moved to `CONTACTED` and showed that reason in history.
+  A $50 deal raised the open pipeline from 60500.00 to 60550.00; closing it
+  lost without a reason returned 422, and closing it with a price reason
+  returned the total to 60500.00 and removed it from the board. Both
+  verification records were deleted. Unsigned browser requests to `/leads/board/`
+  and `/deals/board/` redirected to login.
+- 2026-10-11: Audited Phases 1–3 against the architecture, delivery plan,
+  decision register, implementation, and gates. Removed the documented local
+  credential, separated FluxCRM Admin from Django superuser/staff, removed the
+  Django admin route, made setup races safe, added audited invitation and
+  reset actions, and validated logo signatures. Twelve identity tests passed.
+- 2026-10-11: Phase 2 hardening added complete Deal UI coverage, negative
+  cross-owner read/write tests, Deal stale-version coverage, owner/date/type/
+  temperature list filters, indexed `updated_at` ordering, and flat query-count
+  checks for both Lead and Deal lists. Seven pipeline tests passed. The
+  500,000-row wall-clock measurement remains an explicitly accepted Phase 9
+  gate.
+- 2026-10-11: Interactive records now start at `NEW`; fixture stages use
+  audited corrections. Every Lead and Deal graph pair passed through the
+  service, HTML, and API layers. Deal corrections clear stale terminal state,
+  probability override reasons persist, and StageHistory rejects update and
+  delete. Nine workflow tests passed.
+- 2026-10-11: The complete MySQL suite passed with 34 tests. Ruff, Django
+  system checks, migration-drift checks, and local migrations passed. Live
+  sign-in and the Lead list, Deal list, and both boards returned 200; `/admin/`
+  returned 404. The existing administrator is no longer staff/superuser, and
+  migrations added baseline history for five Leads and two Deals. The
+  Playwright foundation/browser smoke also passed.
 
 ## Recent decision/change log
 
@@ -174,6 +229,13 @@ None for starting Phase 3.
   link to an Account yet. See D-011.
 - **2026-10-11 — List timing:** The 500,000-row list measurement stays in
   Phase 9. The user accepted that because that volume is not expected soon.
+- **2026-10-11 — Protected stages:** Lead and deal graphs are system-protected.
+  Activity, task, and primary-contact gates stay in Phases 4 and 5. Admin is
+  the correction and probability-override role until Phase 6. See D-012.
+- **2026-10-11 — Identity administration:** FluxCRM Admin is an audited
+  application role, not Django staff/superuser access. Invitations and
+  administrator-requested resets use the configured email backend. See D-009
+  and D-010.
 
 ## How to maintain this file
 

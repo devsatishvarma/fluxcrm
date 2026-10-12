@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Stage move · FluxCRM{% endblock %}
+{% block content %}
+  <h1>Stage move was not applied</h1>
+  <p role="alert">
+    {% for field, messages in errors.items %}
+      {{ field }}: {{ messages|join:", " }}
+    {% endfor %}
+  </p>
+{% endblock %}

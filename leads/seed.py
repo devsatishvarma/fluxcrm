@@ -7,9 +7,9 @@ from django.utils.dateparse import parse_datetime
 
 from core.taxonomy import ensure_picklists
 from leads.models import Lead
-from leads.services import create_lead
+from leads.services import create_lead, transition_lead
 from sales.models import Deal
-from sales.services import create_deal
+from sales.services import create_deal, transition_deal
 
 LEADS = (
     {
@@ -109,7 +109,19 @@ def seed_phase2(*, actor, sdr, executive):
             continue
         payload = {key: value for key, value in spec.items() if key != "owner_slot"}
         payload["owner"] = owners[spec["owner_slot"]].pk
-        create_lead(actor=actor, data=payload, request_id="seed")
+        target_stage = payload["stage"]
+        payload["stage"] = "NEW"
+        lead = create_lead(actor=actor, data=payload, request_id="seed")
+        if target_stage != "NEW":
+            transition_lead(
+                actor=actor,
+                lead_id=lead.pk,
+                version=lead.version,
+                to_stage=target_stage,
+                reason="Synthetic fixture stage",
+                correction=True,
+                request_id="seed",
+            )
         created.append(spec["external_id"])
     for spec in DEALS:
         if Deal.all_objects.filter(external_id=spec["external_id"]).exists():
@@ -123,6 +135,18 @@ def seed_phase2(*, actor, sdr, executive):
         payload["lead"] = lead.pk
         payload["owner"] = owners[spec["owner_slot"]].pk
         payload["expected_close_date"] = spec["expected_close_date"].isoformat()
-        create_deal(actor=actor, data=payload, request_id="seed")
+        target_stage = payload["stage"]
+        payload["stage"] = "NEW"
+        deal = create_deal(actor=actor, data=payload, request_id="seed")
+        if target_stage != "NEW":
+            transition_deal(
+                actor=actor,
+                deal_id=deal.pk,
+                version=deal.version,
+                to_stage=target_stage,
+                reason="Synthetic fixture stage",
+                correction=True,
+                request_id="seed",
+            )
         created.append(spec["external_id"])
     return created

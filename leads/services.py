@@ -308,7 +308,14 @@ def filter_leads(user, params):
 
 @transaction.atomic
 def create_lead(*, actor, data, request_id=""):
-    normalized = normalize_lead(actor, data)
+    requested_stage = str(data.get("stage") or "NEW").strip().upper()
+    if requested_stage != "NEW":
+        raise ValidationError(
+            {"stage": "New leads must start at NEW; use a stage transition afterward."}
+        )
+    initial_data = data.copy()
+    initial_data["stage"] = "NEW"
+    normalized = normalize_lead(actor, initial_data)
     now = timezone.now()
     lead = Lead(
         created_by=actor,
@@ -332,11 +339,12 @@ def update_lead(*, actor, lead_id, version, data, request_id=""):
     if not normalized:
         return lead
     before = lead_snapshot(lead)
-    stage_changed = "stage" in normalized and normalized["stage"] != lead.stage
+    if "stage" in normalized and normalized["stage"] != lead.stage:
+        raise ValidationError(
+            {"stage": "Change stage from the board or the transition action."}
+        )
     for field, value in normalized.items():
         setattr(lead, field, value)
-    if stage_changed:
-        lead.stage_entered_at = timezone.now()
     lead.updated_by = actor
     lead.version += 1
     lead.full_clean()
@@ -427,3 +435,89 @@ def lead_payload(lead: Lead) -> dict:
         "created_at": lead.created_at.isoformat(),
         "updated_at": lead.updated_at.isoformat(),
     }
+
+
+def lead_history(lead: Lead):
+    from core.models import StageHistory
+
+    return StageHistory.objects.filter(object_type="lead", object_id=lead.pk)
+
+
+@transaction.atomic
+def transition_lead(
+    *,
+    actor,
+    lead_id,
+    version,
+    to_stage,
+    reason="",
+    data=None,
+    correction=False,
+    request_id="",
+):
+    from django.core.exceptions import PermissionDenied
+
+    from core.models import StageHistory
+    from core.workflow import LEAD_GRAPH, lead_gate_gaps, stage_is_active
+
+    lead = get_scoped(Lead, actor, lead_id, for_update=True)
+    if require_version(version) != lead.version:
+        raise VersionConflict
+    destination = str(to_stage or "").strip()
+    note = str(reason or "").strip()
+    incoming = data or {}
+    if not stage_is_active("LEAD_STAGE", destination):
+        raise ValidationError({"to_stage": "That stage is unknown or retired."})
+    if correction:
+        if not actor.is_company_admin:
+            raise PermissionDenied
+        if not note:
+            raise ValidationError({"reason": "A correction requires a reason."})
+    elif destination not in LEAD_GRAPH.get(lead.stage, ()):
+        raise ValidationError({"to_stage": "That stage move is not allowed."})
+    elif lead.stage == "UNQUALIFIED" and not actor.is_company_admin:
+        raise PermissionDenied
+    for field, list_key in (
+        ("contact_substatus", "CONTACT_SUBSTATUS"),
+        ("nurture_reason", "NURTURE_REASON"),
+        ("disqualification_reason", "DISQUALIFICATION_REASON"),
+    ):
+        if incoming.get(field):
+            setattr(lead, field, clean_optional_key(list_key, incoming[field], field))
+    if "next_follow_up_at" in incoming:
+        lead.next_follow_up_at = clean_datetime(
+            incoming.get("next_follow_up_at"), "next_follow_up_at"
+        )
+    if incoming.get("notes"):
+        lead.notes = str(incoming.get("notes")).strip()
+    if not correction:
+        gaps = lead_gate_gaps(lead, destination, note)
+        if gaps:
+            raise ValidationError({"detail": " ".join(gaps), "missing": gaps})
+    before = lead_snapshot(lead)
+    now = timezone.now()
+    duration = max(int((now - lead.stage_entered_at).total_seconds()), 0)
+    StageHistory.objects.create(
+        object_type="lead",
+        object_id=lead.pk,
+        from_stage=lead.stage,
+        to_stage=destination,
+        changed_by=actor,
+        duration_seconds=duration,
+        reason=note[:500],
+        correction=correction,
+    )
+    lead.stage = destination
+    lead.stage_entered_at = now
+    lead.updated_by = actor
+    lead.version += 1
+    lead.full_clean()
+    lead.save()
+    _record(
+        actor,
+        "lead.corrected" if correction else "lead.stage_changed",
+        lead,
+        before,
+        request_id,
+    )
+    return lead

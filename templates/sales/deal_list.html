@@ -3,7 +3,11 @@
 {% block content %}
   <div class="d-flex justify-content-between align-items-center mb-3">
     <h1 class="mb-0">Deals</h1>
-    <a class="btn btn-primary" href="{% url 'sales:create' %}">Add deal</a>
+    <p class="mb-0">
+      Open pipeline: {{ open_total }} USD
+      <a href="{% url 'sales:board' %}">Board</a>
+      <a class="btn btn-primary" href="{% url 'sales:create' %}">Add deal</a>
+    </p>
   </div>
   <form
     class="row g-2 align-items-end mb-3"
@@ -18,7 +22,46 @@
     </div>
     <div class="col-md-2">
       <label class="form-label" for="deal-stage">Stage</label>
-      <input class="form-control" id="deal-stage" name="stage" value="{{ query.stage }}">
+      <select class="form-select" id="deal-stage" name="stage">
+        {% for key, label in stage_choices %}
+          <option value="{{ key }}"{% if query.stage == key %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label" for="deal-type">Type</label>
+      <select class="form-select" id="deal-type" name="deal_type">
+        {% for key, label in type_choices %}
+          <option value="{{ key }}"{% if query.deal_type == key %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label" for="deal-temperature">Temperature</label>
+      <select class="form-select" id="deal-temperature" name="temperature">
+        {% for key, label in temperature_choices %}
+          <option value="{{ key }}"{% if query.temperature == key %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% if owner_choices %}
+      <div class="col-md-2">
+        <label class="form-label" for="deal-owner">Owner</label>
+        <select class="form-select" id="deal-owner" name="owner">
+          <option value="">All owners</option>
+          {% for owner in owner_choices %}
+            <option value="{{ owner.pk }}"{% if query.owner == owner.pk|stringformat:"s" %} selected{% endif %}>{{ owner.display_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    {% endif %}
+    <div class="col-md-2">
+      <label class="form-label" for="deal-close-after">Close after</label>
+      <input class="form-control" id="deal-close-after" name="close_after" type="date" value="{{ query.close_after }}">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label" for="deal-close-before">Close before</label>
+      <input class="form-control" id="deal-close-before" name="close_before" type="date" value="{{ query.close_before }}">
     </div>
     <div class="col-md-2">
       <button class="btn btn-outline-primary" type="submit">Filter</button>

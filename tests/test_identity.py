@@ -6,11 +6,14 @@ from unittest.mock import patch
 import pytest
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.core import mail
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import IntegrityError
 from django.test import Client, override_settings
 from django.urls import reverse
 
 from audit.models import AuditEvent
-from core.services import ensure_roles
+from core.forms import SetupForm
+from core.services import SetupAlreadyCompleted, ensure_roles, setup_first_administrator
 from identity.models import CompanySettings, User
 
 pytestmark = pytest.mark.django_db
@@ -58,6 +61,8 @@ def test_setup_is_repeatable_and_has_no_default_password(client):
     assert company.default_timezone == "America/Los_Angeles"
     admin = User.objects.get(username="satish")
     assert admin.check_password(ADMIN_PASSWORD)
+    assert admin.is_staff is False
+    assert admin.is_superuser is False
     assert "password" not in str(
         AuditEvent.objects.values_list("after_json", flat=True)
     )
@@ -159,6 +164,25 @@ def test_standard_user_cannot_administer_company_or_users(client):
     assert client.get(reverse("core:company_settings")).status_code == 403
     assert client.get(reverse("core:user_list")).status_code == 403
     assert client.get(reverse("core:user_create")).status_code == 403
+    admin = User.objects.get(username="satish")
+    assert (
+        client.post(reverse("core:company_settings"), setup_payload()).status_code
+        == 403
+    )
+    assert client.post(reverse("core:user_create"), {}).status_code == 403
+    assert (
+        client.post(
+            reverse("core:user_set_active", args=[admin.pk]),
+            {"active": "0"},
+        ).status_code
+        == 403
+    )
+    assert (
+        client.post(
+            reverse("core:user_send_password_reset", args=[admin.pk])
+        ).status_code
+        == 403
+    )
 
 
 def test_company_values_persist_and_render_in_company_timezone(client):
@@ -245,3 +269,143 @@ def test_failed_login_log_omits_password(client, caplog):
         {"username": "satish", "password": "wrong-password-1"},
     )
     assert "wrong-password-1" not in caplog.text
+
+
+@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+def test_admin_can_invite_disable_and_reset_user(client):
+    complete_setup(client)
+    client.post(
+        reverse("core:login"),
+        {"username": "satish", "password": ADMIN_PASSWORD},
+    )
+    _, standard = ensure_roles()
+    invited = client.post(
+        reverse("core:user_create"),
+        {
+            "username": "riley",
+            "email": "riley@example.test",
+            "display_name": "Riley",
+            "timezone": "America/Los_Angeles",
+            "role": standard.pk,
+            "send_invitation": "on",
+        },
+    )
+    assert invited.status_code == 302
+    user = User.objects.get(username="riley")
+    assert user.is_active
+    assert user.is_staff is False
+    assert len(mail.outbox) == 1
+    assert "/password-reset/" in mail.outbox[0].body
+    assert AuditEvent.objects.filter(
+        action="user.invited", object_id=str(user.pk)
+    ).exists()
+
+    reset = client.post(reverse("core:user_send_password_reset", args=[user.pk]))
+    assert reset.status_code == 302
+    assert len(mail.outbox) == 2
+    assert AuditEvent.objects.filter(
+        action="user.password_reset_requested",
+        object_id=str(user.pk),
+    ).exists()
+
+    created = client.post(
+        reverse("core:user_create"),
+        {
+            "username": "morgan",
+            "email": "morgan@example.test",
+            "display_name": "Morgan",
+            "timezone": "America/Los_Angeles",
+            "role": standard.pk,
+            "password": "temporary-strong-pass",
+            "password_confirmation": "temporary-strong-pass",
+        },
+    )
+    assert created.status_code == 302
+    assert User.objects.get(username="morgan").check_password("temporary-strong-pass")
+    assert len(mail.outbox) == 2
+
+    disabled = client.post(
+        reverse("core:user_set_active", args=[user.pk]),
+        {"active": "0"},
+    )
+    assert disabled.status_code == 302
+    user.refresh_from_db()
+    assert user.is_active is False
+    assert AuditEvent.objects.filter(
+        action="user.disabled", object_id=str(user.pk)
+    ).exists()
+    blocked_reset = client.post(
+        reverse("core:user_send_password_reset", args=[user.pk])
+    )
+    assert blocked_reset.status_code == 422
+    admin = User.objects.get(username="satish")
+    cannot_disable_self = client.post(
+        reverse("core:user_set_active", args=[admin.pk]),
+        {"active": "0"},
+    )
+    assert cannot_disable_self.status_code == 422
+    admin.refresh_from_db()
+    assert admin.is_active is True
+
+
+def test_logo_requires_matching_extension_mime_and_signature():
+    valid = SimpleUploadedFile(
+        "logo.png",
+        b"\x89PNG\r\n\x1a\n\x00\x00\x00\x00",
+        content_type="image/png",
+    )
+    form = SetupForm(setup_payload(), {"logo": valid})
+    assert form.is_valid(), form.errors
+
+    disguised = SimpleUploadedFile(
+        "logo.png",
+        b"<script>alert(1)</script>",
+        content_type="image/png",
+    )
+    form = SetupForm(setup_payload(), {"logo": disguised})
+    assert form.is_valid() is False
+    assert "not a valid" in form.errors["logo"][0]
+
+    wrong_extension = SimpleUploadedFile(
+        "logo.txt",
+        b"\x89PNG\r\n\x1a\n\x00\x00\x00\x00",
+        content_type="image/png",
+    )
+    form = SetupForm(setup_payload(), {"logo": wrong_extension})
+    assert form.is_valid() is False
+    assert "must use" in form.errors["logo"][0]
+
+
+def test_concurrent_setup_integrity_error_becomes_safe_rerun():
+    profile = SetupForm(setup_payload())
+    assert profile.is_valid()
+    with (
+        patch("core.services.User.objects.exists", side_effect=[False, False]),
+        patch(
+            "core.services.CompanySettings.objects.exists",
+            side_effect=[False, True],
+        ),
+        patch(
+            "core.services.CompanySettings.objects.create",
+            side_effect=IntegrityError("duplicate singleton"),
+        ),
+        pytest.raises(SetupAlreadyCompleted),
+    ):
+        setup_first_administrator(
+            profile=profile.company_profile(),
+            admin_user={
+                "username": "satish",
+                "email": "satish@example.test",
+                "display_name": "Satish",
+            },
+            password=ADMIN_PASSWORD,
+        )
+
+
+def test_django_admin_is_not_exposed(client):
+    complete_setup(client)
+    client.post(
+        reverse("core:login"),
+        {"username": "satish", "password": ADMIN_PASSWORD},
+    )
+    assert client.get("/admin/").status_code == 404

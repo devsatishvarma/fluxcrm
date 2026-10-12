@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Deal board · FluxCRM{% endblock %}
+{% block content %}
+  <h1>Deal board</h1>
+  <p>Open pipeline: {{ open_total }} USD</p>
+  <p><a href="{% url 'sales:list' %}">List</a></p>
+  <p id="board-error" role="alert"></p>
+  <div class="row g-2">
+    {% for stage, cards in columns %}
+      <section class="col-md-3" data-stage="{{ stage }}">
+        <h2 class="h6">{{ stage }}</h2>
+        {% for deal in cards %}
+          <article
+            class="border rounded p-2 mb-2"
+            draggable="true"
+            data-version="{{ deal.version }}"
+            data-url="{% url 'sales:transition' deal.pk %}"
+          >
+            <a href="{% url 'sales:detail' deal.pk %}">{{ deal.title }}</a>
+            <p class="mb-1">{{ deal.amount|default:"—" }} {{ deal.currency }}</p>
+            <form method="post" action="{% url 'sales:transition' deal.pk %}">
+              {% csrf_token %}
+              <input type="hidden" name="version" value="{{ deal.version }}">
+              <input class="form-control form-control-sm mb-1" name="reason" placeholder="Reason">
+              <input class="form-control form-control-sm mb-1" name="amount" placeholder="Amount">
+              <input class="form-control form-control-sm mb-1" name="expected_close_date" type="date">
+              <input class="form-control form-control-sm mb-1" name="close_reason" placeholder="Close reason">
+              <select class="form-select form-select-sm mb-1" name="to_stage">
+                {% for target in deal.allowed_stage_targets %}
+                  <option value="{{ target }}">{{ target }}</option>
+                {% endfor %}
+              </select>
+              <button class="btn btn-sm btn-outline-primary" type="submit">Move</button>
+            </form>
+          </article>
+        {% empty %}
+          <p>No open deals in this stage.</p>
+        {% endfor %}
+      </section>
+    {% endfor %}
+  </div>
+  {% include "crm/board_script.html" %}
+{% endblock %}

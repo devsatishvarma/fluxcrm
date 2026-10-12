@@ -3,7 +3,10 @@
 {% block content %}
   <div class="d-flex justify-content-between align-items-center mb-3">
     <h1 class="mb-0">Leads</h1>
-    <a class="btn btn-primary" href="{% url 'leads:create' %}">Add lead</a>
+    <p class="mb-0">
+      <a href="{% url 'leads:board' %}">Board</a>
+      <a class="btn btn-primary" href="{% url 'leads:create' %}">Add lead</a>
+    </p>
   </div>
   <form
     class="row g-2 align-items-end mb-3"
@@ -18,11 +21,38 @@
     </div>
     <div class="col-md-2">
       <label class="form-label" for="lead-source">Source</label>
-      <input class="form-control" id="lead-source" name="source" value="{{ query.source }}">
+      <select class="form-select" id="lead-source" name="source">
+        {% for key, label in source_choices %}
+          <option value="{{ key }}"{% if query.source == key %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
     </div>
     <div class="col-md-2">
       <label class="form-label" for="lead-stage">Stage</label>
-      <input class="form-control" id="lead-stage" name="stage" value="{{ query.stage }}">
+      <select class="form-select" id="lead-stage" name="stage">
+        {% for key, label in stage_choices %}
+          <option value="{{ key }}"{% if query.stage == key %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% if owner_choices %}
+      <div class="col-md-2">
+        <label class="form-label" for="lead-owner">Owner</label>
+        <select class="form-select" id="lead-owner" name="owner">
+          <option value="">All owners</option>
+          {% for owner in owner_choices %}
+            <option value="{{ owner.pk }}"{% if query.owner == owner.pk|stringformat:"s" %} selected{% endif %}>{{ owner.display_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    {% endif %}
+    <div class="col-md-2">
+      <label class="form-label" for="lead-created-after">Created after</label>
+      <input class="form-control" id="lead-created-after" name="created_after" type="date" value="{{ query.created_after }}">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label" for="lead-created-before">Created before</label>
+      <input class="form-control" id="lead-created-before" name="created_before" type="date" value="{{ query.created_before }}">
     </div>
     <div class="col-md-2">
       <button class="btn btn-outline-primary" type="submit">Filter</button>

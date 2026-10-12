@@ -1,3 +1,4 @@
+from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django import forms
@@ -7,6 +8,7 @@ from django.core.exceptions import ValidationError
 from identity.models import CompanySettings, Role, User
 
 ALLOWED_LOGO_TYPES = {"image/png", "image/jpeg", "image/webp"}
+ALLOWED_LOGO_EXTENSIONS = {".jpeg", ".jpg", ".png", ".webp"}
 MAX_LOGO_BYTES = 2 * 1024 * 1024
 DEFAULT_SERVICES = [
     "IT Consulting",
@@ -176,8 +178,16 @@ class UserCreateForm(forms.Form):
     timezone = forms.CharField(max_length=64, initial="America/Los_Angeles")
     role = forms.ModelChoiceField(queryset=Role.objects.none())
     manager = forms.ModelChoiceField(queryset=User.objects.none(), required=False)
-    password = forms.CharField(widget=forms.PasswordInput)
-    password_confirmation = forms.CharField(widget=forms.PasswordInput)
+    send_invitation = forms.BooleanField(
+        required=False,
+        initial=True,
+        help_text="Email a single-use password setup link.",
+    )
+    password = forms.CharField(widget=forms.PasswordInput, required=False)
+    password_confirmation = forms.CharField(
+        widget=forms.PasswordInput,
+        required=False,
+    )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -193,8 +203,12 @@ class UserCreateForm(forms.Form):
         cleaned = super().clean()
         password = cleaned.get("password")
         confirmation = cleaned.get("password_confirmation")
+        if not cleaned.get("send_invitation") and not password:
+            self.add_error("password", "Enter a password or send an invitation.")
         if password and confirmation and password != confirmation:
             self.add_error("password_confirmation", "Passwords do not match.")
+        if password and not confirmation:
+            self.add_error("password_confirmation", "Confirm the password.")
         return cleaned
 
 
@@ -214,4 +228,16 @@ def _validate_logo(upload):
     content_type = getattr(upload, "content_type", "")
     if content_type not in ALLOWED_LOGO_TYPES:
         raise ValidationError("Logo files must be PNG, JPEG, or WebP.")
+    if Path(upload.name).suffix.lower() not in ALLOWED_LOGO_EXTENSIONS:
+        raise ValidationError("Logo files must use .png, .jpg, .jpeg, or .webp.")
+    position = upload.tell()
+    header = upload.read(12)
+    upload.seek(position)
+    valid_signature = (
+        header.startswith(b"\x89PNG\r\n\x1a\n")
+        or header.startswith(b"\xff\xd8\xff")
+        or (header.startswith(b"RIFF") and header[8:12] == b"WEBP")
+    )
+    if not valid_signature:
+        raise ValidationError("The uploaded file is not a valid PNG, JPEG, or WebP.")
     return upload

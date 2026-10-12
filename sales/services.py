@@ -52,6 +52,9 @@ def deal_snapshot(deal: Deal) -> dict:
         "title": deal.title,
         "lead_id": str(deal.lead_id),
         "stage": deal.stage,
+        "probability": str(deal.probability),
+        "outcome": deal.outcome,
+        "close_reason": deal.close_reason,
         "deal_type": deal.deal_type,
         "amount": None if deal.amount is None else str(deal.amount),
         "currency": deal.currency,
@@ -80,8 +83,8 @@ def _visible_lead(actor, lead_id):
         raise ValidationError({"lead": "A deal must belong to a lead."})
     try:
         return get_scoped(Lead, actor, lead_id)
-    except PermissionDenied as exc:
-        raise ValidationError({"lead": "You do not have access to that lead."}) from exc
+    except PermissionDenied:
+        raise
     except Http404 as exc:
         raise ValidationError({"lead": "Select an active lead."}) from exc
 
@@ -224,7 +227,14 @@ def filter_deals(user, params):
 
 @transaction.atomic
 def create_deal(*, actor, data, request_id=""):
-    normalized = normalize_deal(actor, data)
+    requested_stage = str(data.get("stage") or "NEW").strip().upper()
+    if requested_stage != "NEW":
+        raise ValidationError(
+            {"stage": "New deals must start at NEW; use a stage transition afterward."}
+        )
+    initial_data = data.copy()
+    initial_data["stage"] = "NEW"
+    normalized = normalize_deal(actor, initial_data)
     deal = Deal(
         created_by=actor,
         updated_by=actor,
@@ -247,11 +257,26 @@ def update_deal(*, actor, deal_id, version, data, request_id=""):
     if not normalized:
         return deal
     before = deal_snapshot(deal)
-    stage_changed = "stage" in normalized and normalized["stage"] != deal.stage
+    if "stage" in normalized and normalized["stage"] != deal.stage:
+        raise ValidationError(
+            {"stage": "Change stage from the board or the transition action."}
+        )
+    if (
+        "probability" in normalized
+        and normalized["probability"] != deal.probability
+        and not actor.is_company_admin
+    ):
+        raise PermissionDenied
+    if (
+        "probability" in normalized
+        and normalized["probability"] != deal.probability
+        and not str(data.get("probability_reason") or "").strip()
+    ):
+        raise ValidationError(
+            {"probability_reason": "A probability override requires a reason."}
+        )
     for field, value in normalized.items():
         setattr(deal, field, value)
-    if stage_changed:
-        deal.stage_entered_at = timezone.now()
     deal.updated_by = actor
     deal.version += 1
     deal.full_clean()
@@ -296,8 +321,163 @@ def deal_payload(deal: Deal) -> dict:
         "owner_name": deal.owner.display_name,
         "stage": deal.stage,
         "probability": str(deal.probability),
+        "bant_budget_status": deal.bant_budget_status,
+        "bant_authority_status": deal.bant_authority_status,
+        "bant_need_status": deal.bant_need_status,
+        "bant_timeline_status": deal.bant_timeline_status,
+        "close_reason": deal.close_reason,
+        "outcome": deal.outcome,
         "notes": deal.notes,
         "version": deal.version,
         "created_at": deal.created_at.isoformat(),
         "updated_at": deal.updated_at.isoformat(),
     }
+
+
+def deal_history(deal: Deal):
+    from core.models import StageHistory
+
+    return StageHistory.objects.filter(object_type="deal", object_id=deal.pk)
+
+
+def open_pipeline_total(user):
+    from django.db.models import Sum
+
+    from core.workflow import OPEN_DEAL_STAGES
+
+    total = (
+        filter_deals(user, {})
+        .filter(stage__in=OPEN_DEAL_STAGES)
+        .aggregate(total=Sum("amount"))["total"]
+    )
+    return total or Decimal("0.00")
+
+
+@transaction.atomic
+def transition_deal(
+    *,
+    actor,
+    deal_id,
+    version,
+    to_stage,
+    reason="",
+    data=None,
+    correction=False,
+    request_id="",
+):
+    from django.core.exceptions import PermissionDenied
+
+    from core.models import StageHistory
+    from core.taxonomy import DEAL_STAGE_PROBABILITY
+    from core.workflow import (
+        DEAL_GRAPH,
+        OPEN_DEAL_STAGES,
+        deal_gate_gaps,
+        stage_is_active,
+    )
+
+    deal = get_scoped(Deal, actor, deal_id, for_update=True, related=("owner", "lead"))
+    if require_version(version) != deal.version:
+        raise VersionConflict
+    destination = str(to_stage or "").strip()
+    note = str(reason or "").strip()
+    incoming = data or {}
+    if not stage_is_active("DEAL_STAGE", destination):
+        raise ValidationError({"to_stage": "That stage is unknown or retired."})
+    if correction:
+        if not actor.is_company_admin:
+            raise PermissionDenied
+        if not note:
+            raise ValidationError({"reason": "A correction requires a reason."})
+    elif destination not in DEAL_GRAPH.get(deal.stage, ()):
+        raise ValidationError({"to_stage": "That stage move is not allowed."})
+    if incoming.get("amount") not in (None, ""):
+        deal.amount = clean_money(incoming.get("amount"))
+    if incoming.get("expected_close_date") not in (None, ""):
+        deal.expected_close_date = clean_date(
+            incoming.get("expected_close_date"), "expected_close_date"
+        )
+    for field in (
+        "bant_budget_status",
+        "bant_authority_status",
+        "bant_need_status",
+        "bant_timeline_status",
+    ):
+        if incoming.get(field):
+            setattr(
+                deal,
+                field,
+                clean_required_key("BANT_STATUS", incoming.get(field), field),
+            )
+    if destination in {"CLOSED_LOST", "CLOSED_HOLD"}:
+        reason_list = (
+            "CLOSED_LOST_REASON"
+            if destination == "CLOSED_LOST"
+            else "CLOSED_HOLD_REASON"
+        )
+        deal.close_reason = clean_required_key(
+            reason_list,
+            incoming.get("close_reason") or deal.close_reason,
+            "close_reason",
+        )
+    probability = Decimal(DEAL_STAGE_PROBABILITY[destination])
+    probability_reason = ""
+    supplied = incoming.get("probability")
+    if supplied not in (None, ""):
+        override = clean_money(supplied, "probability")
+        if override != probability:
+            if not actor.is_company_admin:
+                raise PermissionDenied
+            if not str(incoming.get("probability_reason") or "").strip():
+                raise ValidationError(
+                    {
+                        "probability_reason": (
+                            "A probability override requires a reason."
+                        )
+                    }
+                )
+            probability = override
+            probability_reason = str(incoming["probability_reason"]).strip()
+    if not correction or destination in {"CLOSED_WON", "CLOSED_LOST", "CLOSED_HOLD"}:
+        gaps = deal_gate_gaps(deal, destination, note)
+        if gaps:
+            raise ValidationError({"detail": " ".join(gaps), "missing": gaps})
+    if destination == "CLOSED_WON":
+        deal.outcome = "WON"
+    elif destination == "CLOSED_LOST":
+        deal.outcome = "LOST"
+    elif destination == "CLOSED_HOLD":
+        deal.outcome = "HOLD"
+    elif destination in OPEN_DEAL_STAGES:
+        deal.outcome = ""
+        deal.close_reason = ""
+    before = deal_snapshot(deal)
+    now = timezone.now()
+    duration = max(int((now - deal.stage_entered_at).total_seconds()), 0)
+    StageHistory.objects.create(
+        object_type="deal",
+        object_id=deal.pk,
+        from_stage=deal.stage,
+        to_stage=destination,
+        changed_by=actor,
+        duration_seconds=duration,
+        probability_snapshot=probability,
+        probability_reason=probability_reason[:500],
+        reason=note[:500],
+        correction=correction,
+    )
+    deal.stage = destination
+    deal.probability = probability
+    deal.stage_entered_at = now
+    deal.updated_by = actor
+    deal.version += 1
+    deal.full_clean()
+    deal.save()
+    _record(
+        actor,
+        "deal.corrected" if correction else "deal.stage_changed",
+        deal,
+        before,
+        request_id,
+    )
+    return deal

@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.db import models
 
 
@@ -22,6 +23,61 @@ class PicklistValue(models.Model):
 
     def __str__(self) -> str:
         return f"{self.list_key}:{self.key}"
+
+
+class AppendOnlyQuerySet(models.QuerySet):
+    def update(self, **kwargs):
+        raise ValidationError("Stage history is append-only.")
+
+    def delete(self):
+        raise ValidationError("Stage history is append-only.")
+
+    def bulk_update(self, objs, fields, batch_size=None):
+        raise ValidationError("Stage history is append-only.")
+
+
+class StageHistory(models.Model):
+    """Append-only stage change for a lead or deal."""
+
+    object_type = models.CharField(max_length=16)
+    object_id = models.UUIDField()
+    from_stage = models.CharField(max_length=64, blank=True)
+    to_stage = models.CharField(max_length=64)
+    changed_at = models.DateTimeField(auto_now_add=True)
+    changed_by = models.ForeignKey(
+        "identity.User",
+        null=True,
+        on_delete=models.PROTECT,
+        related_name="stage_changes",
+    )
+    duration_seconds = models.PositiveIntegerField(default=0)
+    probability_snapshot = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
+    probability_reason = models.CharField(max_length=500, blank=True)
+    reason = models.CharField(max_length=500, blank=True)
+    correction = models.BooleanField(default=False)
+    objects = AppendOnlyQuerySet.as_manager()
+
+    class Meta:
+        ordering = ("changed_at", "pk")
+        indexes = [
+            models.Index(fields=("object_type", "object_id", "changed_at")),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.object_type}:{self.object_id} {self.from_stage}->{self.to_stage}"
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValidationError("Stage history is append-only.")
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("Stage history is append-only.")
 
 
 class JobRun(models.Model):

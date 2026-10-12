@@ -24,6 +24,64 @@
     <p>No deals are linked to this lead.</p>
   {% endif %}
   <p><a href="{% url 'sales:create' %}?lead={{ lead.pk }}">Add deal</a></p>
+  <h2>Move stage</h2>
+  <form method="post" action="{% url 'leads:transition' lead.pk %}">
+    {% csrf_token %}
+    <input type="hidden" name="version" value="{{ lead.version }}">
+    <label for="lead-next-stage">Next stage</label>
+    <select id="lead-next-stage" name="to_stage">
+      {% for stage in allowed_stages %}
+        <option value="{{ stage }}">{{ stage }}</option>
+      {% endfor %}
+    </select>
+    <label for="lead-move-reason">Reason</label>
+    <input id="lead-move-reason" name="reason">
+    <label for="lead-substatus">Contact substatus</label>
+    <select id="lead-substatus" name="contact_substatus">
+      {% for key, label in contact_substatus_choices %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+    </select>
+    <label for="lead-nurture-reason">Nurture reason</label>
+    <select id="lead-nurture-reason" name="nurture_reason">
+      {% for key, label in nurture_reason_choices %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+    </select>
+    <label for="lead-disqualification-reason">Disqualification reason</label>
+    <select id="lead-disqualification-reason" name="disqualification_reason">
+      {% for key, label in disqualification_reason_choices %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+    </select>
+    <label for="lead-next-follow-up">Next follow-up</label>
+    <input id="lead-next-follow-up" name="next_follow_up_at" type="datetime-local">
+    <button class="btn btn-primary" type="submit">Move stage</button>
+  </form>
+  {% if correction_stages %}
+    <h3>Administrator correction</h3>
+    <form method="post" action="{% url 'leads:transition' lead.pk %}">
+      {% csrf_token %}
+      <input type="hidden" name="version" value="{{ lead.version }}">
+      <input type="hidden" name="correction" value="1">
+      <label for="lead-correction-stage">Correct stage to</label>
+      <select id="lead-correction-stage" name="to_stage">
+        {% for stage in correction_stages %}<option value="{{ stage }}">{{ stage }}</option>{% endfor %}
+      </select>
+      <label for="lead-correction-reason">Correction reason</label>
+      <input id="lead-correction-reason" name="reason" required>
+      <button class="btn btn-outline-warning" type="submit">Record correction</button>
+    </form>
+  {% endif %}
+  <h2>Stage history</h2>
+  {% if history %}
+    <ul>
+      {% for row in history %}
+        <li>
+          {{ row.from_stage }} to {{ row.to_stage }}
+          by {{ row.changed_by.display_name }}
+          after {{ row.duration_seconds }} seconds.
+          {{ row.reason }}
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p>No stage changes yet.</p>
+  {% endif %}
   <h2>Delete lead</h2>
   <form method="post" action="{% url 'leads:delete' lead.pk %}">
     {% csrf_token %}

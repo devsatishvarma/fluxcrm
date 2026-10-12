@@ -20,7 +20,6 @@ class DealForm(forms.Form):
         required=False,
         widget=forms.DateInput(attrs={"type": "date"}),
     )
-    stage = forms.ChoiceField()
     probability = forms.DecimalField(max_digits=5, decimal_places=2, required=False)
     notes = forms.CharField(required=False, widget=forms.Textarea)
     owner = forms.ModelChoiceField(queryset=User.objects.none(), required=False)
@@ -33,7 +32,6 @@ class DealForm(forms.Form):
         ).order_by("company_name", "last_name")
         self.fields["deal_type"].choices = choice_pairs("DEAL_TYPE")
         self.fields["temperature"].choices = choice_pairs("TEMPERATURE")
-        self.fields["stage"].choices = choice_pairs("DEAL_STAGE")
         self.fields["owner"].queryset = User.objects.filter(is_active=True).order_by(
             "display_name"
         )
@@ -49,7 +47,6 @@ class DealForm(forms.Form):
                     "currency": instance.currency,
                     "temperature": instance.temperature,
                     "expected_close_date": instance.expected_close_date,
-                    "stage": instance.stage,
                     "probability": instance.probability,
                     "notes": instance.notes,
                     "version": instance.version,

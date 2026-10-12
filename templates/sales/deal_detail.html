@@ -14,6 +14,86 @@
     <dt>External ID</dt><dd>{{ deal.external_id }}</dd>
   </dl>
   {% if deal.notes %}<h2>Notes</h2><p>{{ deal.notes }}</p>{% endif %}
+  <h2>Move stage</h2>
+  <form method="post" action="{% url 'sales:transition' deal.pk %}">
+    {% csrf_token %}
+    <input type="hidden" name="version" value="{{ deal.version }}">
+    <label for="deal-next-stage">Next stage</label>
+    <select id="deal-next-stage" name="to_stage">
+      {% for stage in allowed_stages %}
+        <option value="{{ stage }}">{{ stage }}</option>
+      {% endfor %}
+    </select>
+    <label for="deal-move-reason">Reason</label>
+    <input id="deal-move-reason" name="reason">
+    <label for="deal-amount">Amount</label>
+    <input id="deal-amount" name="amount">
+    <label for="deal-close-date">Expected close date</label>
+    <input id="deal-close-date" name="expected_close_date" type="date">
+    <label for="deal-close-reason">Close reason</label>
+    <input id="deal-close-reason" name="close_reason">
+    <label for="deal-budget-status">Budget status</label>
+    <select id="deal-budget-status" name="bant_budget_status">
+      {% for key, label in bant_choices %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+    </select>
+    <label for="deal-authority-status">Authority status</label>
+    <select id="deal-authority-status" name="bant_authority_status">
+      {% for key, label in bant_choices %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+    </select>
+    <label for="deal-need-status">Need status</label>
+    <select id="deal-need-status" name="bant_need_status">
+      {% for key, label in bant_choices %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+    </select>
+    <label for="deal-timeline-status">Timeline status</label>
+    <select id="deal-timeline-status" name="bant_timeline_status">
+      {% for key, label in bant_choices %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+    </select>
+    {% if user.is_company_admin %}
+      <label for="deal-probability">Probability override</label>
+      <input id="deal-probability" name="probability" type="number" min="0" max="100" step="0.01">
+      <label for="deal-probability-reason">Probability reason</label>
+      <input id="deal-probability-reason" name="probability_reason">
+    {% endif %}
+    <button class="btn btn-primary" type="submit">Move stage</button>
+  </form>
+  {% if correction_stages %}
+    <h3>Administrator correction</h3>
+    <form method="post" action="{% url 'sales:transition' deal.pk %}">
+      {% csrf_token %}
+      <input type="hidden" name="version" value="{{ deal.version }}">
+      <input type="hidden" name="correction" value="1">
+      <label for="deal-correction-stage">Correct stage to</label>
+      <select id="deal-correction-stage" name="to_stage">
+        {% for stage in correction_stages %}<option value="{{ stage }}">{{ stage }}</option>{% endfor %}
+      </select>
+      <label for="deal-correction-reason">Correction reason</label>
+      <input id="deal-correction-reason" name="reason" required>
+      <label for="deal-correction-amount">Amount</label>
+      <input id="deal-correction-amount" name="amount">
+      <label for="deal-correction-close-date">Expected close date</label>
+      <input id="deal-correction-close-date" name="expected_close_date" type="date">
+      <label for="deal-correction-close-reason">Close reason</label>
+      <input id="deal-correction-close-reason" name="close_reason">
+      <button class="btn btn-outline-warning" type="submit">Record correction</button>
+    </form>
+  {% endif %}
+  <h2>Stage history</h2>
+  {% if history %}
+    <ul>
+      {% for row in history %}
+        <li>
+          {{ row.from_stage }} to {{ row.to_stage }}
+          by {{ row.changed_by.display_name }}
+          after {{ row.duration_seconds }} seconds.
+          Probability {{ row.probability_snapshot }}.
+          {% if row.probability_reason %}Override reason: {{ row.probability_reason }}.{% endif %}
+          {{ row.reason }}
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p>No stage changes yet.</p>
+  {% endif %}
   <h2>Delete deal</h2>
   <form method="post" action="{% url 'sales:delete' deal.pk %}">
     {% csrf_token %}

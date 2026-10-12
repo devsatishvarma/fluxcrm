@@ -29,7 +29,6 @@ class LeadForm(forms.Form):
     employee_count = forms.IntegerField(min_value=0, required=False)
     annual_revenue = forms.DecimalField(max_digits=18, decimal_places=2, required=False)
     source = forms.ChoiceField()
-    stage = forms.ChoiceField()
     contact_substatus = forms.ChoiceField(required=False)
     nurture_reason = forms.ChoiceField(required=False)
     disqualification_reason = forms.ChoiceField(required=False)
@@ -47,7 +46,6 @@ class LeadForm(forms.Form):
         self.fields["industry"].choices = choice_pairs("INDUSTRY")
         self.fields["company_size_band"].choices = choice_pairs("COMPANY_SIZE")
         self.fields["source"].choices = choice_pairs("LEAD_SOURCE")
-        self.fields["stage"].choices = choice_pairs("LEAD_STAGE")
         self.fields["contact_substatus"].choices = choice_pairs("CONTACT_SUBSTATUS")
         self.fields["nurture_reason"].choices = choice_pairs("NURTURE_REASON")
         self.fields["disqualification_reason"].choices = choice_pairs(

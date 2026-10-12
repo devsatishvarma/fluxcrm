@@ -10,8 +10,10 @@ from leads.services import (
     create_lead,
     delete_lead,
     filter_leads,
+    lead_history,
     lead_payload,
     restore_lead,
+    transition_lead,
     update_lead,
 )
 
@@ -70,3 +72,44 @@ class LeadRestoreView(APIView):
             request_id=getattr(request, "request_id", ""),
         )
         return Response(lead_payload(lead))
+
+
+class LeadTransitionView(APIView):
+    def post(self, request, lead_id):
+        correction = request.data.get("correction")
+        lead = transition_lead(
+            actor=request.user,
+            lead_id=lead_id,
+            version=request.data.get("version"),
+            to_stage=request.data.get("to_stage"),
+            reason=request.data.get("reason", ""),
+            data=request.data,
+            correction=correction is True or str(correction).lower() in {"1", "true"},
+            request_id=getattr(request, "request_id", ""),
+        )
+        return Response(lead_payload(lead))
+
+
+class LeadHistoryView(APIView):
+    def get(self, request, lead_id):
+        lead = get_scoped(Lead, request.user, lead_id)
+        return Response(
+            [
+                {
+                    "from_stage": row.from_stage,
+                    "to_stage": row.to_stage,
+                    "changed_at": row.changed_at.isoformat(),
+                    "changed_by": row.changed_by_id,
+                    "duration_seconds": row.duration_seconds,
+                    "probability_snapshot": (
+                        None
+                        if row.probability_snapshot is None
+                        else str(row.probability_snapshot)
+                    ),
+                    "probability_reason": row.probability_reason,
+                    "reason": row.reason,
+                    "correction": row.correction,
+                }
+                for row in lead_history(lead)
+            ]
+        )

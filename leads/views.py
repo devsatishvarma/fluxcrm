@@ -8,7 +8,9 @@ from django.views.decorators.http import require_http_methods, require_POST
 
 from core.access import activate_viewer_timezone, get_scoped, scoped
 from core.exceptions import VersionConflict
+from core.taxonomy import choice_pairs
 from core.validation import add_form_errors
+from identity.models import User
 from leads.forms import LeadDeleteForm, LeadForm
 from leads.models import Lead
 from leads.services import create_lead, delete_lead, filter_leads, update_lead
@@ -44,6 +46,13 @@ def lead_list(request):
         "errors": errors,
         "query": request.GET,
         "filter_query": filters.urlencode(),
+        "source_choices": choice_pairs("LEAD_SOURCE"),
+        "stage_choices": choice_pairs("LEAD_STAGE"),
+        "owner_choices": (
+            User.objects.filter(is_active=True).order_by("display_name")
+            if request.user.is_company_admin
+            else ()
+        ),
     }
     template = "leads/_lead_results.html" if request.htmx else "leads/lead_list.html"
     return render(request, template, context, status=status)
@@ -78,12 +87,24 @@ def lead_detail(request, lead_id):
     except PermissionDenied:
         return render(request, "crm/forbidden.html", status=403)
     deals = scoped(Deal.objects.filter(lead=lead).select_related("owner"), request.user)
+    from core.workflow import LEAD_BOARD_STAGES, LEAD_GRAPH, allowed_targets
+    from leads.services import lead_history
+
+    stages = allowed_targets(LEAD_GRAPH, lead.stage)
     return render(
         request,
         "leads/lead_detail.html",
         {
             "lead": lead,
             "deals": deals,
+            "history": lead_history(lead).select_related("changed_by"),
+            "allowed_stages": stages,
+            "contact_substatus_choices": choice_pairs("CONTACT_SUBSTATUS"),
+            "nurture_reason_choices": choice_pairs("NURTURE_REASON"),
+            "disqualification_reason_choices": choice_pairs("DISQUALIFICATION_REASON"),
+            "correction_stages": (
+                tuple(LEAD_BOARD_STAGES) if request.user.is_company_admin else ()
+            ),
             "delete_form": LeadDeleteForm(initial={"version": lead.version}),
         },
     )
@@ -176,3 +197,69 @@ def lead_delete(request, lead_id):
             status=409,
         )
     return redirect("leads:list")
+
+
+def lead_board(request):
+    from core.workflow import LEAD_BOARD_STAGES, LEAD_GRAPH, allowed_targets
+
+    activate_viewer_timezone(request.user)
+    leads = list(filter_leads(request.user, request.GET))
+    columns = {stage: [] for stage in LEAD_BOARD_STAGES}
+    for lead in leads:
+        lead.allowed_stage_targets = allowed_targets(LEAD_GRAPH, lead.stage)
+        columns.setdefault(lead.stage, []).append(lead)
+    return render(
+        request,
+        "leads/lead_board.html",
+        {"columns": columns.items(), "error": None},
+    )
+
+
+@require_POST
+def lead_transition(request, lead_id):
+    from leads.services import transition_lead
+
+    correction = request.POST.get("correction") == "1"
+    try:
+        lead = transition_lead(
+            actor=request.user,
+            lead_id=lead_id,
+            version=request.POST.get("version"),
+            to_stage=request.POST.get("to_stage"),
+            reason=request.POST.get("reason", ""),
+            data=request.POST,
+            correction=correction,
+            request_id=_request_id(request),
+        )
+    except PermissionDenied:
+        return _transition_error(
+            request, {"detail": ["You cannot make that change."]}, 403
+        )
+    except VersionConflict:
+        return _transition_error(
+            request, {"detail": ["This record was updated. Reload and retry."]}, 409
+        )
+    except ValidationError as exc:
+        if hasattr(exc, "message_dict"):
+            payload = exc.message_dict
+        else:
+            payload = {"detail": exc.messages}
+        return _transition_error(request, payload, 422)
+    if request.headers.get("X-Requested-With") == "fetch":
+        from django.http import JsonResponse
+
+        return JsonResponse({"stage": lead.stage, "version": lead.version})
+    return redirect("leads:board")
+
+
+def _transition_error(request, payload, status):
+    from django.http import JsonResponse
+
+    if request.headers.get("X-Requested-With") == "fetch":
+        return JsonResponse(payload, status=status)
+    return render(
+        request,
+        "crm/transition_error.html",
+        {"errors": payload},
+        status=status,
+    )

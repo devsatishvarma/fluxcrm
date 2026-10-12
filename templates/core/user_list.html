@@ -21,6 +21,10 @@
           <td>{{ account.role.name }}</td>
           <td>{% if account.is_active %}Active{% else %}Disabled{% endif %}</td>
           <td>
+            <form class="d-inline" method="post" action="{% url 'core:user_send_password_reset' account.pk %}">
+              {% csrf_token %}
+              <button class="btn btn-outline-secondary btn-sm" type="submit">Send password reset</button>
+            </form>
             <form method="post" action="{% url 'core:user_set_active' account.pk %}">
               {% csrf_token %}
               {% if account.is_active %}

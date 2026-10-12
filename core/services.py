@@ -1,12 +1,14 @@
 """Transactional identity and company-profile operations."""
 
 import hashlib
+import secrets
 from datetime import timedelta
 
 from django.conf import settings
+from django.contrib.auth.forms import PasswordResetForm
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from audit.models import AuditEvent
@@ -83,42 +85,47 @@ def user_snapshot(user: User) -> dict:
     }
 
 
-@transaction.atomic
 def setup_first_administrator(*, profile, admin_user, password, request_id=""):
-    if User.objects.exists():
-        raise SetupAlreadyCompleted
-    validate_password(password)
-    admin_role, _ = ensure_roles()
-    company = CompanySettings.objects.create(**profile)
-    user = User(
-        username=admin_user["username"],
-        email=admin_user["email"],
-        display_name=admin_user["display_name"],
-        timezone=company.default_timezone,
-        role=admin_role,
-        is_staff=True,
-        is_superuser=True,
-    )
-    user.set_password(password)
-    user.full_clean()
-    user.save()
-    record_audit(
-        actor=user,
-        action="company_settings.created",
-        instance=company,
-        before=None,
-        after=company_snapshot(company),
-        request_id=request_id,
-    )
-    record_audit(
-        actor=user,
-        action="user.created",
-        instance=user,
-        before=None,
-        after=user_snapshot(user),
-        request_id=request_id,
-    )
-    return company, user
+    try:
+        with transaction.atomic():
+            if User.objects.exists() or CompanySettings.objects.exists():
+                raise SetupAlreadyCompleted
+            validate_password(password)
+            admin_role, _ = ensure_roles()
+            company = CompanySettings.objects.create(**profile)
+            user = User(
+                username=admin_user["username"],
+                email=admin_user["email"],
+                display_name=admin_user["display_name"],
+                timezone=company.default_timezone,
+                role=admin_role,
+                is_staff=False,
+                is_superuser=False,
+            )
+            user.set_password(password)
+            user.full_clean()
+            user.save()
+            record_audit(
+                actor=user,
+                action="company_settings.created",
+                instance=company,
+                before=None,
+                after=company_snapshot(company),
+                request_id=request_id,
+            )
+            record_audit(
+                actor=user,
+                action="user.created",
+                instance=user,
+                before=None,
+                after=user_snapshot(user),
+                request_id=request_id,
+            )
+            return company, user
+    except IntegrityError as exc:
+        if User.objects.exists() or CompanySettings.objects.exists():
+            raise SetupAlreadyCompleted from exc
+        raise
 
 
 @transaction.atomic
@@ -140,8 +147,19 @@ def update_company_settings(*, actor, company, changes, request_id=""):
 
 
 @transaction.atomic
-def create_standard_user(*, actor, user_data, password, request_id=""):
-    validate_password(password, user=User(username=user_data["username"]))
+def create_standard_user(
+    *,
+    actor,
+    user_data,
+    password=None,
+    invite=False,
+    request=None,
+    request_id="",
+):
+    if invite and request is None:
+        raise ValidationError("An invitation requires an HTTP request.")
+    if not invite:
+        validate_password(password, user=User(username=user_data["username"]))
     _, standard_role = ensure_roles()
     role = user_data.get("role") or standard_role
     user = User(
@@ -151,10 +169,10 @@ def create_standard_user(*, actor, user_data, password, request_id=""):
         timezone=user_data["timezone"],
         role=role,
         manager=user_data.get("manager"),
-        is_staff=role.key == "ADMIN",
+        is_staff=False,
         is_superuser=False,
     )
-    user.set_password(password)
+    user.set_password(secrets.token_urlsafe(48) if invite else password)
     user.full_clean()
     user.save()
     record_audit(
@@ -165,7 +183,45 @@ def create_standard_user(*, actor, user_data, password, request_id=""):
         after=user_snapshot(user),
         request_id=request_id,
     )
+    if invite:
+        send_user_password_reset(
+            actor=actor,
+            user=user,
+            request=request,
+            action="user.invited",
+            request_id=request_id,
+        )
     return user
+
+
+def send_user_password_reset(
+    *,
+    actor,
+    user,
+    request,
+    action="user.password_reset_requested",
+    request_id="",
+):
+    if not user.is_active:
+        raise ValidationError("Enable this user before sending a password reset.")
+    form = PasswordResetForm({"email": user.email})
+    if not form.is_valid():
+        raise ValidationError(form.errors.as_text())
+    form.save(
+        request=request,
+        use_https=request.is_secure(),
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        email_template_name="registration/password_reset_email.txt",
+        subject_template_name="registration/password_reset_subject.txt",
+    )
+    record_audit(
+        actor=actor,
+        action=action,
+        instance=user,
+        before=None,
+        after={"delivery": "email", "user_id": user.pk},
+        request_id=request_id,
+    )
 
 
 @transaction.atomic

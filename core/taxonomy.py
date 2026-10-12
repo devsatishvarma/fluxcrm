@@ -111,6 +111,12 @@ TAXONOMY = {
         ("WARM", "Warm"),
         ("COLD", "Cold"),
     ),
+    "BANT_STATUS": (
+        ("UNKNOWN", "Unknown"),
+        ("NOT_MET", "Not met"),
+        ("PARTIAL", "Partial"),
+        ("CONFIRMED", "Confirmed"),
+    ),
 }
 
 DEAL_STAGE_PROBABILITY = {

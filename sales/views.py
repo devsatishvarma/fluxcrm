@@ -7,7 +7,9 @@ from django.views.decorators.http import require_http_methods, require_POST
 
 from core.access import activate_viewer_timezone, get_scoped
 from core.exceptions import VersionConflict
+from core.taxonomy import choice_pairs
 from core.validation import add_form_errors
+from identity.models import User
 from sales.forms import DealDeleteForm, DealForm
 from sales.models import Deal
 from sales.services import create_deal, delete_deal, filter_deals, update_deal
@@ -37,11 +39,22 @@ def deal_list(request):
     page = paginator.get_page(request.GET.get("page") or 1)
     filters = request.GET.copy()
     filters.pop("page", None)
+    from sales.services import open_pipeline_total
+
     context = {
         "page_obj": page,
         "errors": errors,
         "query": request.GET,
         "filter_query": filters.urlencode(),
+        "open_total": open_pipeline_total(request.user),
+        "stage_choices": choice_pairs("DEAL_STAGE"),
+        "type_choices": choice_pairs("DEAL_TYPE"),
+        "temperature_choices": choice_pairs("TEMPERATURE"),
+        "owner_choices": (
+            User.objects.filter(is_active=True).order_by("display_name")
+            if request.user.is_company_admin
+            else ()
+        ),
     }
     template = "sales/_deal_results.html" if request.htmx else "sales/deal_list.html"
     return render(request, template, context, status=status)
@@ -78,11 +91,24 @@ def deal_detail(request, deal_id):
         deal = get_scoped(Deal, request.user, deal_id, related=("owner", "lead"))
     except PermissionDenied:
         return render(request, "crm/forbidden.html", status=403)
+    from core.taxonomy import DEAL_STAGE_PROBABILITY
+    from core.workflow import DEAL_GRAPH, allowed_targets
+    from sales.services import deal_history
+
+    stages = allowed_targets(DEAL_GRAPH, deal.stage)
     return render(
         request,
         "sales/deal_detail.html",
         {
             "deal": deal,
+            "history": deal_history(deal).select_related("changed_by"),
+            "allowed_stages": stages,
+            "bant_choices": choice_pairs("BANT_STATUS"),
+            "lost_reason_choices": choice_pairs("CLOSED_LOST_REASON"),
+            "hold_reason_choices": choice_pairs("CLOSED_HOLD_REASON"),
+            "correction_stages": (
+                tuple(DEAL_STAGE_PROBABILITY) if request.user.is_company_admin else ()
+            ),
             "delete_form": DealDeleteForm(initial={"version": deal.version}),
         },
     )
@@ -128,7 +154,13 @@ def deal_edit(request, deal_id):
 def deal_delete(request, deal_id):
     form = DealDeleteForm(request.POST)
     if not form.is_valid():
-        return redirect("sales:detail", deal_id)
+        deal = get_scoped(Deal, request.user, deal_id, related=("owner", "lead"))
+        return render(
+            request,
+            "sales/deal_detail.html",
+            {"deal": deal, "delete_form": form},
+            status=422,
+        )
     try:
         delete_deal(
             actor=request.user,
@@ -158,3 +190,67 @@ def deal_delete(request, deal_id):
             status=409,
         )
     return redirect("sales:list")
+
+
+def deal_board(request):
+    from core.workflow import DEAL_GRAPH, OPEN_DEAL_STAGES, allowed_targets
+
+    activate_viewer_timezone(request.user)
+    deals = list(filter_deals(request.user, {}).filter(stage__in=OPEN_DEAL_STAGES))
+    columns = {stage: [] for stage in OPEN_DEAL_STAGES}
+    for deal in deals:
+        deal.allowed_stage_targets = allowed_targets(DEAL_GRAPH, deal.stage)
+        columns[deal.stage].append(deal)
+    from sales.services import open_pipeline_total
+
+    return render(
+        request,
+        "sales/deal_board.html",
+        {
+            "columns": columns.items(),
+            "open_total": open_pipeline_total(request.user),
+        },
+    )
+
+
+@require_POST
+def deal_transition(request, deal_id):
+    from sales.services import transition_deal
+
+    correction = request.POST.get("correction") == "1"
+    try:
+        deal = transition_deal(
+            actor=request.user,
+            deal_id=deal_id,
+            version=request.POST.get("version"),
+            to_stage=request.POST.get("to_stage"),
+            reason=request.POST.get("reason", ""),
+            data=request.POST,
+            correction=correction,
+            request_id=_request_id(request),
+        )
+    except PermissionDenied:
+        from leads.views import _transition_error
+
+        return _transition_error(
+            request, {"detail": ["You cannot make that change."]}, 403
+        )
+    except VersionConflict:
+        from leads.views import _transition_error
+
+        return _transition_error(
+            request, {"detail": ["This record was updated. Reload and retry."]}, 409
+        )
+    except ValidationError as exc:
+        from leads.views import _transition_error
+
+        if hasattr(exc, "message_dict"):
+            payload = exc.message_dict
+        else:
+            payload = {"detail": exc.messages}
+        return _transition_error(request, payload, 422)
+    if request.headers.get("X-Requested-With") == "fetch":
+        from django.http import JsonResponse
+
+        return JsonResponse({"stage": deal.stage, "version": deal.version})
+    return redirect("sales:board")

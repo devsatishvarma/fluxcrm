@@ -31,10 +31,17 @@ class Deal(AuditedRecord):
     stage_entered_at = models.DateTimeField()
     probability = models.DecimalField(max_digits=5, decimal_places=2)
     notes = models.TextField(blank=True)
+    bant_budget_status = models.CharField(max_length=16, default="UNKNOWN")
+    bant_authority_status = models.CharField(max_length=16, default="UNKNOWN")
+    bant_need_status = models.CharField(max_length=16, default="UNKNOWN")
+    bant_timeline_status = models.CharField(max_length=16, default="UNKNOWN")
+    close_reason = models.CharField(max_length=64, blank=True)
+    outcome = models.CharField(max_length=16, blank=True)
 
     class Meta:
         indexes = [
             models.Index(fields=("owner", "stage", "created_at")),
+            models.Index(fields=("owner", "updated_at")),
             models.Index(fields=("deleted_at", "owner")),
             models.Index(fields=("lead", "stage")),
             models.Index(fields=("expected_close_date",)),

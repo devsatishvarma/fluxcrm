@@ -48,6 +48,7 @@ class Lead(AuditedRecord):
     class Meta:
         indexes = [
             models.Index(fields=("owner", "stage", "created_at")),
+            models.Index(fields=("owner", "updated_at")),
             models.Index(fields=("deleted_at", "owner")),
             models.Index(fields=("stage", "created_at")),
             models.Index(fields=("next_follow_up_at",)),

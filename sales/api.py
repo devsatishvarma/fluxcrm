@@ -8,9 +8,11 @@ from core.api import CappedPagination, parse_page_size
 from sales.models import Deal
 from sales.services import (
     create_deal,
+    deal_history,
     deal_payload,
     delete_deal,
     filter_deals,
+    transition_deal,
     update_deal,
 )
 
@@ -59,3 +61,44 @@ class DealDetailView(APIView):
             request_id=getattr(request, "request_id", ""),
         )
         return Response(status=204)
+
+
+class DealTransitionView(APIView):
+    def post(self, request, deal_id):
+        correction = request.data.get("correction")
+        deal = transition_deal(
+            actor=request.user,
+            deal_id=deal_id,
+            version=request.data.get("version"),
+            to_stage=request.data.get("to_stage"),
+            reason=request.data.get("reason", ""),
+            data=request.data,
+            correction=correction is True or str(correction).lower() in {"1", "true"},
+            request_id=getattr(request, "request_id", ""),
+        )
+        return Response(deal_payload(deal))
+
+
+class DealHistoryView(APIView):
+    def get(self, request, deal_id):
+        deal = get_scoped(Deal, request.user, deal_id, related=("owner", "lead"))
+        return Response(
+            [
+                {
+                    "from_stage": row.from_stage,
+                    "to_stage": row.to_stage,
+                    "changed_at": row.changed_at.isoformat(),
+                    "changed_by": row.changed_by_id,
+                    "duration_seconds": row.duration_seconds,
+                    "probability_snapshot": (
+                        None
+                        if row.probability_snapshot is None
+                        else str(row.probability_snapshot)
+                    ),
+                    "probability_reason": row.probability_reason,
+                    "reason": row.reason,
+                    "correction": row.correction,
+                }
+                for row in deal_history(deal)
+            ]
+        )

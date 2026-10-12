@@ -1,6 +1,7 @@
 """First-run setup, authentication, and administration screens."""
 
 import logging
+from smtplib import SMTPException
 from zoneinfo import ZoneInfo
 
 from django.contrib.auth import login, logout
@@ -24,6 +25,7 @@ from core.services import (
     create_standard_user,
     is_throttled,
     record_attempt,
+    send_user_password_reset,
     set_user_active,
     setup_first_administrator,
     update_company_settings,
@@ -202,11 +204,22 @@ def user_create(request: HttpRequest) -> HttpResponse:
             create_standard_user(
                 actor=request.user,
                 user_data=form.cleaned_data,
-                password=form.cleaned_data["password"],
+                password=form.cleaned_data.get("password"),
+                invite=form.cleaned_data["send_invitation"],
+                request=request,
                 request_id=getattr(request, "request_id", ""),
             )
         except ValidationError as exc:
             form.add_error(None, exc)
+        except (OSError, SMTPException):
+            logger.exception(
+                "User invitation delivery failed",
+                extra={"outcome": "failure"},
+            )
+            form.add_error(
+                None,
+                "The invitation could not be delivered. No user was created.",
+            )
         else:
             return redirect("core:user_list")
     return render(request, "core/user_form.html", {"form": form})
@@ -235,5 +248,45 @@ def user_set_active(request: HttpRequest, user_id: int) -> HttpResponse:
                 "error": exc.messages[0],
             },
             status=422,
+        )
+    return redirect("core:user_list")
+
+
+@login_required
+@require_POST
+def user_send_password_reset(request: HttpRequest, user_id: int) -> HttpResponse:
+    if not request.user.is_company_admin:
+        return HttpResponse(status=403)
+    user = get_object_or_404(User, pk=user_id)
+    try:
+        send_user_password_reset(
+            actor=request.user,
+            user=user,
+            request=request,
+            request_id=getattr(request, "request_id", ""),
+        )
+    except ValidationError as exc:
+        return render(
+            request,
+            "core/user_list.html",
+            {
+                "users": User.objects.select_related("role", "manager"),
+                "error": exc.messages[0],
+            },
+            status=422,
+        )
+    except (OSError, SMTPException):
+        logger.exception(
+            "Password reset delivery failed",
+            extra={"outcome": "failure", "user_id": user.pk},
+        )
+        return render(
+            request,
+            "core/user_list.html",
+            {
+                "users": User.objects.select_related("role", "manager"),
+                "error": "The password reset email could not be delivered.",
+            },
+            status=503,
         )
     return redirect("core:user_list")

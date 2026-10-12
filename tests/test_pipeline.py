@@ -220,6 +220,68 @@ def test_stale_versions_conflict_and_owner_scope_holds(client):
     denied = client.get(reverse("leads:detail", args=[lead_id]))
     assert denied.status_code == 403
     assert other_api.get("/api/v1/leads/?q=Analytical").json()["count"] == 0
+    denied_patch = other_api.patch(
+        f"/api/v1/leads/{lead_id}/",
+        {"version": 1, "company_name": "Stolen"},
+        format="json",
+    )
+    assert denied_patch.status_code == 403
+    assert Lead.objects.get(pk=lead_id).company_name == "Analytical Engines"
+
+    api.force_authenticate(user=admin)
+    deal = api.post(
+        "/api/v1/deals/",
+        {
+            "title": "Scoped deal",
+            "lead": lead_id,
+            "deal_type": "CONSULTING_SERVICES",
+            "currency": "USD",
+            "temperature": "WARM",
+            "stage": "NEW",
+            "owner": owner.pk,
+        },
+        format="json",
+    )
+    assert deal.status_code == 201
+    deal_id = deal.json()["id"]
+    stale_deal = api.patch(
+        f"/api/v1/deals/{deal_id}/",
+        {"version": 0, "title": "Stale"},
+        format="json",
+    )
+    assert stale_deal.status_code == 409
+    assert Deal.objects.get(pk=deal_id).title == "Scoped deal"
+    assert (
+        other_api.patch(
+            f"/api/v1/deals/{deal_id}/",
+            {"version": 1, "title": "Stolen"},
+            format="json",
+        ).status_code
+        == 403
+    )
+    assert (
+        other_api.delete(
+            f"/api/v1/deals/{deal_id}/",
+            {"version": 1, "delete_reason": "Not mine"},
+            format="json",
+        ).status_code
+        == 403
+    )
+    assert Deal.objects.get(pk=deal_id).title == "Scoped deal"
+
+    hidden_lead_deal = other_api.post(
+        "/api/v1/deals/",
+        {
+            "title": "Hidden lead",
+            "lead": lead_id,
+            "deal_type": "CONSULTING_SERVICES",
+            "currency": "USD",
+            "temperature": "WARM",
+            "stage": "NEW",
+        },
+        format="json",
+    )
+    assert hidden_lead_deal.status_code == 403
 
 
 def test_seed_values_reconcile_and_lists_do_not_query_per_row(client, caplog):
@@ -245,13 +307,14 @@ def test_seed_values_reconcile_and_lists_do_not_query_per_row(client, caplog):
     assert "private notebook" not in caplog.text
     assert "notes@example.test" not in caplog.text
 
-    def list_queries():
+    def list_queries(url):
         with CaptureQueriesContext(connection) as captured:
-            response = client.get(reverse("leads:list"))
+            response = client.get(url)
         assert response.status_code == 200
         return len(captured)
 
-    before = list_queries()
+    lead_before = list_queries(reverse("leads:list"))
+    deal_before = list_queries(reverse("sales:list"))
     for index in range(3):
         Lead.objects.create(
             external_id=f"extra-{index}",
@@ -265,8 +328,23 @@ def test_seed_values_reconcile_and_lists_do_not_query_per_row(client, caplog):
             created_by=admin,
             updated_by=admin,
         )
-    after = list_queries()
-    assert before == after
+        Deal.objects.create(
+            external_id=f"extra-deal-{index}",
+            title=f"Extra Deal {index}",
+            lead=lead,
+            deal_type="CONSULTING_SERVICES",
+            amount=Decimal("100.00"),
+            currency="USD",
+            temperature="WARM",
+            stage="NEW",
+            stage_entered_at=lead.stage_entered_at,
+            probability=Decimal("5.00"),
+            owner=admin,
+            created_by=admin,
+            updated_by=admin,
+        )
+    assert lead_before == list_queries(reverse("leads:list"))
+    assert deal_before == list_queries(reverse("sales:list"))
 
 
 def test_anonymous_visitors_are_sent_to_login(client):
@@ -275,3 +353,85 @@ def test_anonymous_visitors_are_sent_to_login(client):
     response = client.get(reverse("leads:list"))
     assert response.status_code == 302
     assert "/login/" in response.url
+
+
+def test_deal_ui_crud_filters_errors_and_lead_delete_guard(client):
+    ensure_picklists()
+    admin = make_user("ada", admin=True)
+    client.force_login(admin)
+    lead_response = client.post(reverse("leads:create"), lead_form())
+    lead = Lead.objects.get(email_normalized="ada@example.test")
+    assert lead_response.status_code == 302
+
+    created = client.post(
+        reverse("sales:create"),
+        {
+            "title": "UI consulting",
+            "lead": lead.pk,
+            "deal_type": "CONSULTING_SERVICES",
+            "amount": "2500.00",
+            "currency": "USD",
+            "temperature": "HOT",
+            "expected_close_date": "2026-12-15",
+            "stage": "NEW",
+            "probability": "5.00",
+            "owner": admin.pk,
+        },
+    )
+    assert created.status_code == 302
+    deal = Deal.objects.get(title="UI consulting")
+    listed = client.get(
+        reverse("sales:list"),
+        {
+            "deal_type": "CONSULTING_SERVICES",
+            "temperature": "HOT",
+            "owner": admin.pk,
+            "close_after": "2026-12-01",
+            "close_before": "2026-12-31",
+        },
+    )
+    assert listed.status_code == 200
+    assert b"UI consulting" in listed.content
+    assert b"Close after" in listed.content
+    empty = client.get(reverse("sales:list"), {"temperature": "COLD"})
+    assert b"No deals match these filters." in empty.content
+
+    invalid_delete = client.post(
+        reverse("sales:delete", args=[deal.pk]),
+        {"version": deal.version, "delete_reason": ""},
+    )
+    assert invalid_delete.status_code == 422
+    assert Deal.objects.filter(pk=deal.pk).exists()
+    blocked_lead = client.post(
+        reverse("leads:delete", args=[lead.pk]),
+        {"version": lead.version, "delete_reason": "No longer needed"},
+    )
+    assert blocked_lead.status_code == 422
+    assert Lead.objects.filter(pk=lead.pk).exists()
+    deleted = client.post(
+        reverse("sales:delete", args=[deal.pk]),
+        {"version": deal.version, "delete_reason": "Duplicate"},
+    )
+    assert deleted.status_code == 302
+    assert Deal.objects.filter(pk=deal.pk).exists() is False
+
+
+def test_invalid_lead_owner_and_short_delete_reason_are_rejected():
+    ensure_picklists()
+    admin = make_user("ada", admin=True)
+    api = APIClient()
+    api.force_authenticate(user=admin)
+    invalid_owner = api.post(
+        "/api/v1/leads/",
+        lead_form(owner=999999),
+        format="json",
+    )
+    assert invalid_owner.status_code == 422
+    created = api.post("/api/v1/leads/", lead_form(), format="json")
+    rejected = api.delete(
+        f"/api/v1/leads/{created.json()['id']}/",
+        {"version": 1, "delete_reason": "x"},
+        format="json",
+    )
+    assert rejected.status_code == 422
+    assert Lead.objects.filter(pk=created.json()["id"]).exists()

@@ -132,6 +132,9 @@ here before implementing it.
 - The `accounts` app remains reserved for CRM customer and prospect records.
 - `AUTH_USER_MODEL` is `identity.User`, with a manager relationship and an
   Admin or Standard User role. Team membership remains a Phase 6 addition.
+- FluxCRM Admin is an application role, not Django staff/superuser access.
+  The Django admin route is not exposed; company and user changes use audited
+  application services.
 - Development databases created before this user model must be recreated.
   No production user data exists.
 - **Affected phases:** 1 and 5
@@ -144,6 +147,9 @@ here before implementing it.
 - **Date/status:** 2026-10-11 — Confirmed during Phase 1 design
 - Development uses Django's console email backend. Tests use the in-memory
   backend.
+- Administrators may create a user with a temporary password or send a
+  single-use invitation, and may send a later password reset. All three use
+  the same configured backend and are audited.
 - Reset links expire after one hour and become invalid after use.
 - A production email provider and failure-alert owner are still required
   before production password reset is enabled.
@@ -166,13 +172,44 @@ here before implementing it.
 - List views must stay free of per-row queries. The timed list target at
   500,000 rows remains a Phase 9 measurement. On 2026-10-11 the user accepted
   that deferral because that volume is not expected soon. Phase 2 instead
-  proved the list query count does not grow with the rows on the page.
+  proved the Lead and Deal list query counts do not grow with the rows on the
+  page.
 - Seed and API keys use this document's uppercase taxonomy. The architecture
   sample's lowercase source names are illustrative only.
 - **Affected phases:** 2, 3, 5, 6, and 9
 - **Specification impact:** Preserves the Phase 2 exit gate that a Deal cannot
   be orphaned or attached to an Account yet.
 - **Approval source:** Phase 2 delivery plan.
+
+### D-012 — Phase 3 protected stage workflow
+
+- **Date/status:** 2026-10-11 — Confirmed by proceeding from Phase 2 into Phase 3
+- Lead and deal stage graphs are system-protected. Picklist labels stay
+  editable. Retiring a value blocks it as a new transition target. The lead
+  and deal edit forms cannot change stage; the transition service is the only
+  stage writer, and the list, detail form, and Kanban all call it.
+- Interactive create always starts at `NEW`. Synthetic fixtures also create at
+  `NEW`, then use an audited Admin correction to establish their known stage.
+  Phase 3 migration records a baseline history row for pre-existing records.
+- The architecture's explicit “any active stage” rules for Nurturing,
+  Unqualified, and Archived take precedence where its state diagram omits an
+  edge. Unqualified remains terminal for ordinary users.
+- Activity and task side effects stay in Phase 4. Primary contact stays in
+  Phase 5. Until those phases, contact, discovery, and proposal gates use the
+  data already on the record plus a reason: contact substatus and a channel,
+  BANT statuses, amount, expected close date, and a close reason.
+- Until manager roles arrive in Phase 6, Admin is the probability-override
+  role and the correction role. An override requires `probability_reason`,
+  which is stored with the probability snapshot.
+  Reopening an unqualified lead is admin-only. Closed won, closed lost, and
+  closed hold stay out of open pipeline totals.
+- A Kanban drop posts the same transition endpoint and leaves the card in
+  place until the server accepts the move.
+- Stage history is append-only at the application model/queryset layer.
+- **Affected phases:** 3, 4, 5, and 6
+- **Specification impact:** Preserves the workflow exit gates while deferring
+  activity, task, and primary-contact side effects to the phases that own them.
+- **Approval source:** Phase 3 delivery plan.
 
 ## Starter taxonomy — version 1
 

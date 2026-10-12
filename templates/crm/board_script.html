@@ -1,0 +1,29 @@
+<script>
+  document.querySelectorAll("article[draggable='true']").forEach((card) => {
+    card.addEventListener("dragstart", () => card.dataset.dragging = "true");
+    card.addEventListener("dragend", () => delete card.dataset.dragging);
+  });
+  document.querySelectorAll("[data-stage]").forEach((column) => {
+    column.addEventListener("dragover", (event) => event.preventDefault());
+    column.addEventListener("drop", async (event) => {
+      event.preventDefault();
+      const card = document.querySelector("article[data-dragging='true']");
+      const error = document.getElementById("board-error");
+      if (!card) return;
+      const body = new FormData(card.querySelector("form"));
+      body.set("to_stage", column.dataset.stage);
+      const response = await fetch(card.dataset.url, {
+        method: "POST",
+        body,
+        headers: {"X-Requested-With": "fetch"},
+      });
+      if (!response.ok) {
+        const payload = await response.json();
+        const missing = payload.missing || payload.detail || payload.to_stage;
+        error.textContent = Array.isArray(missing) ? missing.join(" ") : missing;
+        return;
+      }
+      window.location.reload();
+    });
+  });
+</script>
