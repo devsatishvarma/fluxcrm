@@ -5,29 +5,29 @@
 
 ## Current position
 
-- **MVP completion:** 9% (6 of 69 Phase 0–9 gate items verified)
-- **Current phase:** Phase 0 — Foundation
-- **Phase status:** In progress
-- **Phase completion:** 86% (6 of 7 gate items verified)
+- **MVP completion:** 10% (7 of 69 Phase 0–9 gate items verified)
+- **Current phase:** Phase 1 — Company and identity
+- **Phase status:** Not started
+- **Phase completion:** 0% (0 of 7 gate items verified)
 - **Planning baseline:** Complete
 - **Last updated:** 2026-10-11
-- **Last verified result:** Clean checkout `40a0734` started with the
-  documented command; web, MySQL, and scheduler are healthy. The private CI
-  run is not yet observable.
+- **Last verified result:** Phase 0 is complete. GitHub Actions run
+  [38182395029](https://github.com/devsatishvarma/fluxcrm/actions/runs/38182395029)
+  passed on commit `27e59d6`.
 
-## Current phase gate — Phase 0
+## Current phase gate — Phase 1
 
-- [x] Clean clone starts with one documented command.
-- [ ] Migrations pass against empty local and CI MySQL 8.4 databases.
-- [x] Database failure produces a clear failed readiness result.
-- [x] Container restart preserves database and upload volumes.
-- [x] A backup restores successfully into a clean database.
-- [x] No secrets are committed or emitted in logs.
-- [x] Existing AI and new CRM dependencies resolve without unreviewed conflict.
+- [ ] Clean-database setup and a safe rerun both succeed.
+- [ ] Active users can authenticate; disabled users cannot.
+- [ ] Reset tokens expire, are single-use, and are absent from logs.
+- [ ] Non-admin users cannot change company or user administration settings.
+- [ ] Company values survive restart and render in `America/Los_Angeles`.
+- [ ] Login/reset throttles and secure-cookie behavior pass automated checks.
+- [ ] No default production credential exists.
 
 ## Phase summary
 
-- **Phase 0 — Foundation:** 6/7, in progress.
+- **Phase 0 — Foundation:** 7/7, complete.
 - **Phase 1 — Company and identity:** 0/7, waiting for Phase 0.
 - **Phase 2 — Leads and lead-linked Deals:** 0/7, waiting for Phase 1.
 - **Phase 3 — Workflow:** 0/7, waiting for Phase 2.
@@ -41,9 +41,7 @@
 
 ## Active blockers
 
-- GitHub CLI is not authenticated, so the private Actions result cannot be
-  read. Run `gh auth login` and then report the `phase-0-foundation` workflow
-  result.
+None for starting Phase 1.
 
 ## Decisions needed later
 
@@ -60,10 +58,9 @@
 
 ## Next three actions
 
-1. Authenticate the GitHub CLI and record the `phase-0-foundation` Actions
-   result, including clean-MySQL migrations.
-2. Close the remaining Phase 0 CI gate only if that run passes.
-3. Begin Phase 1 design after the CI gate passes.
+1. Design the first-run administrator bootstrap and Admin/Standard User grants.
+2. Define user creation, disablement, and password-reset behavior.
+3. Implement company settings and authentication as the first Phase 1 slice.
 
 ## Latest evidence
 
@@ -95,6 +92,11 @@
   removed.
 - 2026-10-11: Secret-pattern scan, `uv lock --check`, `git diff --check`, and
   `docker compose config --quiet` passed.
+- 2026-10-11: GitHub Actions run 38182395029 succeeded for `27e59d6` on
+  `phase-0-foundation`. A clean MySQL 8.4 service applied every migration,
+  including `core.0001_initial`. Ruff, Django checks, migration-drift checks,
+  6 pytest tests, and 1 Playwright smoke test passed. An earlier run,
+  38181980759, also succeeded.
 
 ## Recent decision/change log
 
