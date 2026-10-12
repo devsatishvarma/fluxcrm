@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Company · FluxCRM{% endblock %}
+{% block content %}
+  <h1>Company settings</h1>
+  <form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button class="btn btn-primary" type="submit">Save company settings</button>
+  </form>
+{% endblock %}

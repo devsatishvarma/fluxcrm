@@ -2,13 +2,8 @@ import logging
 
 from django.db import DatabaseError, connection
 from django.http import HttpRequest, JsonResponse
-from django.shortcuts import render
 
 logger = logging.getLogger(__name__)
-
-
-def home(request: HttpRequest):
-    return render(request, "core/home.html")
 
 
 def health(request: HttpRequest) -> JsonResponse:

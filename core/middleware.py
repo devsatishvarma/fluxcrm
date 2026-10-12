@@ -6,6 +6,7 @@ import time
 import uuid
 
 from django.http import HttpRequest, HttpResponse
+from django.shortcuts import redirect
 
 from core.logging import request_id_context
 
@@ -33,11 +34,14 @@ class RequestIdMiddleware:
             duration_ms = (time.monotonic() - started_at) * 1000
             response.headers["X-Request-ID"] = request_id
             response.headers["Server-Timing"] = f"app;dur={duration_ms:.2f}"
+            log_path = request.path
+            if "/password-reset/" in log_path and log_path.count("/") >= 4:
+                log_path = "/password-reset/<redacted>/"
             logger.info(
                 "Request completed",
                 extra={
                     "http_method": request.method,
-                    "http_path": request.path,
+                    "http_path": log_path,
                     "http_status": response.status_code,
                     "duration_ms": round(duration_ms, 2),
                 },
@@ -45,3 +49,19 @@ class RequestIdMiddleware:
             return response
         finally:
             request_id_context.reset(token)
+
+
+class SetupRequiredMiddleware:
+    """Send an unconfigured installation to first-run setup."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request: HttpRequest) -> HttpResponse:
+        if request.path.startswith(("/health", "/ready", "/setup", "/static")):
+            return self.get_response(request)
+        from identity.models import User
+
+        if not User.objects.exists():
+            return redirect("core:setup")
+        return self.get_response(request)

@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Add user · FluxCRM{% endblock %}
+{% block content %}
+  <h1>Add user</h1>
+  <form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button class="btn btn-primary" type="submit">Create user</button>
+  </form>
+{% endblock %}

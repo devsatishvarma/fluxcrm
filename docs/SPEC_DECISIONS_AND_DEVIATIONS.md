@@ -123,6 +123,35 @@ here before implementing it.
   selected application architecture.
 - **Approval source:** User selection before Phase 0 implementation.
 
+### D-009 — Identity models live in the identity app
+
+- **Date/status:** 2026-10-11 — Confirmed during Phase 1 design
+- Internal users, roles, company settings, and login throttles live in the
+  `identity` app. Its initial migration creates the custom user, which Django
+  requires before `admin` migrations can reference it.
+- The `accounts` app remains reserved for CRM customer and prospect records.
+- `AUTH_USER_MODEL` is `identity.User`, with a manager relationship and an
+  Admin or Standard User role. Team membership remains a Phase 6 addition.
+- Development databases created before this user model must be recreated.
+  No production user data exists.
+- **Affected phases:** 1 and 5
+- **Specification impact:** Preserves the architecture's user fields while
+  avoiding a name collision with the CRM Account module.
+- **Approval source:** Phase 1 design required before implementation.
+
+### D-010 — Development password-reset email
+
+- **Date/status:** 2026-10-11 — Confirmed during Phase 1 design
+- Development uses Django's console email backend. Tests use the in-memory
+  backend.
+- Reset links expire after one hour and become invalid after use.
+- A production email provider and failure-alert owner are still required
+  before production password reset is enabled.
+- **Affected phase:** 1
+- **Specification impact:** Implements the reset workflow without selecting an
+  unapproved production email service.
+- **Approval source:** Phase 1 delivery plan.
+
 ## Starter taxonomy — version 1
 
 The user approved a standard, admin-editable starter set. Keys are stable

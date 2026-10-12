@@ -5,31 +5,41 @@
 
 ## Current position
 
-- **MVP completion:** 10% (7 of 69 Phase 0–9 gate items verified)
-- **Current phase:** Phase 1 — Company and identity
+- **MVP completion:** 20% (14 of 69 Phase 0–9 gate items verified)
+- **Current phase:** Phase 2 — Leads and lead-linked Deals
 - **Phase status:** Not started
 - **Phase completion:** 0% (0 of 7 gate items verified)
 - **Planning baseline:** Complete
 - **Last updated:** 2026-10-11
-- **Last verified result:** Phase 0 is complete. GitHub Actions run
-  [38182395029](https://github.com/devsatishvarma/fluxcrm/actions/runs/38182395029)
-  passed on commit `27e59d6`.
+- **Last verified result:** Phase 1 identity gates passed on a clean MySQL
+  database, in pytest, and against the local server. Production email delivery
+  is still undecided.
 
-## Current phase gate — Phase 1
+## Current phase gate — Phase 2
 
-- [ ] Clean-database setup and a safe rerun both succeed.
-- [ ] Active users can authenticate; disabled users cannot.
-- [ ] Reset tokens expire, are single-use, and are absent from logs.
-- [ ] Non-admin users cannot change company or user administration settings.
-- [ ] Company values survive restart and render in `America/Los_Angeles`.
-- [ ] Login/reset throttles and secure-cookie behavior pass automated checks.
-- [ ] No default production credential exists.
+- [ ] CRUD, search, filtering, pagination, and soft delete work in the UI and API.
+- [ ] A Deal cannot be orphaned or linked to an Account before Phase 5.
+- [ ] Invalid owners, taxonomy keys, money, currency, and dates are rejected.
+- [ ] Stale versions return a conflict without overwriting newer data.
+- [ ] Direct URL and API attempts cannot cross owner scope.
+- [ ] Displayed fixture values reconcile to database values.
+- [ ] Representative lists avoid N+1 queries and meet the phase performance budget.
+
+## Completed phase gate — Phase 1
+
+- [x] Clean-database setup and a safe rerun both succeed.
+- [x] Active users can authenticate; disabled users cannot.
+- [x] Reset tokens expire, are single-use, and are absent from logs.
+- [x] Non-admin users cannot change company or user administration settings.
+- [x] Company values survive restart and render in `America/Los_Angeles`.
+- [x] Login/reset throttles and secure-cookie behavior pass automated checks.
+- [x] No default production credential exists.
 
 ## Phase summary
 
 - **Phase 0 — Foundation:** 7/7, complete.
-- **Phase 1 — Company and identity:** 0/7, waiting for Phase 0.
-- **Phase 2 — Leads and lead-linked Deals:** 0/7, waiting for Phase 1.
+- **Phase 1 — Company and identity:** 7/7, complete.
+- **Phase 2 — Leads and lead-linked Deals:** 0/7, not started.
 - **Phase 3 — Workflow:** 0/7, waiting for Phase 2.
 - **Phase 4 — Activities and tasks:** 0/6, waiting for Phase 3.
 - **Phase 5 — Accounts, Contacts, conversion:** 0/7, waiting for Phase 4.
@@ -41,14 +51,14 @@
 
 ## Active blockers
 
-None for starting Phase 1.
+None for starting Phase 2.
 
 ## Decisions needed later
 
-- Before Phase 1 production reset: select the email delivery provider and
-  failure-alert owner.
-- Before Phase 1 completion: provide and approve the company logo, if one is to
-  be included.
+- Before production password reset: select the email delivery provider and
+  failure-alert owner. Development reset uses the console/locmem backend.
+- Company logo upload is optional and was not supplied. It can be added later
+  from company settings.
 - Before Phase 9: select the cloud provider, managed MySQL offering, backup
   target, alert owners, and incident contacts.
 - Before production pilot: approve data classification, retention/deletion,
@@ -58,9 +68,10 @@ None for starting Phase 1.
 
 ## Next three actions
 
-1. Design the first-run administrator bootstrap and Admin/Standard User grants.
-2. Define user creation, disablement, and password-reset behavior.
-3. Implement company settings and authentication as the first Phase 1 slice.
+1. Freeze version 1 of the starter taxonomy before Lead or Deal migrations.
+2. Define normalization, owner scope, optimistic locking, and soft delete for
+   leads and lead-linked deals.
+3. Implement Lead and lead-linked Deal models, screens, and API.
 
 ## Latest evidence
 
@@ -97,6 +108,23 @@ None for starting Phase 1.
   including `core.0001_initial`. Ruff, Django checks, migration-drift checks,
   6 pytest tests, and 1 Playwright smoke test passed. An earlier run,
   38181980759, also succeeded.
+- 2026-10-11: Ruff passed. Fourteen pytest tests passed on MySQL, covering
+  setup rerun, active and disabled login, single-use expiring reset tokens,
+  redacted reset paths, standard-user denial, Pacific time rendering, login
+  and reset throttles, and secure cookies.
+- 2026-10-11: Recreated the local `fluxcrm` database and applied the identity
+  user migration. Live setup stored Infoshare Systems and the first
+  administrator; repeating setup redirected to login. Home rendered
+  `2026-10-11 17:31 America/Los_Angeles`. A standard user received 403 on
+  company settings and user administration.
+- 2026-10-11: Disabling that standard user left the next sign-in on the login
+  page. After stopping and starting the app process, setup still redirected
+  to login, the administrator could sign in, and home still showed Infoshare
+  Systems Inc. at `2026-10-11 17:44 America/Los_Angeles`.
+- 2026-10-11: Browser walk confirmed the setup form, then login was required
+  for `/`, `/company/`, `/users/`, and a repeated `/setup/`. The browser
+  password field was not submitted; the signed-in pages were checked on the
+  same local server.
 
 ## Recent decision/change log
 
@@ -113,6 +141,9 @@ None for starting Phase 1.
   Phase 10 modules require separate post-pilot approval.
 - **2026-10-11 — Package identity:** Renamed the Python distribution from
   `agents` to `fluxcrm` with user approval; all existing dependencies remain.
+- **2026-10-11 — Identity app:** Custom users live in `identity` so the
+  swappable user is created in that app's first migration. `accounts` stays
+  reserved for CRM customer records. See D-009 and D-010.
 
 ## How to maintain this file
 
