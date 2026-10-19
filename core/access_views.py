@@ -8,9 +8,11 @@ from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods, require_POST
 
+from core.notices import fail_with, failed, succeeded, validation_text
 from core.policy import ACTIONS, OBJECTS, SCOPES, AccessDenied, allows, require_action
 from core.services import (
     authorize_import,
+    changed_fields,
     request_export,
     review_administrators,
     save_team,
@@ -100,13 +102,13 @@ def team_edit(request: HttpRequest, team_id=None) -> HttpResponse:
     if denied:
         return denied
     team = Team() if team_id is None else get_object_or_404(Team, pk=team_id)
-    users = User.objects.filter(is_active=True).order_by("display_name")
+    managers = User.objects.filter(is_active=True).order_by("display_name")
     error = ""
     if request.method == "POST":
         manager = None
         raw_manager = request.POST.get("manager")
         if raw_manager:
-            manager = users.filter(pk=raw_manager).first()
+            manager = managers.filter(pk=raw_manager).first()
             if manager is None:
                 error = "Select an active manager."
         if not error:
@@ -122,15 +124,25 @@ def team_edit(request: HttpRequest, team_id=None) -> HttpResponse:
                 )
             except ValidationError as exc:
                 error = "; ".join(exc.messages)
+                fail_with(request, "Could not save the team.", validation_text(exc))
             else:
+                name = request.POST.get("name", "").strip()
+                succeeded(request, f"Team {name} saved.")
                 return redirect("core:teams")
-    selected = set(team.members.values_list("pk", flat=True)) if team.pk else set()
+        else:
+            failed(request, f"Could not save the team. {error}")
+    selected = set()
+    members = User.objects.none()
+    if team.pk:
+        selected = set(team.members.values_list("pk", flat=True))
+        members = team.members.filter(is_active=True).order_by("display_name")
     return render(
         request,
         "core/team_form.html",
         {
             "team": team,
-            "users": users,
+            "managers": managers,
+            "members": members,
             "selected": selected,
             "error": error,
         },
@@ -167,7 +179,9 @@ def role_edit(request: HttpRequest, role_id: int) -> HttpResponse:
             )
         except ValidationError as exc:
             error = "; ".join(exc.messages)
+            fail_with(request, "Could not save the role.", validation_text(exc))
         else:
+            succeeded(request, f"Grants for {role.name} saved.")
             return redirect("core:roles")
     return render(
         request,
@@ -196,6 +210,7 @@ def administrator_review(request: HttpRequest) -> HttpResponse:
     if request.method == "POST":
         review_administrators(actor=request.user, request_id=_request_id(request))
         reviewed = True
+        succeeded(request, "Administrator review recorded.")
     return render(
         request,
         "core/administrator_review.html",
@@ -225,6 +240,7 @@ def user_manager(request: HttpRequest, user_id: int) -> HttpResponse:
         )
     except ValidationError as exc:
         return HttpResponse("; ".join(exc.messages), status=422)
+    succeeded(request, f"Manager for {user.display_name} saved.")
     return redirect("core:user_list")
 
 
@@ -242,13 +258,17 @@ def audit_list(request: HttpRequest) -> HttpResponse:
     if object_id:
         events = events.filter(object_id=object_id)
     page = Paginator(events, 50).get_page(request.GET.get("page"))
+    show_snapshots = allows(request.user, "settings", "A")
+    if show_snapshots:
+        for event in page.object_list:
+            event.changes = changed_fields(event.before_json, event.after_json)
     return render(
         request,
         "core/audit_list.html",
         {
             "page_obj": page,
             "query": request.GET,
-            "show_snapshots": allows(request.user, "settings", "A"),
+            "show_snapshots": show_snapshots,
         },
     )
 

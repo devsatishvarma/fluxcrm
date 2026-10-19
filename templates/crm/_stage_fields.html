@@ -1,0 +1,33 @@
+<script>
+  document.querySelectorAll("[data-stage-owner]").forEach(function (node) {
+    node.hidden = true;
+  });
+  function applyStageFields(select) {
+    var stage = select.value;
+    document.querySelectorAll('[data-stage-owner="' + select.id + '"]').forEach(function (node) {
+      var stages = (node.getAttribute("data-stages") || "").split(",");
+      var show = stages.indexOf(stage) !== -1;
+      var substatus = node.getAttribute("data-substatus");
+      if (show && substatus) {
+        var source = document.getElementById(node.getAttribute("data-substatus-source"));
+        show = Boolean(source && source.value === substatus);
+      }
+      node.hidden = !show;
+      node.querySelectorAll("input, select, textarea").forEach(function (input) {
+        input.disabled = !show;
+      });
+    });
+  }
+  document.querySelectorAll("select[name='to_stage']").forEach(function (select) {
+    if (!document.querySelector('[data-stage-owner="' + select.id + '"]')) {
+      return;
+    }
+    select.addEventListener("change", function () { applyStageFields(select); });
+    applyStageFields(select);
+  });
+  var substatus = document.getElementById("lead-substatus");
+  var leadStage = document.getElementById("lead-next-stage");
+  if (substatus && leadStage) {
+    substatus.addEventListener("change", function () { applyStageFields(leadStage); });
+  }
+</script>

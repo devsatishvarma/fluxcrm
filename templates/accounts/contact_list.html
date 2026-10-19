@@ -1,5 +1,6 @@
 {% extends "base.html" %}
-{% block title %}Contacts · FluxCRM{% endblock %}
+{% load crm %}
+{% block title %}Contacts · GlideCRM{% endblock %}
 {% block content %}
   <h1>Contacts</h1>
   {% if errors %}
@@ -56,6 +57,8 @@
             <tr>
               <th scope="col">Name</th>
               <th scope="col">Email</th>
+              <th scope="col">Work phone</th>
+              <th scope="col">Mobile phone</th>
               <th scope="col">Title</th>
               <th scope="col">Primary</th>
             </tr>
@@ -63,8 +66,10 @@
           <tbody>
             {% for contact in group.contacts %}
               <tr>
-                <td>{{ contact.first_name }} {{ contact.last_name }}</td>
+                <td><a href="{% url 'accounts:contact_edit' contact.pk %}">{{ contact.first_name }} {{ contact.last_name }}</a></td>
                 <td>{{ contact.email|default:"—" }}</td>
+                <td>{{ contact.work_phone|phone }}</td>
+                <td>{{ contact.mobile_phone|phone }}</td>
                 <td>{{ contact.title|default:"—" }}</td>
                 <td>{% if contact.is_primary %}Primary{% else %}—{% endif %}</td>
               </tr>

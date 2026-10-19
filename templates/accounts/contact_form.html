@@ -1,47 +1,133 @@
 {% extends "base.html" %}
-{% block title %}Add contact · FluxCRM{% endblock %}
+{% block title %}{% if contact %}Edit contact{% else %}Add contact{% endif %} · GlideCRM{% endblock %}
 {% block content %}
-  <h1>Add contact at {{ account.name }}</h1>
-  {% if errors %}
-    <p role="alert">
-      {% for field, messages in errors.items %}{{ field }}: {{ messages|join:", " }} {% endfor %}
-    </p>
-  {% endif %}
+  <h1>{% if contact %}Edit contact{% else %}Add contact at {{ account.name }}{% endif %}</h1>
   <form method="post">
     {% csrf_token %}
-    <div class="row g-3">
-      <div class="col-md-6">
-        <label class="form-label" for="contact-first">First name</label>
-        <input class="form-control" id="contact-first" name="first_name" required>
+    {% if values.version %}<input type="hidden" name="version" value="{{ values.version }}">{% endif %}
+    <div class="form-grid">
+      {% if contact %}
+        <div class="field-line">
+          <label class="form-label" for="contact-account">Account<abbr class="req" title="Required">*</abbr></label>
+          <div class="field-control">
+            <select class="form-select" id="contact-account" name="account" required>
+              {% for choice in accounts %}
+                <option value="{{ choice.pk }}"{% if values.account == choice.pk|stringformat:"s" %} selected{% endif %}>{{ choice.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+      {% endif %}
+      <div class="field-line">
+        <label class="form-label" for="contact-first">First name<abbr class="req" title="Required">*</abbr></label>
+        <div class="field-control">
+          <input class="form-control" id="contact-first" name="first_name" value="{{ values.first_name }}" required>
+        </div>
       </div>
-      <div class="col-md-6">
-        <label class="form-label" for="contact-last">Last name</label>
-        <input class="form-control" id="contact-last" name="last_name" required>
+      <div class="field-line">
+        <label class="form-label" for="contact-last">Last name<abbr class="req" title="Required">*</abbr></label>
+        <div class="field-control">
+          <input class="form-control" id="contact-last" name="last_name" value="{{ values.last_name }}" required>
+        </div>
       </div>
-      <div class="col-md-6">
+      <div class="field-line">
         <label class="form-label" for="contact-title">Title</label>
-        <input class="form-control" id="contact-title" name="title">
+        <div class="field-control">
+          <input class="form-control" id="contact-title" name="title" value="{{ values.title }}">
+        </div>
       </div>
-      <div class="col-md-6">
-        <label class="form-label" for="contact-email">Email</label>
-        <input class="form-control" id="contact-email" name="email" type="email">
+      <div class="field-line">
+        <label class="form-label" for="contact-email">Email<abbr class="req" title="Required">*</abbr></label>
+        <div class="field-control">
+          <input class="form-control" id="contact-email" name="email" type="email" value="{{ values.email }}" required>
+        </div>
       </div>
-      <div class="col-md-6">
+      <div class="field-line">
+        <label class="form-label" for="contact-work-phone">Work phone</label>
+        <div class="field-control">
+          <input class="form-control" id="contact-work-phone" name="work_phone" value="{{ values.work_phone }}" maxlength="40" placeholder="(XXX) XXX-XXXX">
+        </div>
+      </div>
+      <div class="field-line">
+        <label class="form-label" for="contact-mobile-phone">Mobile phone</label>
+        <div class="field-control">
+          <input class="form-control" id="contact-mobile-phone" name="mobile_phone" value="{{ values.mobile_phone }}" maxlength="40" placeholder="(XXX) XXX-XXXX">
+        </div>
+      </div>
+      <div class="field-line">
+        <label class="form-label" for="contact-street">Street</label>
+        <div class="field-control">
+          <input class="form-control" id="contact-street" name="street" value="{{ values.street }}" maxlength="200">
+        </div>
+      </div>
+      <div class="field-line">
+        <label class="form-label" for="contact-city">City</label>
+        <div class="field-control">
+          <input class="form-control" id="contact-city" name="city" value="{{ values.city }}" maxlength="100">
+        </div>
+      </div>
+      <div class="field-line">
+        <label class="form-label" for="contact-region">State</label>
+        <div class="field-control">
+          <input class="form-control" id="contact-region" name="region" value="{{ values.region }}" maxlength="100">
+        </div>
+      </div>
+      <div class="field-line">
+        <label class="form-label" for="contact-postal">Postal code</label>
+        <div class="field-control">
+          <input class="form-control" id="contact-postal" name="postal_code" value="{{ values.postal_code }}" maxlength="20">
+        </div>
+      </div>
+      <div class="field-line">
+        <label class="form-label" for="contact-country">Country</label>
+        <div class="field-control">
+          <input class="form-control" id="contact-country" name="country" value="{{ values.country }}" maxlength="100">
+        </div>
+      </div>
+      <div class="field-line">
         <label class="form-label" for="contact-reports">Reports to</label>
-        <select class="form-select" id="contact-reports" name="reports_to">
-          <option value="">—</option>
-          {% for person in reports %}
-            <option value="{{ person.pk }}">{{ person }}</option>
-          {% endfor %}
-        </select>
+        <div class="field-control">
+          <select class="form-select" id="contact-reports" name="reports_to">
+            <option value="">—</option>
+            {% for person in reports %}
+              <option value="{{ person.pk }}"{% if values.reports_to == person.pk|stringformat:"s" %} selected{% endif %}>{{ person }}</option>
+            {% endfor %}
+          </select>
+        </div>
       </div>
-      <div class="col-md-6 d-flex align-items-end">
-        <div class="form-check mb-2">
-          <input class="form-check-input" id="contact-primary" name="is_primary" value="1" type="checkbox">
-          <label class="form-check-label" for="contact-primary">Primary contact</label>
+      {% if owners %}
+        <div class="field-line">
+          <label class="form-label" for="contact-owner">Owner</label>
+          <div class="field-control">
+            <select class="form-select" id="contact-owner" name="owner">
+              {% for owner in owners %}
+                <option value="{{ owner.pk }}"{% if values.owner == owner.pk|stringformat:"s" %} selected{% endif %}>{{ owner.display_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+      {% endif %}
+      <div class="field-line">
+        <span class="form-label">Primary</span>
+        <div class="field-control">
+          <label class="choice-line">
+            <input id="contact-primary" name="is_primary" value="1" type="checkbox"{% if values.is_primary == "1" %} checked{% endif %}>
+            <span>Primary contact</span>
+          </label>
+        </div>
+      </div>
+      <div class="field-line">
+        <label class="form-label" for="contact-notes">Notes</label>
+        <div class="field-control">
+          <textarea class="form-control" id="contact-notes" name="notes">{{ values.notes }}</textarea>
         </div>
       </div>
     </div>
-    <button class="btn btn-primary mt-3" type="submit">Save</button>
+    <button class="btn btn-primary mt-3" type="submit">Save contact</button>
+    <a href="{% url 'accounts:detail' account.pk %}">Cancel</a>
   </form>
+  {% if contact %}
+    {% url 'accounts:contact_delete' contact.pk as delete_url %}
+    {% include "crm/_delete_form.html" with object_key="contact" record_label="contact" delete_url=delete_url version=contact.version field_id=contact.pk %}
+  {% endif %}
 {% endblock %}

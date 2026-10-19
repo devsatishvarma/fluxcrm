@@ -58,7 +58,7 @@ def test_lead_rating_age_and_stage_time_are_visible(client):
     assert b"0 days" in page.content
     assert b"hour" not in page.content
     assert b"minute" not in page.content
-    assert b"Started in NEW" in page.content
+    assert b"Started in New" in page.content
     assert b"Phase 3 baseline" not in page.content
     assert b"0 seconds" not in page.content
     assert b"by after" not in page.content
@@ -106,15 +106,19 @@ def test_deal_history_explains_a_baseline_and_a_real_move(client):
     client.force_login(admin)
     page = client.get(reverse("sales:detail", args=[deal.pk]))
     text = page.content.decode()
-    assert "Started in PROPOSAL" in text
+    assert "Started in Proposal" in text
     assert "Phase 3 baseline" not in text
     assert "0 seconds" not in text
-    assert "Moved from DISCOVERY to PROPOSAL" in text
-    assert "Spent 0 days in DISCOVERY" in text
+    assert "Moved from Discovery to Proposal" in text
+    assert text.index("Stage history") > text.index("Timeline")
+    assert text.index("Delete deal") > text.index("Stage history")
+    assert '<details class="stage-history">' in text
+    assert '<details class="stage-history" open' not in text
+    assert "Spent 0 days in Discovery" in text
     assert f"Recorded by {admin.display_name}" in text
     assert "9 days" in text
     assert "2 days" in text
-    assert "Deal confidence" in text
+    assert "Deal confidence</dt><dd>Low</dd>" in text
     assert "Medium" in text
     assert "Temperature" not in text
     assert "Warm" not in text

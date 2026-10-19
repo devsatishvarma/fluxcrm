@@ -15,7 +15,7 @@ def test_health_does_not_require_database(client):
     response = client.get(reverse("core:health"))
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "service": "fluxcrm"}
+    assert response.json() == {"status": "ok", "service": "glidecrm"}
     assert response.headers["X-Request-ID"]
 
 

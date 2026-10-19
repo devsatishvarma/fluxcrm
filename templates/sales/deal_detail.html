@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% load crm %}
-{% block title %}{{ deal.title }} · FluxCRM{% endblock %}
+{% block title %}{{ deal.title }} · GlideCRM{% endblock %}
 {% block content %}
   <h1>{{ deal.title }}</h1>
   <p><a href="{% url 'sales:edit' deal.pk %}">Edit</a></p>
@@ -21,7 +21,18 @@
         <dd><a href="{% url 'accounts:detail' deal.account.pk %}">{{ deal.account.name }}</a></dd>
       </div>
     {% endif %}
-    {% if deal.primary_contact %}
+    {% if deal.account %}
+      <div>
+        <dt>Contact</dt>
+        <dd>
+          {% if deal.primary_contact %}
+            <a href="{% url 'accounts:contact_edit' deal.primary_contact.pk %}">{{ deal.primary_contact.first_name }} {{ deal.primary_contact.last_name }}</a>
+          {% else %}
+            —
+          {% endif %}
+        </dd>
+      </div>
+    {% elif deal.primary_contact %}
       <div>
         <dt>Contact</dt>
         <dd>{{ deal.primary_contact.first_name }} {{ deal.primary_contact.last_name }}</dd>
@@ -41,129 +52,246 @@
     <div><dt>Deal confidence</dt><dd>{{ deal.confidence|choice_label }}</dd></div>
     <div><dt>Created</dt><dd>{{ deal.created_at|date:"m-d-Y, h:i A" }}</dd></div>
     <div><dt>Deal Age</dt><dd>{{ deal.created_at|elapsed }}</dd></div>
-    <div><dt>Deal stage</dt><dd>{{ deal.stage }}</dd></div>
+    <div><dt>Deal stage</dt><dd>{{ deal.stage|stage_label }}</dd></div>
     <div><dt>Stage-Age</dt><dd>{{ deal.stage_entered_at|elapsed }}</dd></div>
-    <div><dt>Probability</dt><dd>{{ deal.probability }}</dd></div>
+    <div><dt>Win probability</dt><dd>{{ deal.probability|whole }}%</dd></div>
     <div><dt>Expected close</dt><dd>{% if deal.expected_close_date %}{{ deal.expected_close_date|date:"m-d-Y" }}{% else %}—{% endif %}</dd></div>
+    <div><dt>Actual close</dt><dd>{% if deal.actual_close_date %}{{ deal.actual_close_date|date:"m-d-Y" }}{% else %}—{% endif %}</dd></div>
+    {% if deal.evaluation_started_on %}
+      <div><dt>POC or trial start</dt><dd>{{ deal.evaluation_started_on|date:"m-d-Y" }}</dd></div>
+    {% endif %}
+    {% if deal.technical_stakeholder_name %}
+      <div><dt>Technical stakeholder</dt><dd>{{ deal.technical_stakeholder_name }}</dd></div>
+    {% endif %}
     <div><dt>Owner</dt><dd>{{ deal.owner.display_name }}</dd></div>
     <div><dt>External ID</dt><dd>{{ deal.external_id }}</dd></div>
+    <div><dt>Budget</dt><dd>{{ bant_labels|lookup:deal.bant_budget_status|default:"Unknown" }}</dd></div>
+    <div><dt>Authority</dt><dd>{{ bant_labels|lookup:deal.bant_authority_status|default:"Unknown" }}</dd></div>
+    <div><dt>Need</dt><dd>{{ bant_labels|lookup:deal.bant_need_status|default:"Unknown" }}</dd></div>
+    <div><dt>Timeline</dt><dd>{{ bant_labels|lookup:deal.bant_timeline_status|default:"Unknown" }}</dd></div>
   </dl>
   {% if deal.notes %}<h2>Notes</h2><p>{{ deal.notes }}</p>{% endif %}
   <h2>Move deal stage</h2>
-  <form method="post" action="{% url 'sales:transition' deal.pk %}">
-    {% csrf_token %}
-    <input type="hidden" name="version" value="{{ deal.version }}">
-    <div class="row g-2">
-      <div class="col-md-6">
-        <label class="form-label" for="deal-next-stage">Next stage</label>
-        <select class="form-select" id="deal-next-stage" name="to_stage">
-          {% for stage in allowed_stages %}
-            <option value="{{ stage }}">{{ stage }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="col-md-6">
-        <label class="form-label" for="deal-move-reason">Reason</label>
-        <input class="form-control" id="deal-move-reason" name="reason">
-      </div>
-      <div class="col-md-6">
-        <label class="form-label" for="deal-amount">Amount</label>
-        <input class="form-control" id="deal-amount" name="amount">
-      </div>
-      <div class="col-md-6">
-        <label class="form-label" for="deal-close-date">Expected close date</label>
-        <input class="form-control" id="deal-close-date" name="expected_close_date" type="date">
-      </div>
-      <div class="col-md-6">
-        <label class="form-label" for="deal-close-reason">Close reason</label>
-        <input class="form-control" id="deal-close-reason" name="close_reason">
-      </div>
-      <div class="col-md-6">
-        <label class="form-label" for="deal-budget-status">Budget status</label>
-        <select class="form-select" id="deal-budget-status" name="bant_budget_status">
-          {% for key, label in bant_choices %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
-        </select>
-      </div>
-      <div class="col-md-6">
-        <label class="form-label" for="deal-authority-status">Authority status</label>
-        <select class="form-select" id="deal-authority-status" name="bant_authority_status">
-          {% for key, label in bant_choices %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
-        </select>
-      </div>
-      <div class="col-md-6">
-        <label class="form-label" for="deal-need-status">Need status</label>
-        <select class="form-select" id="deal-need-status" name="bant_need_status">
-          {% for key, label in bant_choices %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
-        </select>
-      </div>
-      <div class="col-md-6">
-        <label class="form-label" for="deal-timeline-status">Timeline status</label>
-        <select class="form-select" id="deal-timeline-status" name="bant_timeline_status">
-          {% for key, label in bant_choices %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
-        </select>
-      </div>
-      {% if user.is_company_admin %}
+  {% include "crm/_stage_path.html" with stage_order=stage_order current_stage=deal.stage %}
+  {% if allowed_stages %}
+    <p>Choose the next stage. Only the fields that stage needs are shown, and <abbr class="req" title="Required">*</abbr> marks the ones you must fill. {% if deal.lead %}Closing as Won or Lost converts the lead. {% endif %}There is no separate approval.</p>
+    <form method="post" action="{% url 'sales:transition' deal.pk %}">
+      {% csrf_token %}
+      <input type="hidden" name="version" value="{{ deal.version }}">
+      <div class="aligned-fields">
         <div class="col-md-6">
-          <label class="form-label" for="deal-probability">Probability override</label>
-          <input class="form-control" id="deal-probability" name="probability" type="number" min="0" max="100" step="0.01">
+          <label class="form-label" for="deal-next-stage">Next stage<abbr class="req" title="Required">*</abbr></label>
+          <select class="form-select" id="deal-next-stage" name="to_stage" required>
+            {% for stage in allowed_stages %}
+              <option value="{{ stage }}">{{ stage_labels|lookup:stage|default:stage }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-6" data-stage-owner="deal-next-stage" data-stages="DISCOVERY">
+          <label class="form-label" for="deal-discovery-note">Requirements note<abbr class="req" title="Required">*</abbr></label>
+          <input class="form-control" id="deal-discovery-note" name="reason">
+          <p class="form-text mb-0">What you learned about their needs. This is not the lead’s Contacted stage.</p>
+        </div>
+        <div class="col-md-6" data-stage-owner="deal-next-stage" data-stages="TECHNICAL_EVALUATION">
+          <label class="form-label" for="deal-evaluation-date">POC or trial start<abbr class="req" title="Required">*</abbr></label>
+          <input class="form-control" id="deal-evaluation-date" name="evaluation_started_on" type="date" value="{% if deal.evaluation_started_on %}{{ deal.evaluation_started_on|date:'Y-m-d' }}{% endif %}">
+        </div>
+        <div class="col-md-6" data-stage-owner="deal-next-stage" data-stages="TECHNICAL_EVALUATION">
+          <label class="form-label" for="deal-stakeholder">Technical stakeholder<abbr class="req" title="Required">*</abbr></label>
+          <input class="form-control" id="deal-stakeholder" name="technical_stakeholder_name" value="{{ deal.technical_stakeholder_name }}">
+        </div>
+        <div class="col-md-6" data-stage-owner="deal-next-stage" data-stages="TECHNICAL_EVALUATION">
+          <label class="form-label" for="deal-success">Success criteria<abbr class="req" title="Required">*</abbr></label>
+          <input class="form-control" id="deal-success" name="reason">
+        </div>
+        <div class="col-md-6" data-stage-owner="deal-next-stage" data-stages="PROPOSAL">
+          <label class="form-label" for="deal-proposal-note">Proposal note<abbr class="req" title="Required">*</abbr></label>
+          <input class="form-control" id="deal-proposal-note" name="reason">
+          <p class="form-text mb-0">Record that the proposal was sent.</p>
+        </div>
+        <div class="col-md-6" data-stage-owner="deal-next-stage" data-stages="NEGOTIATION">
+          <label class="form-label" for="deal-terms-note">Terms note<abbr class="req" title="Required">*</abbr></label>
+          <input class="form-control" id="deal-terms-note" name="reason">
+          <p class="form-text mb-0">Pricing, redlines, or contract terms.</p>
+        </div>
+        <div class="col-md-6" data-stage-owner="deal-next-stage" data-stages="CLOSING">
+          <label class="form-label" for="deal-closing-note">Sign-off note<abbr class="req" title="Required">*</abbr></label>
+          <input class="form-control" id="deal-closing-note" name="reason">
+        </div>
+        <div class="col-md-6" data-stage-owner="deal-next-stage" data-stages="NEW">
+          <label class="form-label" for="deal-reopen-note">Reopen reason<abbr class="req" title="Required">*</abbr></label>
+          <input class="form-control" id="deal-reopen-note" name="reason">
+        </div>
+        <div class="col-md-6" data-stage-owner="deal-next-stage" data-stages="QUALIFIED,PROPOSAL,CLOSED_WON">
+          <label class="form-label" for="deal-amount">Amount<abbr class="req" title="Required">*</abbr></label>
+          <input class="form-control" id="deal-amount" name="amount" type="number" min="0" step="1" value="{% if deal.amount != None %}{{ deal.amount|whole }}{% endif %}">
+        </div>
+        <div class="col-md-6" data-stage-owner="deal-next-stage" data-stages="QUALIFIED,PROPOSAL,NEGOTIATION,CLOSING">
+          <label class="form-label" for="deal-close-date">Expected close date<abbr class="req" title="Required">*</abbr></label>
+          <input class="form-control" id="deal-close-date" name="expected_close_date" type="date" value="{% if deal.expected_close_date %}{{ deal.expected_close_date|date:'Y-m-d' }}{% endif %}">
+        </div>
+        <div class="col-md-6" data-stage-owner="deal-next-stage" data-stages="CLOSED_WON">
+          <label class="form-label" for="deal-actual-close-date">Actual close date<abbr class="req" title="Required">*</abbr></label>
+          <input class="form-control" id="deal-actual-close-date" name="actual_close_date" type="date" value="{% if deal.actual_close_date %}{{ deal.actual_close_date|date:'Y-m-d' }}{% endif %}">
+          <p class="form-text mb-0">The day the deal closed. This is not the day you change the stage.</p>
+        </div>
+        <div class="col-md-6" data-stage-owner="deal-next-stage" data-stages="CLOSED_LOST">
+          <label class="form-label" for="deal-lost-reason">Loss reason<abbr class="req" title="Required">*</abbr></label>
+          <select class="form-select" id="deal-lost-reason" name="close_reason">
+            {% for key, label in lost_reason_choices %}
+              {% if key %}<option value="{{ key }}">{{ label }}</option>{% endif %}
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-6" data-stage-owner="deal-next-stage" data-stages="CLOSED_HOLD">
+          <label class="form-label" for="deal-hold-reason">Hold reason<abbr class="req" title="Required">*</abbr></label>
+          <select class="form-select" id="deal-hold-reason" name="close_reason">
+            {% for key, label in hold_reason_choices %}
+              {% if key %}<option value="{{ key }}">{{ label }}</option>{% endif %}
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <h3 class="h6 mt-3">BANT</h3>
+      <div class="aligned-fields">
+        <div class="col-md-6">
+          <label class="form-label" for="deal-budget-status">Budget</label>
+          <select class="form-select" id="deal-budget-status" name="bant_budget_status">
+            {% for key, label in bant_choices %}
+              {% if key %}<option value="{{ key }}"{% if deal.bant_budget_status == key %} selected{% endif %}>{{ label }}</option>{% endif %}
+            {% endfor %}
+          </select>
         </div>
         <div class="col-md-6">
-          <label class="form-label" for="deal-probability-reason">Probability reason</label>
-          <input class="form-control" id="deal-probability-reason" name="probability_reason">
+          <label class="form-label" for="deal-authority-status">Authority</label>
+          <select class="form-select" id="deal-authority-status" name="bant_authority_status">
+            {% for key, label in bant_choices %}
+              {% if key %}<option value="{{ key }}"{% if deal.bant_authority_status == key %} selected{% endif %}>{{ label }}</option>{% endif %}
+            {% endfor %}
+          </select>
         </div>
+        <div class="col-md-6">
+          <label class="form-label" for="deal-need-status">Need</label>
+          <select class="form-select" id="deal-need-status" name="bant_need_status">
+            {% for key, label in bant_choices %}
+              {% if key %}<option value="{{ key }}"{% if deal.bant_need_status == key %} selected{% endif %}>{{ label }}</option>{% endif %}
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" for="deal-timeline-status">Timeline</label>
+          <select class="form-select" id="deal-timeline-status" name="bant_timeline_status">
+            {% for key, label in bant_choices %}
+              {% if key %}<option value="{{ key }}"{% if deal.bant_timeline_status == key %} selected{% endif %}>{{ label }}</option>{% endif %}
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      {% if can_override %}
+        <details class="mt-3">
+          <summary>Change the stage probability</summary>
+          <div class="aligned-fields mt-1">
+            <div class="col-md-6">
+              <label class="form-label" for="deal-probability">Win probability</label>
+              <input class="form-control" id="deal-probability" name="probability" type="number" min="0" max="100" step="1">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="deal-probability-reason">Why the probability changed<abbr class="req" title="Required">*</abbr></label>
+              <input class="form-control" id="deal-probability-reason" name="probability_reason">
+            </div>
+          </div>
+          <p class="form-text">Leave probability blank to use the stage default. A different number needs a reason.</p>
+        </details>
       {% endif %}
-    </div>
-    <button class="btn btn-primary mt-2" type="submit">Move stage</button>
-  </form>
+      <button class="btn btn-primary mt-2" type="submit">Move stage</button>
+    </form>
+  {% else %}
+    <p>This deal is closed and cannot be moved.</p>
+  {% endif %}
+  {% include "activities/_timeline.html" with kind="deal" object_id=deal.pk %}
+  {% include "crm/_stage_fields.html" %}
+  <details class="stage-history">
+    <summary>Stage history</summary>
+    {% if history %}
+      <ul>
+        {% for row in history %}
+          <li>
+            {% if row.from_stage and row.from_stage == row.to_stage and row.probability_reason %}
+              Win probability changed to {{ row.probability_snapshot|whole }}%
+              on {{ row.changed_at|date:"m-d-Y, h:i A" }}.
+              {% if row.changed_by %}Recorded by {{ row.changed_by.display_name }}.{% endif %}
+              Reason: {{ row.probability_reason }}.
+            {% else %}
+              {% if row.from_stage %}
+                Moved from {{ row.from_stage|stage_label }} to {{ row.to_stage|stage_label }}
+                on {{ row.changed_at|date:"m-d-Y, h:i A" }}.
+                Spent {{ row.duration_seconds|duration }} in {{ row.from_stage|stage_label }}.
+              {% else %}
+                Started in {{ row.to_stage|stage_label }}
+                on {{ row.changed_at|date:"m-d-Y, h:i A" }}.
+              {% endif %}
+              {% if row.changed_by %}Recorded by {{ row.changed_by.display_name }}.{% endif %}
+              {% if row.probability_snapshot != None %}Probability {{ row.probability_snapshot|whole }}%.{% endif %}
+              {% if row.probability_reason %}Override reason: {{ row.probability_reason }}.{% endif %}
+            {% endif %}
+            {% if row.reason and row.reason != "Phase 3 baseline" %}{{ row.reason }}{% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>No stage changes yet.</p>
+    {% endif %}
+  </details>
   {% if correction_stages %}
-    <h3>Administrator correction</h3>
+    <h3>Fix a wrong stage</h3>
+    <p>This records a correction. It is not an approval step for a normal move or a close.</p>
     <form method="post" action="{% url 'sales:transition' deal.pk %}">
       {% csrf_token %}
       <input type="hidden" name="version" value="{{ deal.version }}">
       <input type="hidden" name="correction" value="1">
-      <label for="deal-correction-stage">Correct stage to</label>
-      <select id="deal-correction-stage" name="to_stage">
-        {% for stage in correction_stages %}<option value="{{ stage }}">{{ stage }}</option>{% endfor %}
-      </select>
-      <label for="deal-correction-reason">Correction reason</label>
-      <input id="deal-correction-reason" name="reason" required>
-      <label for="deal-correction-amount">Amount</label>
-      <input id="deal-correction-amount" name="amount">
-      <label for="deal-correction-close-date">Expected close date</label>
-      <input id="deal-correction-close-date" name="expected_close_date" type="date">
-      <label for="deal-correction-close-reason">Close reason</label>
-      <input id="deal-correction-close-reason" name="close_reason">
+      <div class="form-grid">
+        <div class="field-line">
+          <label class="form-label" for="deal-correction-stage">Correct stage to</label>
+          <div class="field-control">
+            <select class="form-select" id="deal-correction-stage" name="to_stage">
+              {% for stage in correction_stages %}<option value="{{ stage }}">{{ stage|stage_label }}</option>{% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="field-line">
+          <label class="form-label" for="deal-correction-reason">Correction reason<abbr class="req" title="Required">*</abbr></label>
+          <div class="field-control">
+            <input class="form-control" id="deal-correction-reason" name="reason" required>
+          </div>
+        </div>
+        <div class="field-line">
+          <label class="form-label" for="deal-correction-amount">Amount</label>
+          <div class="field-control">
+            <input class="form-control" id="deal-correction-amount" name="amount" type="number" min="0" step="1">
+          </div>
+        </div>
+        <div class="field-line">
+          <label class="form-label" for="deal-correction-close-date">Expected close date</label>
+          <div class="field-control">
+            <input class="form-control" id="deal-correction-close-date" name="expected_close_date" type="date">
+          </div>
+        </div>
+        <div class="field-line">
+          <label class="form-label" for="deal-correction-actual-close">Actual close date</label>
+          <div class="field-control">
+            <input class="form-control" id="deal-correction-actual-close" name="actual_close_date" type="date" value="{% if deal.actual_close_date %}{{ deal.actual_close_date|date:'Y-m-d' }}{% endif %}">
+          </div>
+        </div>
+        <div class="field-line">
+          <label class="form-label" for="deal-correction-close-reason">Close reason</label>
+          <div class="field-control">
+            <input class="form-control" id="deal-correction-close-reason" name="close_reason">
+          </div>
+        </div>
+      </div>
       <button class="btn btn-outline-warning" type="submit">Record correction</button>
     </form>
   {% endif %}
-  <h2>Stage history</h2>
-  {% if history %}
-    <ul>
-      {% for row in history %}
-        <li>
-          {% if row.from_stage %}
-            Moved from {{ row.from_stage }} to {{ row.to_stage }}
-            on {{ row.changed_at|date:"m-d-Y, h:i A" }}.
-            Spent {{ row.duration_seconds|duration }} in {{ row.from_stage }}.
-          {% else %}
-            Started in {{ row.to_stage }}
-            on {{ row.changed_at|date:"m-d-Y, h:i A" }}.
-          {% endif %}
-          {% if row.changed_by %}Recorded by {{ row.changed_by.display_name }}.{% endif %}
-          {% if row.probability_snapshot != None %}Probability {{ row.probability_snapshot }}.{% endif %}
-          {% if row.probability_reason %}Override reason: {{ row.probability_reason }}.{% endif %}
-          {% if row.reason and row.reason != "Phase 3 baseline" %}{{ row.reason }}{% endif %}
-        </li>
-      {% endfor %}
-    </ul>
-  {% else %}
-    <p>No stage changes yet.</p>
-  {% endif %}
-  {% include "activities/_timeline.html" with kind="deal" object_id=deal.pk %}
-  <h2>Delete deal</h2>
-  <form method="post" action="{% url 'sales:delete' deal.pk %}">
-    {% csrf_token %}
-    {{ delete_form.as_p }}
-    <button class="btn btn-outline-danger" type="submit">Delete deal</button>
-  </form>
+  {% url 'sales:delete' deal.pk as delete_url %}
+  {% include "crm/_delete_form.html" with object_key="deal" record_label="deal" delete_url=delete_url version=deal.version field_id=deal.pk %}
 {% endblock %}

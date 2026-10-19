@@ -1,4 +1,4 @@
-name: fluxcrm
+name: glidecrm
 
 x-app: &app
   build:
@@ -40,7 +40,7 @@ services:
     command:
       - sh
       - -c
-      - python manage.py migrate --noinput && gunicorn fluxcrm.wsgi:application --bind 0.0.0.0:8000 --access-logfile - --error-logfile -
+      - python manage.py migrate --noinput && gunicorn glidecrm.wsgi:application --bind 0.0.0.0:8000 --access-logfile - --error-logfile -
     depends_on:
       database:
         condition: service_healthy
@@ -72,5 +72,9 @@ services:
 
 volumes:
   mysql_data:
+    external: true
+    name: fluxcrm_mysql_data
   staticfiles:
   uploads:
+    external: true
+    name: fluxcrm_uploads

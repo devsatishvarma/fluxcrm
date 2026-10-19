@@ -1,11 +1,16 @@
 {% if form.non_field_errors %}{{ form.non_field_errors }}{% endif %}
 {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
-<div class="row g-3">
+<div class="form-grid">
   {% for field in form.visible_fields %}
-    <div class="col-md-6">
-      {{ field.label_tag }}
-      {{ field }}
-      {{ field.errors }}
+    <div class="field-line">
+      <label class="form-label" for="{{ field.id_for_label }}">
+        {{ field.label }}{% if field.field.required %}<abbr class="req" title="Required">*</abbr>{% endif %}
+      </label>
+      <div class="field-control">
+        {{ field }}
+        {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+        {{ field.errors }}
+      </div>
     </div>
   {% endfor %}
 </div>

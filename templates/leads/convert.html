@@ -1,8 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Convert {{ lead.company_name }} · FluxCRM{% endblock %}
+{% block title %}Convert {{ lead.company_name }} · GlideCRM{% endblock %}
 {% block content %}
   <h1>Convert {{ lead.first_name }} {{ lead.last_name }}</h1>
   <p>{{ lead.company_name }}</p>
+  <p>Account name and type are required when you create an account. The contact uses this lead’s name. A matching account or contact asks you to choose; there is no extra approval when nothing matches. Converting does not change the lead stage.</p>
   {% if lead.converted_at %}
     <p>This lead is already converted.</p>
   {% endif %}
@@ -53,37 +54,43 @@
         <label class="form-check-label" for="account-create">Create a new account</label>
       </div>
       <div class="mb-3">
-        <label class="form-label" for="account-name">Account name</label>
-        <input class="form-control" id="account-name" name="account_name" value="{{ lead.company_name }}">
+        <label class="form-label" for="account-name">Account name<abbr class="req" title="Required">*</abbr></label>
+        <input class="form-control" id="account-name" name="account_name" value="{{ lead.company_name }}" required>
       </div>
       <div class="mb-3">
-        <label class="form-label" for="account-type">Account type</label>
-        <select class="form-select" id="account-type" name="account_type">
+        <label class="form-label" for="account-type">Account type<abbr class="req" title="Required">*</abbr></label>
+        <select class="form-select" id="account-type" name="account_type" required>
           {% for key, label in types %}
             <option value="{{ key }}"{% if key == "PROSPECT" %} selected{% endif %}>{{ label }}</option>
           {% endfor %}
         </select>
       </div>
-      <div class="form-check">
-        <input class="form-check-input" id="confirm-new" type="checkbox" name="confirm_new" value="1">
-        <label class="form-check-label" for="confirm-new">This is a different account from the matches</label>
-      </div>
-      <div class="mb-3">
-        <label class="form-label" for="justification">Why this is new</label>
-        <input class="form-control" id="justification" name="justification">
-      </div>
+      {% if candidates %}
+        <div class="form-check">
+          <input class="form-check-input" id="confirm-new" type="checkbox" name="confirm_new" value="1">
+          <label class="form-check-label" for="confirm-new">This is a different account from the matches</label>
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="justification">Why this is new<abbr class="req" title="Required">*</abbr></label>
+          <input class="form-control" id="justification" name="justification">
+        </div>
+      {% endif %}
       {% if candidates %}
         <div class="form-check">
           <input class="form-check-input" id="account-existing" type="radio" name="account_mode" value="existing">
           <label class="form-check-label" for="account-existing">Use an existing account</label>
         </div>
-        <label class="form-label" for="account-id">Existing account</label>
-        <select class="form-select" id="account-id" name="account_id">
-          <option value="">—</option>
-          {% for candidate in candidates %}
-            <option value="{{ candidate.id }}">{{ candidate.name }}</option>
-          {% endfor %}
-        </select>
+        <div class="field-line">
+          <label class="form-label" for="account-id">Existing account</label>
+          <div class="field-control">
+            <select class="form-select" id="account-id" name="account_id">
+              <option value="">—</option>
+              {% for candidate in candidates %}
+                <option value="{{ candidate.id }}">{{ candidate.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
       {% endif %}
     </fieldset>
     <fieldset class="mb-3">
@@ -92,18 +99,25 @@
         <input class="form-check-input" id="contact-create" type="radio" name="contact_mode" value="create" checked>
         <label class="form-check-label" for="contact-create">Create a contact from this lead</label>
       </div>
-      <div class="form-check">
-        <input class="form-check-input" id="confirm-contact" type="checkbox" name="confirm_new_contact" value="1">
-        <label class="form-check-label" for="confirm-contact">Create another contact even if one matches</label>
-      </div>
+      {% if choice.contact_candidates %}
+        <div class="form-check">
+          <input class="form-check-input" id="confirm-contact" type="checkbox" name="confirm_new_contact" value="1">
+          <label class="form-check-label" for="confirm-contact">Create another contact even though one matches<abbr class="req" title="Required">*</abbr></label>
+        </div>
+      {% endif %}
     </fieldset>
     <fieldset class="mb-3">
       <legend>Deals</legend>
-      <select class="form-select" id="deal-action" name="deal_action">
-        <option value="reparent">Move open deals to the account</option>
-        <option value="leave">Leave deals on the lead</option>
-        <option value="create">Create a new account deal</option>
-      </select>
+      <div class="field-line">
+        <label class="form-label" for="deal-action">Open deals</label>
+        <div class="field-control">
+          <select class="form-select" id="deal-action" name="deal_action">
+            <option value="reparent">Move open deals to the account</option>
+            <option value="leave">Leave deals on the lead</option>
+            <option value="create">Create a new account deal</option>
+          </select>
+        </div>
+      </div>
     </fieldset>
     <button class="btn btn-primary" type="submit">Convert</button>
   </form>

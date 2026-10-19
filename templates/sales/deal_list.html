@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 {% load crm %}
-{% block title %}Deals · FluxCRM{% endblock %}
+{% block title %}Deals · GlideCRM{% endblock %}
 {% block content %}
   <div class="d-flex justify-content-between align-items-center mb-3">
     <h1 class="mb-0">Deals</h1>
     <p class="mb-0">
-      Open pipeline: {{ open_total|money }}
-      <a href="{% url 'sales:board' %}">Board</a>
-      <a class="btn btn-primary" href="{% url 'sales:create' %}">Add deal</a>
+      <i class="bi bi-briefcase" aria-hidden="true"></i>Open pipeline: {{ open_total|money }}
+      <a href="{% url 'sales:board' %}"><i class="bi bi-kanban" aria-hidden="true"></i>Board</a>
+      <a class="btn btn-primary" href="{% url 'sales:create' %}"><i class="bi bi-plus-lg" aria-hidden="true"></i>Add deal</a>
     </p>
   </div>
   <form
@@ -72,7 +72,7 @@
         <option value="-amount"{% if query.ordering == "-amount" %} selected{% endif %}>Amount, high to low</option>
         <option value="amount"{% if query.ordering == "amount" %} selected{% endif %}>Amount, low to high</option>
         <option value="stage"{% if query.ordering == "stage" %} selected{% endif %}>Stage</option>
-        <option value="confidence"{% if query.ordering == "confidence" %} selected{% endif %}>Confidence</option>
+        <option value="confidence"{% if query.ordering == "confidence" %} selected{% endif %}>Confidence, high to low</option>
         <option value="expected_close_date"{% if query.ordering == "expected_close_date" %} selected{% endif %}>Expected close</option>
         <option value="owner"{% if query.ordering == "owner" %} selected{% endif %}>Owner</option>
       </select>
@@ -84,4 +84,5 @@
   <div id="deal-results">
     {% include "sales/_deal_results.html" %}
   </div>
+  {% include "sales/_deal_reports.html" %}
 {% endblock %}

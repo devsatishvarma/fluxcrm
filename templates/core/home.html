@@ -1,10 +1,51 @@
 {% extends "base.html" %}
-{% block title %}Home · FluxCRM{% endblock %}
+{% load crm %}
+{% block title %}Home · GlideCRM{% endblock %}
+{% block body_class %}page-home{% endblock %}
 {% block content %}
-  <h1>FluxCRM</h1>
-  {% if company %}
-    <p>{{ company.display_name }}</p>
-    <p>{{ company.legal_name }}</p>
-  {% endif %}
-  <p>Local time: <time datetime="{{ local_now|date:'c' }}">{{ local_now|date:"m-d-Y, h:i A" }}</time> {{ timezone_name }}</p>
+  <section class="home-hero">
+    <h1>
+      <img class="brand-logo brand-logo-hero" src="{% url 'core:brand_logo' %}" alt="">
+      <span class="visually-hidden">GlideCRM</span>
+    </h1>
+    {% if company %}
+      <p class="home-company">{{ company.display_name }}</p>
+    {% endif %}
+    <p>Local time: <time datetime="{{ local_now|date:'c' }}">{{ local_now|date:"m-d-Y, h:i A" }}</time> {{ timezone_name }}</p>
+  </section>
+  <h2>Start here</h2>
+  <div class="home-grid">
+    <a class="home-link" href="{% url 'leads:list' %}">
+      <h2><i class="bi bi-person-lines-fill" aria-hidden="true"></i>Leads</h2>
+      <p>People and companies still in the pipeline.</p>
+    </a>
+    <a class="home-link" href="{% url 'accounts:list' %}">
+      <h2><i class="bi bi-building" aria-hidden="true"></i>Accounts</h2>
+      <p>Customers and the accounts they belong to.</p>
+    </a>
+    <a class="home-link" href="{% url 'accounts:contacts' %}">
+      <h2><i class="bi bi-people" aria-hidden="true"></i>Contacts</h2>
+      <p>People grouped under each account.</p>
+    </a>
+    <a class="home-link" href="{% url 'sales:list' %}">
+      <h2><i class="bi bi-briefcase" aria-hidden="true"></i>Deals</h2>
+      <p>Open work, amounts, and close dates.</p>
+    </a>
+    <a class="home-link" href="{% url 'activities:tasks' %}">
+      <h2><i class="bi bi-check2-square" aria-hidden="true"></i>Tasks</h2>
+      <p>Follow-ups that are due, overdue, or waiting.</p>
+    </a>
+    {% can "report" "R" as can_read_report %}
+    {% can "report" "A" as can_admin_report %}
+    {% if can_read_report or can_admin_report %}
+      <a class="home-link" href="{% url 'reporting:dashboard' %}">
+        <h2><i class="bi bi-bar-chart" aria-hidden="true"></i>Reports</h2>
+        <p>Pipeline, forecast, and the records behind them.</p>
+      </a>
+    {% endif %}
+    <a class="home-link" href="{% url 'core:settings' %}">
+      <h2><i class="bi bi-gear" aria-hidden="true"></i>Settings</h2>
+      <p>Company, people, roles, import, and audit.</p>
+    </a>
+  </div>
 {% endblock %}

@@ -1,5 +1,7 @@
 """Lead API. Uses the same services as the HTML pages."""
 
+from django.http import Http404
+from rest_framework.exceptions import NotFound
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -13,6 +15,7 @@ from leads.services import (
     filter_leads,
     lead_history,
     lead_payload,
+    page_leads,
     restore_lead,
     transition_lead,
     update_lead,
@@ -21,14 +24,22 @@ from leads.services import (
 
 class LeadListView(APIView):
     def get(self, request):
-        parse_page_size(request.query_params.get("page_size"))
         paginator = CappedPagination()
-        page = paginator.paginate_queryset(
-            filter_leads(request.user, request.query_params),
-            request,
-            view=self,
+        page_size = parse_page_size(request.query_params.get("page_size"))
+        try:
+            page = page_leads(
+                filter_leads(request.user, request.query_params),
+                request.query_params.get("page") or 1,
+                page_size,
+                strict=True,
+            )
+        except Http404 as exc:
+            raise NotFound() from exc
+        paginator.page = page
+        paginator.request = request
+        return paginator.get_paginated_response(
+            [lead_payload(lead) for lead in page.object_list]
         )
-        return paginator.get_paginated_response([lead_payload(lead) for lead in page])
 
     def post(self, request):
         lead = create_lead(

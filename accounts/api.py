@@ -19,6 +19,7 @@ def account_payload(account):
         "account_type": account.account_type,
         "parent": None if account.parent_id is None else str(account.parent_id),
         "website_url": account.website_url,
+        "address": account.address or {},
         "website_domain": account.website_domain,
         "owner": account.owner_id,
         "status": account.status,
@@ -39,6 +40,9 @@ def contact_payload(contact):
         "last_name": contact.last_name,
         "title": contact.title,
         "email": contact.email,
+        "work_phone": contact.work_phone,
+        "mobile_phone": contact.mobile_phone,
+        "address": contact.address or {},
         "account": str(contact.account_id),
         "is_primary": contact.is_primary,
         "reports_to": (

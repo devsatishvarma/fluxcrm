@@ -19,7 +19,13 @@ from accounts.services import (
 from audit.models import AuditEvent
 from core.access import get_scoped
 from core.exceptions import VersionConflict
-from core.validation import clean_email, clean_external_id, require_version
+from core.validation import (
+    clean_address,
+    clean_email,
+    clean_external_id,
+    clean_phone,
+    require_version,
+)
 from core.workflow import OPEN_DEAL_STAGES
 from leads.models import Lead
 from sales.models import Deal
@@ -80,6 +86,23 @@ def _truthy(value):
     return value in (True, "1", "true", "on", 1)
 
 
+def _blank_address(value):
+    if not isinstance(value, dict):
+        return True
+    return not any(str(part or "").strip() for part in value.values())
+
+
+def _fill_blank_address(record, lead, actor):
+    """Copy the lead address only when the account or contact has none."""
+    if not _blank_address(record.address) or _blank_address(lead.address):
+        return record
+    record.address = clean_address(lead.address)
+    record.updated_by = actor
+    record.version += 1
+    record.save(update_fields=("address", "updated_by", "version", "updated_at"))
+    return record
+
+
 def exact_account_for_lead(lead):
     """Return an account with the same domain or the same name.
 
@@ -134,6 +157,7 @@ def convert_lead(*, actor, lead_id, version, data, request_id="", fail_at=""):
             "subject": "Lead converted",
             "body": "Converted to an account and contact.",
         },
+        logged=False,
         links=[
             {"kind": "lead", "id": lead.pk},
             {"kind": "account", "id": account.pk},
@@ -186,7 +210,7 @@ def _account(actor, lead, data, request_id):
     if mode == "existing":
         account = get_scoped(Account, actor, data.get("account_id"))
         _permitted_type(actor, account.account_type)
-        return account
+        return _fill_blank_address(account, lead, actor)
     if mode != "create":
         raise ValidationError({"account_mode": "Choose create or existing."})
     name = str(data.get("account_name") or lead.company_name).strip()
@@ -210,6 +234,7 @@ def _account(actor, lead, data, request_id):
             "account_type": account_type,
             "website_url": lead.website_url,
             "owner": lead.owner_id,
+            "address": lead.address or {},
         },
         request_id=request_id,
     )
@@ -233,6 +258,8 @@ def _contact(actor, lead, account, data, request_id):
         "last_name": lead.last_name,
         "email": lead.email,
         "title": lead.title,
+        "work_phone": lead.work_phone,
+        "mobile_phone": lead.mobile_phone,
     }
     if mode == "existing":
         contact = get_scoped(Contact, actor, data.get("contact_id"))
@@ -253,6 +280,8 @@ def _contact(actor, lead, account, data, request_id):
                 }
             )
         _apply_choices(contact, incoming, choices, actor)
+        _fill_blank_phones(contact, lead, actor)
+        _fill_blank_address(contact, lead, actor)
         if _truthy(data.get("is_primary", True)):
             mark_primary(actor=actor, contact=contact, request_id=request_id)
         return contact
@@ -279,6 +308,9 @@ def _contact(actor, lead, account, data, request_id):
             "last_name": lead.last_name,
             "title": lead.title,
             "email": lead.email,
+            "work_phone": lead.work_phone,
+            "mobile_phone": lead.mobile_phone,
+            "address": lead.address or {},
             "account": account.pk,
             "owner": lead.owner_id,
             "is_primary": data.get("is_primary", True),
@@ -300,6 +332,9 @@ def _apply_choices(contact, incoming, choices, actor):
             contact.email = email
             contact.email_normalized = email
             changed.extend(("email", "email_normalized"))
+        elif field in {"work_phone", "mobile_phone"}:
+            setattr(contact, field, clean_phone(incoming[field], field=field))
+            changed.append(field)
         else:
             setattr(contact, field, str(incoming[field] or "")[:120])
             changed.append(field)
@@ -345,9 +380,9 @@ def _deals(actor, lead, account, contact, data, request_id):
             data={
                 "title": title[:200],
                 "account": account.pk,
+                "primary_contact": contact.pk,
                 "deal_type": "CONSULTING_SERVICES",
                 "currency": "USD",
-                "confidence": "MEDIUM",
                 "stage": "NEW",
                 "owner": lead.owner_id,
             },
@@ -364,7 +399,9 @@ def prepare_lead_for_closed_deal(*, actor, lead, closed_stage, request_id=""):
     if locked.converted_at is not None:
         return locked.converted_account, locked.converted_contact
     account = exact_account_for_lead(locked)
-    if account is None:
+    if account is not None:
+        _fill_blank_address(account, locked, actor)
+    else:
         account_type = (
             Account.Type.CUSTOMER
             if closed_stage == "CLOSED_WON"
@@ -377,6 +414,7 @@ def prepare_lead_for_closed_deal(*, actor, lead, closed_stage, request_id=""):
                 "account_type": account_type,
                 "website_url": locked.website_url,
                 "owner": locked.owner_id,
+                "address": locked.address or {},
             },
             request_id=request_id,
         )
@@ -419,12 +457,12 @@ def prepare_lead_for_closed_deal(*, actor, lead, closed_stage, request_id=""):
 
 def _contact_for_closed_lead(actor, lead, account):
     email, _domain = clean_email(lead.email or "")
-    if email:
-        existing = Contact.objects.filter(
-            account=account, email_normalized=email
-        ).first()
-        if existing is not None:
-            return existing
+    if not email:
+        raise ValidationError({"email": "Enter an email address."})
+    existing = Contact.objects.filter(account=account, email_normalized=email).first()
+    if existing is not None:
+        _fill_blank_phones(existing, lead, actor)
+        return _fill_blank_address(existing, lead, actor)
     has_primary = Contact.objects.filter(account=account, is_primary=True).exists()
     contact = Contact(
         external_id=clean_external_id(None),
@@ -433,6 +471,9 @@ def _contact_for_closed_lead(actor, lead, account):
         title=(lead.title or "")[:120],
         email=email,
         email_normalized=email,
+        work_phone=clean_phone(lead.work_phone, field="work_phone"),
+        mobile_phone=clean_phone(lead.mobile_phone, field="mobile_phone"),
+        address=clean_address(lead.address or {}),
         account=account,
         owner=lead.owner,
         is_primary=False,
@@ -444,6 +485,25 @@ def _contact_for_closed_lead(actor, lead, account):
     contact.save()
     if not has_primary:
         mark_primary(actor=actor, contact=contact)
+    return contact
+
+
+def _fill_blank_phones(contact, lead, actor):
+    """Copy a lead phone onto a contact only when that contact phone is blank."""
+    changed = []
+    for field in ("work_phone", "mobile_phone"):
+        current = getattr(contact, field) or ""
+        incoming = clean_phone(getattr(lead, field), field=field)
+        if current or not incoming:
+            continue
+        setattr(contact, field, incoming)
+        changed.append(field)
+    if not changed:
+        return contact
+    contact.updated_by = actor
+    contact.version += 1
+    changed.extend(("updated_by", "version", "updated_at"))
+    contact.save(update_fields=tuple(changed))
     return contact
 
 

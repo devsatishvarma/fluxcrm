@@ -5,6 +5,7 @@ import pytest
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from audit.models import AuditEvent
@@ -81,6 +82,7 @@ def test_ui_and_api_cover_search_filter_pagination_and_delete(client):
                 "first_name": "Page",
                 "last_name": str(index),
                 "company_name": f"Paged {index:02d}",
+                "email": f"page{index}@example.test",
                 "source": "OTHER",
                 "stage": "NEW",
             },
@@ -118,7 +120,11 @@ def test_ui_and_api_cover_search_filter_pagination_and_delete(client):
 
     deleted = client.post(
         reverse("leads:delete", args=[lead.pk]),
-        {"version": lead.version, "delete_reason": "Duplicate"},
+        {
+            "version": lead.version,
+            "delete_reason": "Duplicate",
+            "confirm_delete": "yes",
+        },
     )
     assert deleted.status_code == 302
     assert Lead.objects.filter(pk=lead.pk).exists() is False
@@ -300,6 +306,11 @@ def test_seed_values_reconcile_and_lists_do_not_query_per_row(client, caplog):
     assert b"Northstar Robotics" in page.content
     deal_page = client.get(reverse("sales:detail", args=[deal.pk]))
     assert b"$ 12,500" in deal_page.content
+    path = deal_page.content.split(b'class="stage-path"', 1)[1].split(b"</ol>", 1)[0]
+    assert b"stage-arrow" in path
+    assert path.find(b">New<") < path.find(b">Discovery<") < path.find(b">Qualified<")
+    assert path.find(b">Qualified<") < path.find(b">POC/Tech Evaluation<")
+    assert path.find(b">Closing<") < path.find(b">Closed Won<")
     assert b"Northstar endpoint security renewal" in deal_page.content
 
     caplog.set_level(logging.INFO)
@@ -321,6 +332,7 @@ def test_seed_values_reconcile_and_lists_do_not_query_per_row(client, caplog):
             first_name="Extra",
             last_name=str(index),
             company_name=f"Extra Co {index}",
+            email=f"extra{index}@example.test",
             source="WEB",
             stage="NEW",
             stage_entered_at=lead.stage_entered_at,
@@ -374,7 +386,7 @@ def test_deal_ui_crud_filters_errors_and_lead_delete_guard(client):
             "confidence": "HIGH",
             "expected_close_date": "2026-12-15",
             "stage": "NEW",
-            "probability": "5.00",
+            "probability": "80.00",
             "owner": admin.pk,
         },
     )
@@ -410,7 +422,11 @@ def test_deal_ui_crud_filters_errors_and_lead_delete_guard(client):
     assert Lead.objects.filter(pk=lead.pk).exists()
     deleted = client.post(
         reverse("sales:delete", args=[deal.pk]),
-        {"version": deal.version, "delete_reason": "Duplicate"},
+        {
+            "version": deal.version,
+            "delete_reason": "Duplicate",
+            "confirm_delete": "yes",
+        },
     )
     assert deleted.status_code == 302
     assert Deal.objects.filter(pk=deal.pk).exists() is False
@@ -435,3 +451,121 @@ def test_invalid_lead_owner_and_short_delete_reason_are_rejected():
     )
     assert rejected.status_code == 422
     assert Lead.objects.filter(pk=created.json()["id"]).exists()
+
+
+def test_closed_deals_follow_open_deals(client):
+    ensure_picklists()
+    admin = make_user("sorter", admin=True)
+    moment = timezone.now()
+    lead = Lead.objects.create(
+        external_id="sort-lead",
+        first_name="Ada",
+        last_name="Sort",
+        company_name="Sort Co",
+        email="ada.sort@example.test",
+        source="WEB",
+        stage="NEW",
+        stage_entered_at=moment,
+        owner=admin,
+        created_by=admin,
+        updated_by=admin,
+    )
+    Deal.objects.create(
+        external_id="sort-open",
+        title="Open first",
+        lead=lead,
+        deal_type="CONSULTING_SERVICES",
+        amount=Decimal("100.00"),
+        currency="USD",
+        confidence="LOW",
+        stage="NEW",
+        stage_entered_at=moment,
+        probability=Decimal("5.00"),
+        owner=admin,
+        created_by=admin,
+        updated_by=admin,
+    )
+    Deal.objects.create(
+        external_id="sort-closed",
+        title="Closed later",
+        lead=lead,
+        deal_type="CONSULTING_SERVICES",
+        amount=Decimal("9000.00"),
+        currency="USD",
+        confidence="HIGH",
+        stage="CLOSED_WON",
+        outcome="WON",
+        stage_entered_at=moment,
+        probability=Decimal("100.00"),
+        owner=admin,
+        created_by=admin,
+        updated_by=admin,
+    )
+    client.force_login(admin)
+    listed = client.get(reverse("sales:list"))
+    assert listed.content.find(b"Open first") < listed.content.find(b"Closed later")
+    by_amount = client.get(reverse("sales:list"), {"ordering": "-amount"})
+    assert by_amount.content.find(b"Open first") < by_amount.content.find(
+        b"Closed later"
+    )
+
+
+def test_confidence_sort_is_high_then_medium_then_low(client):
+    ensure_picklists()
+    admin = make_user("sorter", admin=True)
+    moment = timezone.now()
+    lead = Lead.objects.create(
+        external_id="confidence-sort-lead",
+        first_name="Ada",
+        last_name="Rank",
+        company_name="Rank Co",
+        email="ada.rank@example.test",
+        source="WEB",
+        stage="NEW",
+        stage_entered_at=moment,
+        owner=admin,
+        created_by=admin,
+        updated_by=admin,
+    )
+    for title, confidence, probability in (
+        ("Open low deal", "LOW", Decimal("10.00")),
+        ("Open high deal", "HIGH", Decimal("90.00")),
+        ("Open medium deal", "MEDIUM", Decimal("50.00")),
+    ):
+        Deal.objects.create(
+            external_id=title.lower().replace(" ", "-"),
+            title=title,
+            lead=lead,
+            deal_type="CONSULTING_SERVICES",
+            amount=Decimal("100.00"),
+            currency="USD",
+            confidence=confidence,
+            stage="NEW",
+            stage_entered_at=moment,
+            probability=probability,
+            owner=admin,
+            created_by=admin,
+            updated_by=admin,
+        )
+    Deal.objects.create(
+        external_id="closed-high-deal",
+        title="Closed high deal",
+        lead=lead,
+        deal_type="CONSULTING_SERVICES",
+        amount=Decimal("100.00"),
+        currency="USD",
+        confidence="HIGH",
+        stage="CLOSED_WON",
+        outcome="WON",
+        stage_entered_at=moment,
+        probability=Decimal("100.00"),
+        owner=admin,
+        created_by=admin,
+        updated_by=admin,
+    )
+    client.force_login(admin)
+    page = client.get(reverse("sales:list"), {"ordering": "confidence"})
+    body = page.content
+    assert body.find(b"Open high deal") < body.find(b"Closed high deal")
+    assert body.find(b"Closed high deal") < body.find(b"Open medium deal")
+    assert body.find(b"Open medium deal") < body.find(b"Open low deal")

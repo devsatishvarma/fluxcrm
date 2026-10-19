@@ -1,9 +1,11 @@
 {% extends "base.html" %}
-{% block title %}Users · FluxCRM{% endblock %}
+{% load crm %}
+{% block title %}Users · GlideCRM{% endblock %}
 {% block content %}
   {% include "core/_settings_nav.html" %}
   <h1>Users</h1>
   {% if error %}<p role="alert">{{ error }}</p>{% endif %}
+  <p>Password reset instructions go to the email on that user. Phone is stored as (XXX) XXX-XXXX and is not used for the reset.</p>
   {% if can_administer %}
     <p>
       <a href="{% url 'core:user_create' %}">Add user</a>
@@ -15,8 +17,11 @@
     <thead>
       <tr>
         <th scope="col">Name</th>
+        <th scope="col">Email</th>
+        <th scope="col">Phone</th>
         <th scope="col">Role</th>
         <th scope="col">Manager</th>
+        <th scope="col">Teams</th>
         <th scope="col">Status</th>
         {% if can_administer %}<th scope="col">Action</th>{% endif %}
       </tr>
@@ -25,11 +30,17 @@
       {% for account in users %}
         <tr>
           <td>{{ account.display_name }}</td>
+          <td>{{ account.email }}</td>
+          <td>{{ account.phone|phone }}</td>
           <td>{{ account.role.name }}</td>
           <td>{{ account.manager.display_name|default:"—" }}</td>
+          <td>
+            {% for team in account.teams.all %}{{ team.name }}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}
+          </td>
           <td>{% if account.is_active %}Active{% else %}Disabled{% endif %}</td>
           {% if can_administer %}
             <td>
+              <a href="{% url 'core:user_edit' account.pk %}">Edit</a>
               <form method="post" action="{% url 'core:user_manager' account.pk %}">
                 {% csrf_token %}
                 <label class="visually-hidden" for="manager-{{ account.pk }}">Manager for {{ account.display_name }}</label>
@@ -45,7 +56,7 @@
               </form>
               <form class="d-inline" method="post" action="{% url 'core:user_send_password_reset' account.pk %}">
                 {% csrf_token %}
-                <button class="btn btn-outline-secondary btn-sm" type="submit">Send password reset</button>
+                <button class="btn btn-outline-secondary btn-sm" type="submit" title="Sends the reset link to {{ account.email }}">Send password reset</button>
               </form>
               <form method="post" action="{% url 'core:user_set_active' account.pk %}">
                 {% csrf_token %}

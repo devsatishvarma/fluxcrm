@@ -1,10 +1,18 @@
 {% extends "base.html" %}
-{% block title %}{{ account.name }} · FluxCRM{% endblock %}
+{% load crm %}
+{% block title %}{{ account.name }} · GlideCRM{% endblock %}
 {% block content %}
-  <h1>{{ account.name }}</h1>
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="mb-0">{{ account.name }}</h1>
+    <a class="btn btn-primary" href="{% url 'accounts:edit' account.pk %}"><i class="bi bi-pencil" aria-hidden="true"></i>Edit account</a>
+  </div>
   <dl class="detail-fields">
     <div><dt>Type</dt><dd>{{ account.get_account_type_display }}</dd></div>
+    <div><dt>Status</dt><dd>{{ account.get_status_display }}</dd></div>
+    <div><dt>Industry</dt><dd>{{ industry_labels|lookup:account.industry|default:"—" }}</dd></div>
     <div><dt>Website</dt><dd>{{ account.website_url|default:"—" }}</dd></div>
+    <div><dt>Phone</dt><dd>{{ account.phone|phone }}</dd></div>
+    <div><dt>Address</dt><dd>{{ account.address|address }}</dd></div>
     <div><dt>Owner</dt><dd>{{ account.owner.display_name }}</dd></div>
     <div>
       <dt>Parent</dt>
@@ -17,6 +25,7 @@
       </dd>
     </div>
   </dl>
+  {% if account.notes %}<h2>Notes</h2><p>{{ account.notes }}</p>{% endif %}
   {% if account.converted_from_lead_id %}
     <p>
       Converted from
@@ -36,19 +45,33 @@
   <h2>Contacts</h2>
   <p><a href="{% url 'accounts:contact_create' account.pk %}">Add contact</a></p>
   {% if contacts %}
-    <ul>
+    <ul class="name-columns">
       {% for contact in contacts %}
         <li>
-          {{ contact.first_name }} {{ contact.last_name }}
-          {% if contact.email %}{{ contact.email }}{% endif %}
-          {% if contact.is_primary %}(primary){% endif %}
-          {% if contact.converted_from_lead_id %}from lead{% endif %}
-          {% if contact.reports_to %}reports to {{ contact.reports_to }}{% endif %}
+          <a href="{% url 'accounts:contact_edit' contact.pk %}">{{ contact.first_name }} {{ contact.last_name }}</a>
         </li>
       {% endfor %}
     </ul>
   {% else %}
     <p>No contacts yet.</p>
   {% endif %}
+  <h2>Deals</h2>
+  <p><a href="{% url 'sales:create' %}?account={{ account.pk }}">Add deal</a></p>
+  {% if deals %}
+    <ul>
+      {% for deal in deals %}
+        <li>
+          <a href="{% url 'sales:detail' deal.pk %}">{{ deal.title }}</a>
+          {{ deal.stage|stage_label }}
+          {% if deal.primary_contact %}with {{ deal.primary_contact }}{% endif %}
+          {{ deal.amount|money }}
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p>No deals yet.</p>
+  {% endif %}
   {% include "activities/_timeline.html" with kind="account" object_id=account.pk %}
+  {% url 'accounts:delete' account.pk as delete_url %}
+  {% include "crm/_delete_form.html" with object_key="account" record_label="account" delete_url=delete_url version=account.version field_id=account.pk %}
 {% endblock %}

@@ -39,8 +39,8 @@ cp .env.example .env
 docker compose up -d database
 export DJANGO_DEBUG=true
 export DJANGO_SECRET_KEY=development-only-replace-before-deployment
-export MYSQL_DATABASE=fluxcrm
-export MYSQL_USER=fluxcrm
+export MYSQL_DATABASE=glidecrm
+export MYSQL_USER=glidecrm
 export MYSQL_PASSWORD=development-only-database-password
 export MYSQL_HOST=127.0.0.1
 uv run python manage.py migrate
@@ -64,8 +64,8 @@ MYSQL_USER=root MYSQL_PASSWORD=development-only-root-password \
 ```
 
 The elevated MySQL account is used only so Django can create and destroy an
-isolated `test_fluxcrm` database. Runtime commands use the restricted
-`fluxcrm` account.
+isolated `test_glidecrm` database. Runtime commands use the restricted
+`glidecrm` account.
 
 Browser smoke tests require Chromium and a running application:
 

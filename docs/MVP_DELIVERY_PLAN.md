@@ -1,4 +1,4 @@
-# FluxCRM MVP Delivery Plan
+# GlideCRM MVP Delivery Plan
 
 ## 1. Purpose
 

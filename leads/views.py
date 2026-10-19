@@ -1,7 +1,6 @@
 """HTML pages for leads."""
 
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.core.paginator import Paginator
 from django.db.models import Q
 from django.http import Http404, HttpResponse
 from django.shortcuts import redirect, render
@@ -9,9 +8,18 @@ from django.views.decorators.http import require_http_methods, require_POST
 
 from core.access import activate_viewer_timezone, get_scoped, scoped
 from core.exceptions import VersionConflict
+from core.notices import (
+    fail_with,
+    failed,
+    form_text,
+    payload_text,
+    stage_name,
+    succeeded,
+    validation_text,
+)
 from core.policy import assignable_users, can_correct, require_action
 from core.taxonomy import choice_pairs
-from core.validation import add_form_errors
+from core.validation import add_form_errors, require_delete_confirmation
 from leads.forms import LeadDeleteForm, LeadForm
 from leads.models import Lead
 from leads.services import (
@@ -19,6 +27,7 @@ from leads.services import (
     create_lead,
     delete_lead,
     filter_leads,
+    page_leads,
     update_lead,
 )
 from sales.models import Deal
@@ -44,8 +53,7 @@ def lead_list(request):
             else {"detail": exc.messages}
         )
         status = 422
-    paginator = Paginator(queryset, PAGE_SIZE)
-    page = paginator.get_page(request.GET.get("page") or 1)
+    page = page_leads(queryset, request.GET.get("page") or 1, PAGE_SIZE)
     from activities.services import attach_freshness
 
     attach_freshness(list(page.object_list), "lead")
@@ -88,10 +96,14 @@ def lead_create(request):
             )
         except ValidationError as exc:
             add_form_errors(form, exc)
+            fail_with(request, "Could not add the lead.", validation_text(exc))
             status = 422
         else:
+            name = f"{lead.first_name} {lead.last_name}".strip()
+            succeeded(request, f"Lead {name} added.")
             return redirect("leads:detail", lead.pk)
     elif request.method == "POST":
+        fail_with(request, "Could not add the lead.", form_text(form))
         status = 422
     return render(request, "leads/lead_form.html", {"form": form}, status=status)
 
@@ -130,9 +142,17 @@ def lead_detail(request, lead_id):
             "tasks": tasks,
             "history": lead_history(lead).select_related("changed_by"),
             "allowed_stages": stages,
+            "stage_order": LEAD_BOARD_STAGES,
+            "stage_labels": {
+                key: label for key, label in choice_pairs("LEAD_STAGE") if key
+            },
             "contact_substatus_choices": choice_pairs("CONTACT_SUBSTATUS"),
             "nurture_reason_choices": choice_pairs("NURTURE_REASON"),
             "disqualification_reason_choices": choice_pairs("DISQUALIFICATION_REASON"),
+            "company_size_choices": choice_pairs("COMPANY_SIZE"),
+            "current_tools_choices": choice_pairs("CURRENT_TOOLS"),
+            "budget_range_choices": choice_pairs("BUDGET_RANGE"),
+            "buying_timeline_choices": choice_pairs("BUYING_TIMELINE"),
             "correction_stages": (
                 tuple(LEAD_BOARD_STAGES) if can_correct(request.user) else ()
             ),
@@ -166,16 +186,24 @@ def lead_edit(request, lead_id):
             )
         except ValidationError as exc:
             add_form_errors(form, exc)
+            fail_with(request, "Could not save the lead.", validation_text(exc))
             status = 422
         except VersionConflict:
             form.add_error(
                 None,
                 "This record was updated. Reload and retry.",
             )
+            failed(
+                request,
+                "Could not save the lead. This record was updated. Reload and retry.",
+            )
             status = 409
         else:
+            name = f"{lead.first_name} {lead.last_name}".strip()
+            succeeded(request, f"Lead {name} saved.")
             return redirect("leads:detail", lead.pk)
     elif request.method == "POST":
+        fail_with(request, "Could not save the lead.", form_text(form))
         status = 422
     return render(
         request,
@@ -198,6 +226,7 @@ def lead_bulk_assign(request):
         return render(request, "crm/forbidden.html", status=403)
     except ValidationError as exc:
         return HttpResponse("; ".join(exc.messages), status=422)
+    succeeded(request, "Leads reassigned.")
     return redirect("leads:list")
 
 
@@ -205,9 +234,12 @@ def lead_bulk_assign(request):
 def lead_delete(request, lead_id):
     form = LeadDeleteForm(request.POST)
     if not form.is_valid():
+        fail_with(request, "Could not delete the lead.", form_text(form))
         return render(request, "leads/lead_form.html", {"form": form}, status=422)
     try:
-        delete_lead(
+        require_action(request.user, "lead", "D", object_id=lead_id)
+        require_delete_confirmation(request.POST)
+        lead = delete_lead(
             actor=request.user,
             lead_id=lead_id,
             version=form.cleaned_data["version"],
@@ -225,6 +257,7 @@ def lead_delete(request, lead_id):
             raise
         form = LeadDeleteForm(request.POST)
         add_form_errors(form, exc)
+        fail_with(request, "Could not delete the lead.", validation_text(exc))
         return render(
             request,
             "leads/lead_detail.html",
@@ -238,6 +271,10 @@ def lead_delete(request, lead_id):
     except VersionConflict:
         lead = get_scoped(Lead, request.user, lead_id)
         form.add_error(None, "This record was updated. Reload and retry.")
+        failed(
+            request,
+            "Could not delete the lead. This record was updated. Reload and retry.",
+        )
         return render(
             request,
             "leads/lead_detail.html",
@@ -248,6 +285,8 @@ def lead_delete(request, lead_id):
             },
             status=409,
         )
+    name = f"{lead.first_name} {lead.last_name}".strip()
+    succeeded(request, f"Lead {name} deleted.")
     return redirect("leads:list")
 
 
@@ -297,6 +336,10 @@ def lead_transition(request, lead_id):
         else:
             payload = {"detail": exc.messages}
         return _transition_error(request, payload, 422)
+    if correction:
+        succeeded(request, "Lead correction saved.")
+    else:
+        succeeded(request, f"Lead moved to {stage_name('LEAD_STAGE', lead.stage)}.")
     if request.headers.get("X-Requested-With") == "fetch":
         from django.http import JsonResponse
 
@@ -309,6 +352,7 @@ def _transition_error(request, payload, status):
 
     if request.headers.get("X-Requested-With") == "fetch":
         return JsonResponse(payload, status=status)
+    fail_with(request, "Could not change the stage.", payload_text(payload))
     return render(
         request,
         "crm/transition_error.html",

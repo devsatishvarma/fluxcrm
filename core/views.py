@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 def health(request: HttpRequest) -> JsonResponse:
     """Liveness check; deliberately does not depend on external services."""
-    return JsonResponse({"status": "ok", "service": "fluxcrm"})
+    return JsonResponse({"status": "ok", "service": "glidecrm"})
 
 
 def readiness(request: HttpRequest) -> JsonResponse:

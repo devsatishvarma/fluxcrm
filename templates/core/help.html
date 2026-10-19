@@ -1,27 +1,94 @@
 {% extends "base.html" %}
-{% block title %}Help · FluxCRM{% endblock %}
+{% block title %}Help · GlideCRM{% endblock %}
 {% block content %}
   <h1>Help</h1>
-  <p>FluxCRM keeps leads, accounts, contacts, deals, and follow-up in one place. Dates and times are shown as mm-dd-yyyy, hh:mm AM/PM in your time zone.</p>
+  <p>GlideCRM keeps leads, accounts, contacts, deals, and follow-up in one place. Dates and times are shown as mm-dd-yyyy, hh:mm AM/PM in your time zone. Amounts are shown as whole dollars, such as $ 12,500. Win probability is a whole percent, such as 30%.</p>
+  <p>A red asterisk (<abbr class="req" title="Required">*</abbr>) marks a field you must fill on that page. Other fields can be left blank.</p>
 
   <h2>Leads</h2>
   <p>A lead is a person and company you have not yet converted. The list can be searched, filtered, and sorted by age, stage, rating, follow-up, owner, or company. Rating is Hot, Warm, or Cold. Lead Age is days since the lead was created. Stage-Age is days in the current stage.</p>
-  <p>Change the lead stage from the lead page. That does not move a deal or create an account. Use Convert when you want an account and contact before a deal closes.</p>
+  <p>Adding a lead requires first name, last name, company, email, and source. Title, phone, address, website, and notes are optional. A phone number uses (XXX) XXX-XXXX, such as (949) 555-0100. Address is street, city, state, postal code, and country. Leave any part blank.</p>
+
+  <h2>Changing a lead stage</h2>
+  <p>Open the lead and choose the next stage. The form shows only the fields that stage needs. Changing a lead stage does not move a deal, create an account, or convert the lead. The board can move a lead when no extra field is required. If the move needs a reason or a date, open the lead.</p>
+  <ul>
+    <li>New: the starting stage for a new lead.</li>
+    <li>Contacted: contact status. Attempted or In Contact also needs an email or phone already on the lead. No contact details needs a short note.</li>
+    <li>MQL: a qualification note. Company size, current tools, budget range, and timeline are optional.</li>
+    <li>Demo: a demo date and a technical contact name.</li>
+    <li>SQL: a note and the next follow-up.</li>
+    <li>Nurturing: a nurture reason and the next follow-up. Choose Reactivation when the lead is being picked up again.</li>
+    <li>Unqualified: a reason from the list (No Budget, No Technical Fit, Wrong Decision-Maker, Security-Compliance Mismatch, or Timing). This is for a lead that is not a fit. Only an administrator can reopen it.</li>
+    <li>Archived: a reason the lead went silent. This is not the same as Unqualified. Reopening also needs a reason.</li>
+  </ul>
+  <p>Fix a wrong stage is only for correcting a stage that was recorded incorrectly. It is not a step you complete before a normal move.</p>
+
+  <h2>Converting a lead</h2>
+  <p>Use Convert on the lead when you want an account and contact before a deal closes. Account name and account type are required if you create an account. The contact is created from the lead’s name, so you do not enter the name again. Convert does not change the lead stage.</p>
+  <p>If an account already has the same website or the same company name, pick that account or say why this one is new. If a contact on that account already matches, confirm a new contact or use the existing one. When nothing matches, there is no extra confirmation. You can move the lead’s open deals onto the account, leave them on the lead, or create one new deal.</p>
 
   <h2>Accounts and contacts</h2>
-  <p>Contacts has its own page. Search by name, email, title, or account, and the results stay grouped under each account. An account has at most one primary contact.</p>
+  <p>An account requires a name and a type. Website, phone, address, industry, parent account, and notes are optional. A contact requires a first name, a last name, and an email. On an existing contact, the account is required too. Title, work phone, mobile phone, address, and who they report to are optional. Phone numbers on a lead, account, contact, and user use (XXX) XXX-XXXX. Address is street, city, state, postal code, and country. Leave any part blank. Converting a lead, including when a deal closes, copies the person’s title, email, work phone, mobile phone, and address onto the new contact, and copies the address onto a new account. An existing account or contact keeps an address it already has. A blank phone or address is filled from the lead. An account has at most one primary contact. Open the account or the contact and choose Edit to change them.</p>
+  <p>Delete an account at the bottom of the account page, or a contact at the bottom of the contact page. Enter a reason and check the confirmation. Delete the account’s contacts, deals, and child accounts first. A contact who is still on a deal, or who other people report to, stays until that link is removed.</p>
+  <p>GlideCRM assigns the account id and the contact id. Those ids are not shown on the screen and are not typed in. They stay on the record so an export can identify it. Contacts has its own page. Search by name, email, phone, title, or account, and the results stay grouped under each account.</p>
 
   <h2>Deals</h2>
-  <p>A deal belongs to a lead or to an account. Amounts are shown as whole dollars, such as $ 12,500. Sort deals by age, amount, stage, confidence, expected close, or owner. Confidence is High, Medium, or Low.</p>
-  <p>Closing a deal as Closed Won or Closed Lost converts that deal’s lead: the company becomes an account (or matches an existing one by website or exact company name) and the person becomes a contact. The lead stage itself does not change. Closed Hold pauses the deal and does not convert the lead. Other deals on that lead stay where they are.</p>
+  <p>A deal belongs to a lead or to an account. From the Deals page, choose whether the deal is linked to a lead or an account. A lead lists those people. An account lists companies, then the contacts on the company you pick. From a lead, add the deal on that lead. From an account, add the deal and choose a contact on that account. The contact is required, and it has to be a person already on the account. Adding a deal requires a title and a type. Amount, win probability, and stage changes work the same way on both. Amount and expected close date can wait until the stage that needs them. You set the win probability. Deal confidence is set by the system from that number: High at 80% or more, Medium from 40% up to 80%, and Low under 40%. Confidence cannot be edited on its own. Closing a deal that is already on an account leaves that account and contact in place. Delete a lead or a deal at the bottom of its page. Enter a reason and check the confirmation. Delete a lead’s deals before deleting the lead.</p>
+  <p>Budget, Authority, Need, and Timeline are on every deal. They are not required. Set each one when you have the information, and leave Unknown when you do not. Edit the deal to change them, or update them when you move the stage. They do not calculate the win probability.</p>
+
+  <h2>Win probability</h2>
+  <p>Win probability is the number you enter. It is not calculated from Budget, Authority, Need, or Timeline. If you leave it blank on a new deal, it starts at 5%, the default for New.</p>
+  <p>Moving the stage replaces that number with the stage default:</p>
+  <ul>
+    <li>New: 5%</li>
+    <li>Discovery: 10%</li>
+    <li>Qualified: 20%</li>
+    <li>POC/Tech Evaluation: 30%</li>
+    <li>Proposal: 50%</li>
+    <li>Negotiation: 70%</li>
+    <li>Closing: 90%</li>
+    <li>Closed Won: 100%</li>
+    <li>Closed Lost: 0%</li>
+    <li>Closed Hold: 0%</li>
+  </ul>
+  <p>An administrator or sales director can keep a different number, but only with a reason. Deal confidence is then set from that percent: High at 80% or more, Medium from 40% up to 80%, and Low under 40%.</p>
+
+  <h2>Changing a deal stage</h2>
+  <p>Open the deal and choose the next stage. Only that stage’s fields are shown. There is no separate approval before the stage changes or the deal closes. When the deal is still on a lead, closing as Won or Lost converts that lead in the same step: the company becomes an account, or matches an existing one by website or exact company name, and the person becomes a contact. The lead stage itself does not change. Closed Hold pauses the deal and leaves the lead where it is. Other deals on that lead stay where they are. A deal added from an account keeps that account and its contact through every stage, including Won and Lost.</p>
+  <ul>
+    <li>Discovery: a note on the requirements you gathered. This is where the deal starts, and it is separate from a lead’s Contacted stage.</li>
+    <li>Qualified: amount and expected close date.</li>
+    <li>POC/Tech Evaluation: the POC or trial start date, the technical stakeholder, and a success-criteria note.</li>
+    <li>Proposal: amount, expected close date, and a note that the proposal was sent.</li>
+    <li>Negotiation: a note on terms or redlines, and the expected close date.</li>
+    <li>Closing: a sign-off note and the expected close date.</li>
+    <li>Closed Won: final amount and the actual close date. Wins are counted on that date, not the day the stage changed.</li>
+    <li>Closed Lost: Price, Competitor, No Technical Fit, Timing, or Lost to Internal Build.</li>
+    <li>Closed Hold: a hold reason. Reopening needs a reason. Hold pauses the deal and does not convert the lead.</li>
+  </ul>
+  <p>On Edit deal, change the POC or trial start date after it has been saved. A sales director or administrator can change the win probability. Enter why it changed. Leave that reason blank when the number stays the same. The new probability updates deal confidence. The same reason is required when a stage move uses a probability other than the stage default. Fix a wrong stage records a correction. It is not required to close a deal.</p>
 
   <h2>Tasks</h2>
   <p>Tasks opens on every open task. Overdue means the due time has already passed. Due today means it is still due later today. Upcoming means it is due after today. On hold, completed, and cancelled tasks are separate lists.</p>
-  <p>Each task shows the lead, contact, and deal it is linked to. You can complete, snooze, hold, resume, cancel, or delete it. Delete asks for a reason. Hold pauses reminders until you resume the task.</p>
+  <p>A task requires a title and a due time. Notes are optional and show on the Tasks screen. The title is shown in bold. Each task shows the lead, contact, and deal it is linked to. On a lead, account, or deal, you can complete or edit the task. Hold, resume, snooze, cancel, and delete stay on the Tasks screen so the record page stays short. Edit is next to Complete and changes the title, due time, priority, and notes. Snooze requires the new time. Delete asks for a reason on its own line. Confirmed to delete sits on the same line as the delete button. Hold pauses reminders until you resume the task.</p>
 
   <h2>Activities</h2>
-  <p>A call, email, meeting, or note is logged on the timeline of a lead, deal, or account. On a record page, press <kbd>A</kbd> when you are not typing in a field to jump to the activity subject. Open Edit or delete on an activity to correct it or remove one that was added by mistake.</p>
+  <p>An activity is a call, an email, a meeting, or a note. It requires a type, a subject, who it was with, and when it happened. Who it was with is a contact or a lead, shown by name. Open With whom to search that list. The list scrolls. Create that person first if the name is not in the list. Notes are optional. On a record page, press <kbd>A</kbd> when you are not typing in a field to jump to the activity subject. Edit changes those details. Delete is next to Edit and asks for a reason and one confirmation.</p>
 
   <h2>Settings</h2>
-  <p>Settings holds Company, Teams, Users, Roles, and Audit. Everyone who can sign in can open Audit for the history they are allowed to read. Teams and Users are for administrators and sales directors. Company and Roles are for administrators. A sales director sees people in their reporting line, not an unrelated branch.</p>
+  <p>Settings holds Company, Teams, Users, Roles, Import, and Audit. Everyone who can sign in can open Audit for the history they are allowed to read. Administrators see only the fields that changed, shown as the previous value and the new value. Teams and Users are for administrators and sales directors. Company and Roles are for administrators. A sales director sees people in their reporting line, not an unrelated branch. A team requires a name. A user requires the fields marked on that form; a manager, a phone, and a password change are optional. Edit on a user changes the name, email, phone, role, manager, and teams. Clear the old team and choose the new one to move that person. A person can belong to more than one team. The team page lists only the active members of that team.</p>
+  <p>Password reset instructions go to the email on the user. Send password reset on the user list, and the invitation when a user is added, both use that address. Phone is kept on the user for later and is not a reset channel. Until a mail provider is connected, those messages are written to the application log instead of a mailbox.</p>
+
+  <h2>Import</h2>
+  <p>Settings, Import accepts a UTF-8 CSV for leads, accounts, or contacts. Download the template first. Lines that start with # say which columns are required or optional and which key or format to use. Those lines are not imported. Keep the header. The sample row is skipped while row_action is example.</p>
+  <p>Required columns are first name, last name, company, email, and source for a lead; name and account type for an account; account id, first name, last name, and email for a contact. Street, city, state, postal code, and country are optional on every template. The state column is named region. A phone column accepts 10 digits and is stored as (XXX) XXX-XXXX. Import the account before its contacts. Enums use keys, such as WEB or CUSTOMER, not the labels. The owner column is the person's name, such as Satish Varma, not the login username. Leave owner blank to assign the row to yourself. external_id is optional and uses letters, numbers, hyphens, or underscores, up to 64 characters. Email is name@domain. Money has at most two decimal places. true and false are the only boolean values. Do not start a cell with =, +, or @.</p>
+  <p>Preview checks the file and saves no leads, accounts, or contacts. Then choose Skip, Update, or Create for rows that match. A match uses external_id first, then an exact email, or an exact account website or name. Commit saves 200 rows at a time. If a later group fails, the earlier rows stay, and a retry does not insert them again. Reusing the retry key after a commit returns that batch instead of adding a second copy. Rollback removes rows that were not edited later and leaves an edited row in place. Workbooks are not accepted. Deals, activities, and tasks are not in these templates. Imported leads start at New.</p>
+
+  <h2>Export</h2>
+  <p>On Import, Export current leads, accounts, or contacts downloads the rows you are allowed to see. The file uses the template columns, and it also includes the id GlideCRM assigned. The owner column is the person's name. A contact file includes that contact id and the account id. Those id columns are not entered on the form and are not shown on the page. Import still matches on the external id, an exact email, or an exact account website or name. A cell that starts with =, +, -, or @ is prefixed so a spreadsheet does not treat it as a formula. A standard user can import records they own and cannot export them. Export permission is separate from read.</p>
+
+  <h2>Reports</h2>
+  <p>Reports shows the records you are allowed to see. The dashboard is three rows: open leads, the number of open deals, and pipeline value; then wins this quarter and this year against the prior period, using each deal’s actual close date; then overdue tasks and stale leads. A prior period with no wins shows N/A. A rep sees their own work, a manager sees their reporting line, and an executive view covers the company. Reports are grouped by purpose: Leads, Deals, Accounts, and Activity. Each total names the companies or accounts behind it. A parent account total includes each descendant deal once. Leave the report dates blank to include every record. Forecast groups open deals by the quarter they are expected to close, and deals with no expected close date stay on the report as Unscheduled.</p>
+  <p>The Deals page shows the deal reports in three sections. Pipeline has deals by stage and by confidence. Timing has deals by age and by quarter. Ownership has deals by sales owner. Age is days since the deal was added. Quarter uses the fiscal quarter of the expected close date.</p>
+  <p>Contacts lists each account and its people, including the primary contact. Every report has Download CSV. The file contains the summary table and the records behind it. The download is recorded as who exported the report, which columns, and how many rows. It does not store the cell values in the audit.</p>
 {% endblock %}

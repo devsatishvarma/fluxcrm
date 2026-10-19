@@ -1,3 +1,4 @@
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -5,7 +6,47 @@ from django import forms
 from django.contrib.auth.forms import AuthenticationForm
 from django.core.exceptions import ValidationError
 
-from identity.models import CompanySettings, Role, User
+from core.display import format_phone, format_whole
+from core.validation import clean_email, clean_phone
+from identity.models import CompanySettings, Role, Team, User
+
+
+def _form_phone(value):
+    try:
+        return clean_phone(value)
+    except ValidationError as exc:
+        raise ValidationError(exc.messages) from exc
+
+
+class WholeNumberField(forms.DecimalField):
+    """Accept a number, including trailing cents, and keep a whole value."""
+
+    def __init__(self, *args, max_value=None, **kwargs):
+        kwargs.setdefault("max_digits", 18)
+        kwargs["decimal_places"] = 2
+        self.whole_max = max_value
+        kwargs.setdefault(
+            "widget",
+            forms.NumberInput(attrs={"step": "1", "min": "0"}),
+        )
+        super().__init__(*args, **kwargs)
+
+    def to_python(self, value):
+        amount = super().to_python(value)
+        if amount in self.empty_values:
+            return None
+        whole = amount.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        if whole < 0 or (self.whole_max is not None and whole > self.whole_max):
+            ceiling = "" if self.whole_max is None else f" to {self.whole_max}"
+            raise ValidationError(f"Enter a whole number from 0{ceiling}.")
+        return whole
+
+    def prepare_value(self, value):
+        if value in self.empty_values:
+            return ""
+        text = format_whole(value)
+        return "" if text == "—" else text
+
 
 ALLOWED_LOGO_TYPES = {"image/png", "image/jpeg", "image/webp"}
 ALLOWED_LOGO_EXTENSIONS = {".jpeg", ".jpg", ".png", ".webp"}
@@ -120,6 +161,9 @@ class CompanySettingsForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields["legal_name"].label = "Legal name"
+        self.fields["display_name"].label = "Company name"
+        self.fields["display_name"].help_text = "Shown on the home page."
         address = self.instance.address or {}
         self.fields["street"].initial = address.get("street", "")
         self.fields["city"].initial = address.get("city", "")
@@ -129,6 +173,12 @@ class CompanySettingsForm(forms.ModelForm):
         self.fields["offered_services_text"].initial = "\n".join(
             self.instance.offered_services or []
         )
+        for field in self.fields.values():
+            widget = field.widget
+            if isinstance(widget, forms.Select):
+                widget.attrs.setdefault("class", "form-select")
+            elif not isinstance(widget, forms.CheckboxInput):
+                widget.attrs.setdefault("class", "form-control")
 
     def clean_base_currency(self):
         currency = self.cleaned_data["base_currency"].upper()
@@ -171,13 +221,25 @@ class CompanySettingsForm(forms.ModelForm):
         return changes
 
 
-class FluxLoginForm(AuthenticationForm):
+class GlideLoginForm(AuthenticationForm):
     username = forms.CharField(max_length=150)
 
 
 class UserCreateForm(forms.Form):
     username = forms.CharField(max_length=150)
-    email = forms.EmailField()
+    email = forms.EmailField(
+        label="Email",
+        help_text="Password reset and invitation links are sent to this address.",
+    )
+    phone = forms.CharField(
+        max_length=40,
+        required=False,
+        label="Phone",
+        help_text="Use (XXX) XXX-XXXX. Password reset does not use this number.",
+        widget=forms.TextInput(
+            attrs={"placeholder": "(XXX) XXX-XXXX", "maxlength": "40"}
+        ),
+    )
     display_name = forms.CharField(max_length=150)
     timezone = forms.CharField(max_length=64, initial="America/Los_Angeles")
     role = forms.ModelChoiceField(queryset=Role.objects.none())
@@ -200,6 +262,13 @@ class UserCreateForm(forms.Form):
             "display_name"
         )
 
+    def clean_email(self):
+        email, _domain = clean_email(self.cleaned_data["email"])
+        return email
+
+    def clean_phone(self):
+        return _form_phone(self.cleaned_data.get("phone"))
+
     def clean_timezone(self):
         return _validate_timezone(self.cleaned_data["timezone"])
 
@@ -214,6 +283,71 @@ class UserCreateForm(forms.Form):
         if password and not confirmation:
             self.add_error("password_confirmation", "Confirm the password.")
         return cleaned
+
+
+class ChoiceCheckboxes(forms.CheckboxSelectMultiple):
+    """A checkbox list whose label does not toggle the box twice."""
+
+    option_template_name = "core/choice_option.html"
+
+
+class UserEditForm(forms.Form):
+    display_name = forms.CharField(max_length=150, label="Name")
+    email = forms.EmailField(
+        label="Email",
+        help_text="Password reset instructions are sent to this address.",
+    )
+    phone = forms.CharField(
+        max_length=40,
+        required=False,
+        label="Phone",
+        help_text="Use (XXX) XXX-XXXX. Password reset does not use this number.",
+        widget=forms.TextInput(
+            attrs={"placeholder": "(XXX) XXX-XXXX", "maxlength": "40"}
+        ),
+    )
+    role = forms.ModelChoiceField(queryset=Role.objects.none())
+    manager = forms.ModelChoiceField(queryset=User.objects.none(), required=False)
+    teams = forms.ModelMultipleChoiceField(
+        queryset=Team.objects.none(),
+        required=False,
+        widget=ChoiceCheckboxes,
+        help_text="Choose every team this person belongs to.",
+    )
+
+    def __init__(self, *args, instance, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["role"].queryset = Role.objects.order_by("name")
+        self.fields["manager"].queryset = (
+            User.objects.filter(is_active=True)
+            .exclude(pk=instance.pk)
+            .order_by("display_name")
+        )
+        self.fields["teams"].queryset = Team.objects.order_by("name")
+        for field in self.fields.values():
+            widget = field.widget
+            if isinstance(widget, forms.Select):
+                widget.attrs.setdefault("class", "form-select")
+            elif not isinstance(widget, forms.CheckboxSelectMultiple):
+                widget.attrs.setdefault("class", "form-control")
+        if not self.is_bound:
+            self.initial.update(
+                {
+                    "display_name": instance.display_name,
+                    "email": instance.email,
+                    "phone": format_phone(instance.phone, empty=""),
+                    "role": instance.role_id,
+                    "manager": instance.manager_id,
+                    "teams": list(instance.teams.values_list("pk", flat=True)),
+                }
+            )
+
+    def clean_email(self):
+        email, _domain = clean_email(self.cleaned_data["email"])
+        return email
+
+    def clean_phone(self):
+        return _form_phone(self.cleaned_data.get("phone"))
 
 
 def _validate_timezone(value: str) -> str:

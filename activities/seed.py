@@ -15,7 +15,7 @@ ACTIVITIES = (
     },
     {
         "external_id": "act-3003",
-        "activity_type": "NOTE",
+        "activity_type": "EMAIL",
         "subject": "Northstar note",
         "occurred_at": datetime(2026, 10, 9, 18, 0, tzinfo=UTC),
         "lead_external_id": "lead-1002",
@@ -43,7 +43,7 @@ def seed_phase4(*, actor):
         lead = Lead.objects.get(external_id=spec["lead_external_id"])
         create_activity(
             actor=actor,
-            data=spec,
+            data={**spec, "with_lead": str(lead.pk)},
             links=[{"kind": "lead", "id": lead.pk}],
             request_id="seed",
         )

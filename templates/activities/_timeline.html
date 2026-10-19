@@ -1,4 +1,6 @@
 {% load crm %}
+{% activity_parties user as parties %}
+{% suggested_party user kind object_id as party_default %}
 <section>
   <h2>Timeline</h2>
   {% if activities %}
@@ -6,21 +8,25 @@
       {% for activity in activities %}
         <li class="mb-3">
           <strong>{{ activity.subject }}</strong>
-          ({{ activity.activity_type }}) · {{ activity.occurred_at|date:"m-d-Y, h:i A" }}
+          ({% if activity.activity_type == "EMAIL" %}Email{% elif activity.activity_type == "MEETING" %}Meeting{% elif activity.activity_type == "NOTE" %}Note{% else %}Call{% endif %})
+          {% if activity.party_url %}· with <a href="{{ activity.party_url }}">{{ activity.party_name }}</a>{% elif activity.with_whom %}· with {{ activity.with_whom }}{% endif %}
+          · {{ activity.occurred_at|date:"m-d-Y, h:i A" }}
+          {% if activity.body %}<div>{{ activity.body }}</div>{% endif %}
           {% can "activity" "U" as can_edit_activity %}
           {% can "activity" "D" as can_delete_activity %}
           {% if can_edit_activity or can_delete_activity %}
-            <details class="mt-1">
-              <summary>Edit or delete</summary>
-              {% if can_edit_activity %}
-                <form class="row g-2 mt-1" method="post" action="{% url 'activities:activity_update' activity.pk %}">
+            <div class="task-pair">
+            {% if can_edit_activity %}
+            <details class="inline-edit mt-1">
+              <summary class="btn btn-sm btn-outline-secondary">Edit</summary>
+                <form class="inline-edit-form row g-2" method="post" action="{% url 'activities:activity_update' activity.pk %}">
                   {% csrf_token %}
                   <input type="hidden" name="version" value="{{ activity.version }}">
                   <input type="hidden" name="kind" value="{{ kind }}">
                   <input type="hidden" name="object_id" value="{{ object_id }}">
                   <div class="col-md-4">
-                    <label class="form-label" for="activity-type-{{ activity.pk }}">Type</label>
-                    <select class="form-select" id="activity-type-{{ activity.pk }}" name="activity_type">
+                    <label class="form-label" for="activity-type-{{ activity.pk }}">Type<abbr class="req" title="Required">*</abbr></label>
+                    <select class="form-select" id="activity-type-{{ activity.pk }}" name="activity_type" required>
                       <option value="CALL" {% if activity.activity_type == "CALL" %}selected{% endif %}>Call</option>
                       <option value="EMAIL" {% if activity.activity_type == "EMAIL" %}selected{% endif %}>Email</option>
                       <option value="MEETING" {% if activity.activity_type == "MEETING" %}selected{% endif %}>Meeting</option>
@@ -28,12 +34,22 @@
                     </select>
                   </div>
                   <div class="col-md-8">
-                    <label class="form-label" for="activity-subject-{{ activity.pk }}">Subject</label>
-                    <input class="form-control" id="activity-subject-{{ activity.pk }}" name="subject" value="{{ activity.subject }}">
+                    <label class="form-label" for="activity-subject-{{ activity.pk }}">Subject<abbr class="req" title="Required">*</abbr></label>
+                    <input class="form-control" id="activity-subject-{{ activity.pk }}" name="subject" value="{{ activity.subject }}" required>
                   </div>
                   <div class="col-md-6">
-                    <label class="form-label" for="activity-when-{{ activity.pk }}">When</label>
-                    <input class="form-control" id="activity-when-{{ activity.pk }}" name="occurred_at" type="datetime-local" value="{{ activity.occurred_at|date:'Y-m-d' }}T{{ activity.occurred_at|date:'H:i' }}">
+                    {% with person_id=activity.pk|stringformat:"s" %}
+                      {% with field_id="activity-with-"|add:person_id %}
+                        {% include "activities/_party_field.html" with field_id=field_id selected=activity.party_value %}
+                      {% endwith %}
+                    {% endwith %}
+                    {% if activity.with_whom and not activity.party_value %}
+                      <p class="form-text">Previously recorded as {{ activity.with_whom }}. Choose a contact or lead.</p>
+                    {% endif %}
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label" for="activity-when-{{ activity.pk }}">When<abbr class="req" title="Required">*</abbr></label>
+                    <input class="form-control" id="activity-when-{{ activity.pk }}" name="occurred_at" type="datetime-local" required value="{{ activity.occurred_at|date:'Y-m-d' }}T{{ activity.occurred_at|date:'H:i' }}">
                   </div>
                   <div class="col-md-6">
                     <label class="form-label" for="activity-outcome-{{ activity.pk }}">Outcome</label>
@@ -47,19 +63,26 @@
                     <button class="btn btn-sm btn-primary" type="submit">Save activity</button>
                   </div>
                 </form>
-              {% endif %}
-              {% if can_delete_activity %}
-                <form class="mt-2" method="post" action="{% url 'activities:activity_delete' activity.pk %}">
+            </details>
+            {% endif %}
+            {% if can_delete_activity %}
+              <details class="inline-edit mt-1">
+                <summary class="btn btn-sm btn-outline-danger">Delete</summary>
+                <form class="inline-edit-form delete-form" method="post" action="{% url 'activities:activity_delete' activity.pk %}">
                   {% csrf_token %}
                   <input type="hidden" name="version" value="{{ activity.version }}">
                   <input type="hidden" name="kind" value="{{ kind }}">
                   <input type="hidden" name="object_id" value="{{ object_id }}">
-                  <label class="form-label" for="activity-delete-{{ activity.pk }}">Delete reason</label>
-                  <input class="form-control mb-2" id="activity-delete-{{ activity.pk }}" name="delete_reason" required minlength="3">
-                  <button class="btn btn-sm btn-outline-danger" type="submit">Delete activity</button>
+                  <label class="form-label" for="activity-delete-{{ activity.pk }}">Delete reason<abbr class="req" title="Required">*</abbr></label>
+                  <input class="form-control" id="activity-delete-{{ activity.pk }}" name="delete_reason" required minlength="3" maxlength="200">
+                  <div class="delete-line">
+                    {% include "crm/_delete_confirm.html" with field_id=activity.pk record_label="activity" %}
+                    <button class="btn btn-sm btn-outline-danger" type="submit">Delete activity</button>
+                  </div>
                 </form>
-              {% endif %}
-            </details>
+              </details>
+            {% endif %}
+            </div>
           {% endif %}
         </li>
       {% endfor %}
@@ -73,8 +96,8 @@
     <input type="hidden" name="object_id" value="{{ object_id }}">
     <div class="row g-2">
       <div class="col-md-4">
-        <label class="form-label" for="quick-activity-type">Activity</label>
-        <select class="form-select" id="quick-activity-type" name="activity_type">
+        <label class="form-label" for="quick-activity-type">Activity<abbr class="req" title="Required">*</abbr></label>
+        <select class="form-select" id="quick-activity-type" name="activity_type" required>
           <option value="CALL" selected>Call</option>
           <option value="EMAIL">Email</option>
           <option value="MEETING">Meeting</option>
@@ -82,20 +105,110 @@
         </select>
       </div>
       <div class="col-md-8">
-        <label class="form-label" for="quick-activity-subject">Subject</label>
+        <label class="form-label" for="quick-activity-subject">Subject<abbr class="req" title="Required">*</abbr></label>
         <input class="form-control" id="quick-activity-subject" name="subject" required>
+      </div>
+      <div class="col-md-6">
+        {% include "activities/_party_field.html" with field_id="quick-activity-with" selected=party_default %}
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="quick-activity-when">When<abbr class="req" title="Required">*</abbr></label>
+        <input class="form-control" id="quick-activity-when" name="occurred_at" type="datetime-local" required>
+      </div>
+      <div class="col-12">
+        <label class="form-label" for="quick-activity-notes">Notes</label>
+        <textarea class="form-control" id="quick-activity-notes" name="body" rows="2"></textarea>
       </div>
     </div>
     <button class="btn btn-sm btn-primary mt-2" type="submit">Add activity</button>
   </form>
 </section>
+<script>
+  function closePartyMenus(except) {
+    document.querySelectorAll(".party-menu").forEach(function (menu) {
+      if (menu === except) return;
+      menu.hidden = true;
+      var toggle = menu.parentElement.querySelector(".party-toggle");
+      if (toggle) toggle.setAttribute("aria-expanded", "false");
+    });
+  }
+  function openPartyMenu(picker) {
+    var menu = picker.querySelector(".party-menu");
+    var toggle = picker.querySelector(".party-toggle");
+    closePartyMenus(menu);
+    menu.hidden = false;
+    toggle.setAttribute("aria-expanded", "true");
+    var search = menu.querySelector(".party-search");
+    if (search) search.focus();
+    var chosen = menu.querySelector("input:checked");
+    if (!chosen) return;
+    var list = menu.querySelector(".party-list");
+    var row = chosen.closest(".party-option");
+    var top = row.getBoundingClientRect().top - list.getBoundingClientRect().top;
+    list.scrollTop += top;
+  }
+  document.addEventListener("click", function (event) {
+    var toggle = event.target.closest(".party-toggle");
+    if (toggle) {
+      var picker = toggle.closest(".party-picker");
+      var menu = picker.querySelector(".party-menu");
+      if (menu.hidden) openPartyMenu(picker);
+      else closePartyMenus(null);
+      return;
+    }
+    var option = event.target.closest(".party-option");
+    if (option) {
+      var picker = option.closest(".party-picker");
+      picker.querySelector(".party-chosen").textContent = option.querySelector("span").textContent;
+      closePartyMenus(null);
+      return;
+    }
+    if (!event.target.closest(".party-menu")) closePartyMenus(null);
+  });
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape") closePartyMenus(null);
+  });
+  document.addEventListener("input", function (event) {
+    if (!event.target.classList.contains("party-search")) return;
+    var list = event.target.closest(".party-menu").querySelector(".party-list");
+    var query = event.target.value.trim().toLowerCase();
+    var visible = 0;
+    list.querySelectorAll(".party-option").forEach(function (option) {
+      var show = !query || (option.dataset.search || "").indexOf(query) !== -1;
+      option.hidden = !show;
+      if (show) visible += 1;
+    });
+    list.querySelectorAll(".party-group").forEach(function (group) {
+      var any = false;
+      var next = group.nextElementSibling;
+      while (next && !next.classList.contains("party-group")) {
+        if (next.classList.contains("party-option") && !next.hidden) any = true;
+        next = next.nextElementSibling;
+      }
+      group.hidden = !any;
+    });
+    var empty = list.querySelector(".party-empty");
+    if (empty) empty.hidden = visible !== 0;
+  });
+  document.querySelectorAll("form").forEach(function (form) {
+    if (!form.querySelector(".party-picker")) return;
+    form.addEventListener("submit", function (event) {
+      var picker = form.querySelector(".party-picker");
+      if (picker.querySelector('input[name="with_party"]:checked')) return;
+      event.preventDefault();
+      openPartyMenu(picker);
+    });
+  });
+</script>
 <section class="mt-4">
   <h2>Tasks</h2>
   {% if tasks %}
     <ul>
       {% for task in tasks %}
         <li class="mb-2">
-          {{ task.title }} · {{ task.status }} · due {{ task.due_at|date:"m-d-Y, h:i A" }}
+          {{ task.title }} · due {{ task.due_at|date:"m-d-Y, h:i A" }}
+          {% if task.status != "OPEN" %} · {{ task.status }}{% endif %}
+          {% if task.description and kind != "deal" %}<div>{{ task.description }}</div>{% endif %}
           {% if task.related %}
             ·
             {% for item in task.related %}
@@ -104,49 +217,19 @@
           {% endif %}
           {% if task.status == "OPEN" or task.status == "HOLD" %}
             {% can "task" "U" as can_update_task %}
-            {% can "task" "D" as can_delete_task %}
             {% if can_update_task %}
-              {% if task.status == "OPEN" %}
-                <form class="d-inline" method="post" action="{% url 'activities:complete' task.pk %}">
-                  {% csrf_token %}
-                  <input type="hidden" name="version" value="{{ task.version }}">
-                  <input type="hidden" name="kind" value="{{ kind }}">
-                  <input type="hidden" name="object_id" value="{{ object_id }}">
-                  <button class="btn btn-sm btn-outline-primary" type="submit">Complete</button>
-                </form>
-                <form class="d-inline" method="post" action="{% url 'activities:hold' task.pk %}">
-                  {% csrf_token %}
-                  <input type="hidden" name="version" value="{{ task.version }}">
-                  <input type="hidden" name="kind" value="{{ kind }}">
-                  <input type="hidden" name="object_id" value="{{ object_id }}">
-                  <button class="btn btn-sm btn-outline-secondary" type="submit">Hold</button>
-                </form>
-              {% else %}
-                <form class="d-inline" method="post" action="{% url 'activities:resume' task.pk %}">
-                  {% csrf_token %}
-                  <input type="hidden" name="version" value="{{ task.version }}">
-                  <input type="hidden" name="kind" value="{{ kind }}">
-                  <input type="hidden" name="object_id" value="{{ object_id }}">
-                  <button class="btn btn-sm btn-outline-secondary" type="submit">Resume</button>
-                </form>
-              {% endif %}
-              <form class="d-inline" method="post" action="{% url 'activities:cancel' task.pk %}">
-                {% csrf_token %}
-                <input type="hidden" name="version" value="{{ task.version }}">
-                <input type="hidden" name="kind" value="{{ kind }}">
-                <input type="hidden" name="object_id" value="{{ object_id }}">
-                <button class="btn btn-sm btn-outline-secondary" type="submit">Cancel</button>
-              </form>
-            {% endif %}
-            {% if can_delete_task %}
-              <form class="d-inline" method="post" action="{% url 'activities:delete' task.pk %}">
-                {% csrf_token %}
-                <input type="hidden" name="version" value="{{ task.version }}">
-                <input type="hidden" name="kind" value="{{ kind }}">
-                <input type="hidden" name="object_id" value="{{ object_id }}">
-                <input name="delete_reason" placeholder="Delete reason" required minlength="3">
-                <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
-              </form>
+              <span class="task-pair">
+                {% if task.status == "OPEN" %}
+                  <form class="d-inline" method="post" action="{% url 'activities:complete' task.pk %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="version" value="{{ task.version }}">
+                    <input type="hidden" name="kind" value="{{ kind }}">
+                    <input type="hidden" name="object_id" value="{{ object_id }}">
+                    <button class="btn btn-sm btn-outline-primary" type="submit">Complete</button>
+                  </form>
+                {% endif %}
+                {% include "activities/_task_edit.html" %}
+              </span>
             {% endif %}
           {% endif %}
         </li>
@@ -161,13 +244,19 @@
     <input type="hidden" name="object_id" value="{{ object_id }}">
     <div class="row g-2">
       <div class="col-md-8">
-        <label class="form-label" for="quick-task-title">Task</label>
+        <label class="form-label" for="quick-task-title">Task<abbr class="req" title="Required">*</abbr></label>
         <input class="form-control" id="quick-task-title" name="title" required>
       </div>
       <div class="col-md-4">
-        <label class="form-label" for="quick-task-due">Due</label>
+        <label class="form-label" for="quick-task-due">Due<abbr class="req" title="Required">*</abbr></label>
         <input class="form-control" id="quick-task-due" name="due_at" type="datetime-local" required>
       </div>
+      {% if kind != "deal" %}
+      <div class="col-12">
+        <label class="form-label" for="quick-task-notes">Notes</label>
+        <textarea class="form-control" id="quick-task-notes" name="description" rows="2"></textarea>
+      </div>
+      {% endif %}
     </div>
     <button class="btn btn-sm btn-primary mt-2" type="submit">Add task</button>
   </form>

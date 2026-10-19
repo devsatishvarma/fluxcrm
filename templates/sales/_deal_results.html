@@ -4,13 +4,24 @@
     {% for field, messages in errors.items %}{{ field }}: {{ messages|join:", " }} {% endfor %}
   </p>
 {% endif %}
+{% if owner_totals %}
+  <section class="owner-totals" aria-label="Amount by owner">
+    <h2>Amount by owner</h2>
+    {% for row in owner_totals %}
+      <article class="owner-chip">
+        <span>{{ row.name }}</span>
+        <strong>{{ row.total|money }}</strong>
+      </article>
+    {% endfor %}
+  </section>
+{% endif %}
 {% if page_obj.object_list %}
   <table class="table">
     <caption>Deals you can access</caption>
     <thead>
       <tr>
         <th scope="col">Title</th>
-        <th scope="col">Lead company</th>
+        <th scope="col">Company</th>
         <th scope="col">Deal confidence</th>
         <th scope="col">Stage</th>
         <th scope="col">Deal Age</th>
@@ -34,7 +45,7 @@
             {% endif %}
           </td>
           <td>{{ deal.confidence|choice_label }}</td>
-          <td>{{ deal.stage }}</td>
+          <td>{{ deal.stage|stage_label }}</td>
           <td>{{ deal.created_at|elapsed }}</td>
           <td>{{ deal.stage_entered_at|elapsed }}</td>
           <td>{{ deal.amount|money }}</td>

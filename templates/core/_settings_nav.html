@@ -1,14 +1,20 @@
+{% load crm %}
 <nav class="mb-3" aria-label="Settings">
   <a href="{% url 'core:settings' %}">Settings</a>
   {% if user.is_company_admin %}
-    · <a href="{% url 'core:company_settings' %}">Company</a>
+    <a href="{% url 'core:company_settings' %}">Company</a>
   {% endif %}
   {% if user.is_company_admin or user.role.key == "SALES_DIRECTOR" %}
-    · <a href="{% url 'core:teams' %}">Teams</a>
-    · <a href="{% url 'core:user_list' %}">Users</a>
+    <a href="{% url 'core:teams' %}">Teams</a>
+    <a href="{% url 'core:user_list' %}">Users</a>
   {% endif %}
   {% if user.is_company_admin %}
-    · <a href="{% url 'core:roles' %}">Roles</a>
+    <a href="{% url 'core:roles' %}">Roles</a>
   {% endif %}
-  · <a href="{% url 'core:audit' %}">Audit</a>
+  <a href="{% url 'core:audit' %}">Audit</a>
+  {% can "import" "C" as can_import_rows %}
+  {% can "import" "A" as can_admin_import %}
+  {% if can_import_rows or can_admin_import %}
+    <a href="{% url 'imports:home' %}">Import</a>
+  {% endif %}
 </nav>

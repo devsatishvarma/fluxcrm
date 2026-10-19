@@ -1,0 +1,31 @@
+<div class="party-picker">
+  <label class="form-label" for="{{ field_id }}">With whom<abbr class="req" title="Required">*</abbr></label>
+  <button class="form-select party-toggle" id="{{ field_id }}" type="button" aria-expanded="false" aria-controls="{{ field_id }}-menu">
+    <span class="party-chosen">{% for person in parties.contacts %}{% if person.value == selected %}{{ person.label }}{% endif %}{% endfor %}{% for person in parties.leads %}{% if person.value == selected %}{{ person.label }}{% endif %}{% endfor %}{% if not selected %}Choose a contact or lead{% endif %}</span>
+  </button>
+  <div class="party-menu" id="{{ field_id }}-menu" hidden>
+    <input class="form-control party-search" type="search" placeholder="Search contacts and leads" autocomplete="off" aria-label="Search contacts and leads">
+    <div class="party-list" role="listbox" aria-labelledby="{{ field_id }}">
+      {% if parties.contacts %}
+        <p class="party-group">Contacts</p>
+        {% for person in parties.contacts %}
+          <label class="party-option" data-search="{{ person.search }}">
+            <input type="radio" name="with_party" value="{{ person.value }}"{% if person.value == selected %} checked{% endif %} required>
+            <span>{{ person.label }}</span>
+          </label>
+        {% endfor %}
+      {% endif %}
+      {% if parties.leads %}
+        <p class="party-group">Leads</p>
+        {% for person in parties.leads %}
+          <label class="party-option" data-search="{{ person.search }}">
+            <input type="radio" name="with_party" value="{{ person.value }}"{% if person.value == selected %} checked{% endif %} required>
+            <span>{{ person.label }}</span>
+          </label>
+        {% endfor %}
+      {% endif %}
+      <p class="party-empty" hidden>No matching contact or lead.</p>
+    </div>
+  </div>
+  <p class="form-text">Create the contact or lead first if the person is not listed.</p>
+</div>

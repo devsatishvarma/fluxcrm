@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Import · GlideCRM{% endblock %}
+{% block content %}
+  <p><a href="{% url 'core:settings' %}">Settings</a></p>
+  <h1>Import</h1>
+  <p>Upload a UTF-8 CSV file for leads, accounts, or contacts. Download a template first. Instruction lines start with # and are not imported. The example row stays in the file until you remove it or change <code>row_action</code>. Address columns are optional: street, city, region for the state, postal_code, and country.</p>
+  {% if errors %}
+    <p role="alert">
+      {% for field, messages in errors.items %}{{ field }}: {{ messages|join:", " }} {% endfor %}
+    </p>
+  {% endif %}
+  <form class="row g-2 align-items-end mb-4" method="post" action="{% url 'imports:preview' %}" enctype="multipart/form-data">
+    {% csrf_token %}
+    <div class="col-md-3">
+      <label class="form-label" for="import-entity">Records</label>
+      <select class="form-select" id="import-entity" name="entity">
+        <option value="lead">Leads</option>
+        <option value="account">Accounts</option>
+        <option value="contact">Contacts</option>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label" for="import-policy">If a row matches</label>
+      <select class="form-select" id="import-policy" name="policy">
+        <option value="skip">Skip the match</option>
+        <option value="update">Update the match</option>
+        <option value="create">Create a new record</option>
+      </select>
+    </div>
+    <div class="col-md-3">
+      <label class="form-label" for="import-key">Retry key</label>
+      <input class="form-control" id="import-key" name="idempotency_key" maxlength="64">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label" for="import-file">CSV file<abbr class="req" title="Required">*</abbr></label>
+      <input class="form-control" id="import-file" name="file" type="file" accept=".csv,text/csv" required>
+    </div>
+    <div class="col-md-1">
+      <button class="btn btn-primary" type="submit">Preview</button>
+    </div>
+  </form>
+  {% for guide in guides %}
+    <h2>{{ guide.label }}</h2>
+    <p>
+      <a href="{% url 'imports:template' guide.entity %}">Download {{ guide.label|lower }} template</a>
+      {% if guide.can_export %}
+        · <a href="{% url 'imports:export' guide.entity %}">Export current {{ guide.label|lower }}</a>
+      {% endif %}
+    </p>
+    <div class="table-responsive mb-4">
+      <table class="table">
+        <caption>{{ guide.label }} columns</caption>
+        <thead>
+          <tr>
+            <th scope="col">Column</th>
+            <th scope="col">Required</th>
+            <th scope="col">Format</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for column in guide.columns %}
+            <tr>
+              <td><code>{{ column.key }}</code></td>
+              <td>{{ column.requirement }}</td>
+              <td>{{ column.instructions }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endfor %}
+{% endblock %}

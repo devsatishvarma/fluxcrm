@@ -1,7 +1,11 @@
 {% extends "base.html" %}
-{% block title %}Setup · FluxCRM{% endblock %}
+{% block title %}Setup · GlideCRM{% endblock %}
+{% block body_class %}page-auth{% endblock %}
 {% block content %}
-  <h1>FluxCRM</h1>
+  <h1>
+    <img class="brand-logo brand-logo-hero" src="{% url 'core:brand_logo' %}" alt="">
+    <span class="visually-hidden">GlideCRM</span>
+  </h1>
   <p>Create the company profile and the first administrator. There is no default password.</p>
   <form method="post" enctype="multipart/form-data" class="row g-3">
     {% csrf_token %}

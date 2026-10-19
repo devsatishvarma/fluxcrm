@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% load crm %}
+{% block title %}{{ report.title }} · GlideCRM{% endblock %}
+{% block content %}
+  <p><a href="{% url 'reporting:dashboard' %}">Reports</a></p>
+  <h1>{{ report.title }}</h1>
+  <p>{{ report.preset }} view. Dates use your time zone.</p>
+  {% if errors %}
+    <p role="alert">
+      {% for field, messages in errors.items %}{{ field }}: {{ messages|join:", " }} {% endfor %}
+    </p>
+  {% endif %}
+  <p>Leave both dates blank to include every record. A date range is inclusive and uses your time zone.</p>
+  {% if report.note %}
+    <p>{{ report.note }}</p>
+  {% endif %}
+  <form class="row g-2 align-items-end mb-3" method="get">
+    <div class="col-md-3">
+      <label class="form-label" for="report-start">From</label>
+      <input class="form-control" id="report-start" name="start" type="date" value="{{ params.start }}">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label" for="report-end">Through</label>
+      <input class="form-control" id="report-end" name="end" type="date" value="{{ params.end }}">
+    </div>
+    <div class="col-md-2">
+      <button class="btn btn-outline-primary" type="submit">Apply</button>
+    </div>
+  </form>
+  <div class="table-responsive mb-3">
+    <table class="table">
+      <caption>{{ report.title }}</caption>
+      <thead>
+        <tr>
+          {% for label, key in report.columns %}
+            <th scope="col">{{ label }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in report.rows %}
+          <tr>
+            {% for label, key in report.columns %}
+              <td>
+                {% if key in report.money_fields %}
+                  {{ row|lookup:key|money }}
+                {% else %}
+                  {{ row|lookup:key }}
+                {% endif %}
+              </td>
+            {% endfor %}
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="{{ report.columns|length }}">No rows match this report.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if report.rows %}
+    <canvas id="report-chart" height="120" aria-label="{{ report.title }} chart"></canvas>
+    {{ chart|json_script:"report-chart-data" }}
+  {% endif %}
+  {% if report.median_days != None %}
+    <p>Median age: {{ report.median_days }} days</p>
+  {% endif %}
+  <h2>Records</h2>
+  {% if page_obj and page_obj.object_list %}
+    <div class="table-responsive mb-3">
+      <table class="table">
+        <caption>Records in {{ report.title }}</caption>
+        <thead>
+          <tr>
+            <th scope="col">Company</th>
+            <th scope="col">Record</th>
+            <th scope="col">Detail</th>
+            <th scope="col">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in page_obj %}
+            <tr>
+              <td>{{ item.company }}</td>
+              <td>{{ item.title }}</td>
+              <td>{{ item.detail }}</td>
+              <td>{% if item.amount != None %}{{ item.amount|money }}{% else %}—{% endif %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if page_obj.has_next %}
+      <a href="?page={{ page_obj.next_page_number }}&amp;page_size={{ page_obj.paginator.per_page }}&amp;start={{ params.start }}&amp;end={{ params.end }}">Next page</a>
+    {% endif %}
+  {% else %}
+    <p>No records in this report.</p>
+  {% endif %}
+  {% if can_export %}
+    <form class="mt-3" method="post" action="{% url 'reporting:export' report_key %}">
+      {% csrf_token %}
+      <input type="hidden" name="start" value="{{ report.start|date:'Y-m-d' }}">
+      <input type="hidden" name="end" value="{{ report.end|date:'Y-m-d' }}">
+      {% for label, key in report.columns %}
+        <input type="hidden" name="fields" value="{{ key }}">
+      {% endfor %}
+      <button class="btn btn-outline-secondary" type="submit">Download CSV</button>
+    </form>
+  {% endif %}
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script>
+    var dataElement = document.getElementById("report-chart-data");
+    var canvas = document.getElementById("report-chart");
+    if (dataElement && canvas && window.Chart) {
+      var points = JSON.parse(dataElement.textContent);
+      new Chart(canvas, {
+        type: "bar",
+        data: { labels: points.labels, datasets: points.datasets },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: points.datasets.length > 1 } }
+        }
+      });
+    }
+  </script>
+{% endblock %}

@@ -36,7 +36,7 @@ OBJECT_LABELS = {
     "activities.activity": "activity",
     "activities.task": "task",
 }
-_denials: ContextVar[list | None] = ContextVar("fluxcrm_access_denials", default=None)
+_denials: ContextVar[list | None] = ContextVar("glidecrm_access_denials", default=None)
 
 
 class AccessDenied(PermissionDenied):
@@ -301,7 +301,7 @@ def allows(user, object_key, action, *, lead=None):
         action == "C"
         and object_key == "deal"
         and grant.create == "sql_conversion"
-        and getattr(lead, "stage", "") == "SQL_READY"
+        and getattr(lead, "stage", "") == "SQL"
     )
 
 

@@ -3,7 +3,10 @@
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
+from django.db.models import Q
+from django.urls import reverse
 
 from core.records import AuditedRecord
 
@@ -19,6 +22,21 @@ class Activity(AuditedRecord):
 
     activity_type = models.CharField(max_length=16, choices=Type.choices)
     subject = models.CharField(max_length=200)
+    with_whom = models.CharField(max_length=200, blank=True, default="")
+    with_contact = models.ForeignKey(
+        "accounts.Contact",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="activities_with",
+    )
+    with_lead = models.ForeignKey(
+        "leads.Lead",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="activities_with",
+    )
     body = models.TextField(blank=True)
     occurred_at = models.DateTimeField()
     duration_minutes = models.PositiveIntegerField(null=True, blank=True)
@@ -36,9 +54,49 @@ class Activity(AuditedRecord):
             models.Index(fields=("owner", "occurred_at")),
             models.Index(fields=("deleted_at", "owner")),
         ]
+        constraints = [
+            models.CheckConstraint(
+                condition=~Q(with_contact__isnull=False, with_lead__isnull=False),
+                name="activities_activity_one_party",
+            )
+        ]
 
     def __str__(self) -> str:
         return self.subject
+
+    def party_value(self):
+        if self.with_contact_id:
+            return f"contact:{self.with_contact_id}"
+        if self.with_lead_id:
+            return f"lead:{self.with_lead_id}"
+        return ""
+
+    def party_name(self):
+        record = self._party_record()
+        if record is not None:
+            return f"{record.first_name} {record.last_name}".strip()
+        return self.with_whom
+
+    def party_url(self):
+        record = self._party_record()
+        if record is None:
+            return ""
+        if self.with_contact_id:
+            return reverse("accounts:detail", args=[record.account_id])
+        return reverse("leads:detail", args=[record.pk])
+
+    def _party_record(self):
+        if self.with_contact_id:
+            try:
+                return self.with_contact
+            except ObjectDoesNotExist:
+                return None
+        if self.with_lead_id:
+            try:
+                return self.with_lead
+            except ObjectDoesNotExist:
+                return None
+        return None
 
 
 class ActivityLink(models.Model):

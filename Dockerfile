@@ -28,4 +28,4 @@ RUN DJANGO_DEBUG=true python manage.py collectstatic --noinput
 
 EXPOSE 8000
 
-CMD ["gunicorn", "fluxcrm.wsgi:application", "--bind", "0.0.0.0:8000", "--access-logfile", "-", "--error-logfile", "-"]
+CMD ["gunicorn", "glidecrm.wsgi:application", "--bind", "0.0.0.0:8000", "--access-logfile", "-", "--error-logfile", "-"]

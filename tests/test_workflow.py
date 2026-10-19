@@ -10,11 +10,11 @@ from rest_framework.test import APIClient
 from audit.models import AuditEvent
 from core.models import PicklistValue, StageHistory
 from core.taxonomy import ensure_picklists
-from core.workflow import DEAL_GRAPH, LEAD_GRAPH
+from core.workflow import DEAL_GRAPH, LEAD_GRAPH, allowed_targets
 from leads.models import Lead
 from leads.services import transition_lead
 from sales.models import Deal
-from sales.services import open_pipeline_total, transition_deal
+from sales.services import open_pipeline_total, transition_deal, update_deal
 from tests.test_pipeline import lead_form, make_user
 
 pytestmark = pytest.mark.django_db
@@ -51,7 +51,7 @@ def test_lead_moves_share_one_service_across_ui_and_api(client):
             actor=admin,
             lead_id=lead.pk,
             version=lead.version,
-            to_stage="SQL_READY",
+            to_stage="SQL",
             reason="skip",
         )
     lead.refresh_from_db()
@@ -60,7 +60,7 @@ def test_lead_moves_share_one_service_across_ui_and_api(client):
     client.force_login(admin)
     blocked = client.post(
         reverse("leads:transition", args=[lead.pk]),
-        {"version": lead.version, "to_stage": "SQL_READY", "reason": "skip"},
+        {"version": lead.version, "to_stage": "SQL", "reason": "skip"},
         HTTP_X_REQUESTED_WITH="fetch",
     )
     assert blocked.status_code == 422
@@ -143,10 +143,18 @@ def test_lead_moves_share_one_service_across_ui_and_api(client):
     assert b"Lovelace" in board.content
     assert b"Move" in board.content
     assert b"board-error" in board.content
+    assert b'name="contact_substatus"' not in board.content
     assert b"X-Requested-With" in board.content
     detail = client.get(reverse("leads:detail", args=[lead.pk]))
     assert b"called the office" in detail.content
+    path = detail.content.split(b'class="stage-path"', 1)[1].split(b"</ol>", 1)[0]
+    assert b"stage-arrow" in path
+    assert path.find(b">New<") < path.find(b">Contacted<") < path.find(b">MQL<")
+    assert path.find(b">MQL<") < path.find(b">Demo<") < path.find(b">SQL<")
+    assert b'aria-current="step"' in path
     assert b"CONTACTED" in detail.content
+    assert b'title="Required"' in detail.content
+    assert b'data-stages="NURTURING"' in detail.content
 
 
 def test_deal_close_rules_history_and_open_pipeline(client):
@@ -261,17 +269,20 @@ def test_deal_close_rules_history_and_open_pipeline(client):
             "version": 2,
             "to_stage": "CLOSED_WON",
             "amount": "48000.00",
-            "expected_close_date": "2026-12-18",
+            "actual_close_date": "2026-12-18",
         },
         format="json",
     )
     assert finished.status_code == 200
-    assert Deal.objects.get(pk=won_id).outcome == "WON"
+    finished_deal = Deal.objects.get(pk=won_id)
+    assert finished_deal.outcome == "WON"
+    assert str(finished_deal.actual_close_date) == "2026-12-18"
     assert open_pipeline_total(admin) == Decimal("100.00")
 
     client.force_login(admin)
     listed = client.get(reverse("sales:list"))
     assert b"Open pipeline: $ 100" in listed.content
+    assert b"Amount by owner" in listed.content
     board = client.get(reverse("sales:board"))
     assert b"Open work" in board.content
     assert b"Lost work" not in board.content
@@ -279,7 +290,7 @@ def test_deal_close_rules_history_and_open_pipeline(client):
     assert b"Won work" not in board.content
     detail = client.get(reverse("sales:detail", args=[lost_id]))
     assert b"they declined" in detail.content
-    assert b"0.00" in detail.content
+    assert b"0%" in detail.content
 
     client.force_login(owner)
     dragged = client.post(
@@ -313,7 +324,7 @@ def test_admin_correction_is_reversible_and_audited(client):
             actor=owner,
             lead_id=lead.pk,
             version=lead.version,
-            to_stage="SQL_READY",
+            to_stage="SQL",
             reason="skip the graph",
             correction=True,
         )
@@ -322,7 +333,7 @@ def test_admin_correction_is_reversible_and_audited(client):
         reverse("leads:transition", args=[lead.pk]),
         {
             "version": lead.version,
-            "to_stage": "SQL_READY",
+            "to_stage": "SQL",
             "reason": "skip the graph",
             "correction": "1",
         },
@@ -333,7 +344,7 @@ def test_admin_correction_is_reversible_and_audited(client):
         f"/api/v1/leads/{lead.pk}/transition/",
         {
             "version": lead.version,
-            "to_stage": "SQL_READY",
+            "to_stage": "SQL",
             "reason": "skip the graph",
             "correction": True,
         },
@@ -348,7 +359,7 @@ def test_admin_correction_is_reversible_and_audited(client):
         f"/api/v1/leads/{lead.pk}/transition/",
         {
             "version": 1,
-            "to_stage": "SQL_READY",
+            "to_stage": "SQL",
             "reason": "restore a migrated stage",
             "correction": True,
         },
@@ -381,7 +392,7 @@ def test_admin_correction_is_reversible_and_audited(client):
         {
             "version": 3,
             "to_stage": "UNQUALIFIED",
-            "disqualification_reason": "BAD_DATA",
+            "disqualification_reason": "NO_BUDGET",
         },
         format="json",
     )
@@ -449,7 +460,7 @@ def test_retired_targets_and_probability_overrides_are_rejected(client):
         f"/api/v1/deals/{deal_id}/transition/",
         {
             "version": 1,
-            "to_stage": "CONTACTED",
+            "to_stage": "DISCOVERY",
             "reason": "left a message",
             "probability": "80.00",
         },
@@ -462,7 +473,7 @@ def test_retired_targets_and_probability_overrides_are_rejected(client):
         f"/api/v1/deals/{deal_id}/transition/",
         {
             "version": 1,
-            "to_stage": "CONTACTED",
+            "to_stage": "DISCOVERY",
             "reason": "left a message",
             "probability": "80.00",
         },
@@ -474,7 +485,7 @@ def test_retired_targets_and_probability_overrides_are_rejected(client):
         f"/api/v1/deals/{deal_id}/transition/",
         {
             "version": 1,
-            "to_stage": "CONTACTED",
+            "to_stage": "DISCOVERY",
             "reason": "left a message",
             "probability": "80.00",
             "probability_reason": "executive sponsor is engaged",
@@ -491,7 +502,7 @@ def test_retired_targets_and_probability_overrides_are_rejected(client):
     assert history_api.json()[0]["probability_reason"] == "executive sponsor is engaged"
     client.force_login(admin)
     page = client.get(reverse("sales:detail", args=[deal_id]))
-    assert b"80.00" in page.content
+    assert b"80%" in page.content
     anonymous = client
     anonymous.logout()
     board = anonymous.get(reverse("leads:board"))
@@ -506,6 +517,18 @@ def _place(record, stage):
     record.refresh_from_db()
 
 
+def test_stage_menu_defaults_to_the_next_stage_in_the_cycle():
+    assert allowed_targets(DEAL_GRAPH, "NEW")[0] == "DISCOVERY"
+    assert allowed_targets(DEAL_GRAPH, "QUALIFIED")[0] == "TECHNICAL_EVALUATION"
+    assert allowed_targets(DEAL_GRAPH, "CLOSING")[0] == "CLOSED_WON"
+    assert allowed_targets(DEAL_GRAPH, "CLOSED_HOLD")[0] == "NEW"
+    assert "CLOSED_HOLD" in allowed_targets(DEAL_GRAPH, "PROPOSAL")
+    assert allowed_targets(LEAD_GRAPH, "NEW")[0] == "CONTACTED"
+    assert allowed_targets(LEAD_GRAPH, "MQL")[0] == "DEMO_POC"
+    assert allowed_targets(LEAD_GRAPH, "SQL")[0] == "NURTURING"
+    assert allowed_targets(LEAD_GRAPH, "ARCHIVED")[0] == "NEW"
+
+
 def test_every_graph_pair_is_enforced_by_the_transition_service():
     ensure_picklists()
     admin = make_user("ada", admin=True)
@@ -516,8 +539,10 @@ def test_every_graph_pair_is_enforced_by_the_transition_service():
     follow_up = timezone.now() + timedelta(days=3)
     lead.contact_substatus = "ATTEMPTED"
     lead.nurture_reason = "TIMING"
-    lead.disqualification_reason = "NO_FIT"
+    lead.disqualification_reason = "NO_BUDGET"
     lead.next_follow_up_at = follow_up
+    lead.demo_scheduled_on = follow_up.date()
+    lead.technical_contact_name = "Avery Chen"
     lead.notes = "documented"
     lead.save()
     for source, allowed in LEAD_GRAPH.items():
@@ -557,6 +582,8 @@ def test_every_graph_pair_is_enforced_by_the_transition_service():
     record.bant_need_status = "PARTIAL"
     record.bant_timeline_status = "PARTIAL"
     record.close_reason = "PRICE"
+    record.evaluation_started_on = follow_up.date()
+    record.technical_stakeholder_name = "Priya Shah"
     record.save()
     for source, allowed in DEAL_GRAPH.items():
         for destination in DEAL_GRAPH:
@@ -598,7 +625,7 @@ def test_new_records_cannot_bypass_workflow_on_create(client):
     api.force_authenticate(user=admin)
     blocked_lead = api.post(
         "/api/v1/leads/",
-        lead_form(stage="SQL_READY"),
+        lead_form(stage="SQL"),
         format="json",
     )
     assert blocked_lead.status_code == 422
@@ -616,7 +643,7 @@ def test_new_records_cannot_bypass_workflow_on_create(client):
     client.force_login(admin)
     injected = client.post(
         reverse("leads:create"),
-        lead_form(email="injected@example.test", stage="SQL_READY"),
+        lead_form(email="injected@example.test", stage="SQL"),
     )
     assert injected.status_code == 302
     assert Lead.objects.get(email_normalized="injected@example.test").stage == "NEW"
@@ -704,7 +731,9 @@ def _lead_transition_data(version, destination):
         "reason": "documented",
         "contact_substatus": "ATTEMPTED",
         "nurture_reason": "TIMING",
-        "disqualification_reason": "NO_FIT",
+        "disqualification_reason": "NO_BUDGET",
+        "demo_scheduled_on": "2026-11-02",
+        "technical_contact_name": "Avery Chen",
         "next_follow_up_at": (timezone.now() + timedelta(days=3)).strftime(
             "%Y-%m-%dT%H:%M:%S%z"
         ),
@@ -728,6 +757,8 @@ def _deal_transition_data(version, destination):
         "bant_need_status": "PARTIAL",
         "bant_timeline_status": "PARTIAL",
         "close_reason": close_reason,
+        "evaluation_started_on": "2026-11-02",
+        "technical_stakeholder_name": "Priya Shah",
     }
 
 
@@ -740,8 +771,10 @@ def test_every_graph_pair_is_enforced_by_html_and_api(client):
     lead = Lead.objects.get(pk=created.json()["id"])
     lead.contact_substatus = "ATTEMPTED"
     lead.nurture_reason = "TIMING"
-    lead.disqualification_reason = "NO_FIT"
+    lead.disqualification_reason = "NO_BUDGET"
     lead.next_follow_up_at = timezone.now() + timedelta(days=3)
+    lead.demo_scheduled_on = timezone.now().date()
+    lead.technical_contact_name = "Avery Chen"
     lead.notes = "documented"
     lead.save()
     client.force_login(admin)
@@ -774,6 +807,8 @@ def test_every_graph_pair_is_enforced_by_html_and_api(client):
     deal.bant_authority_status = "PARTIAL"
     deal.bant_need_status = "PARTIAL"
     deal.bant_timeline_status = "PARTIAL"
+    deal.evaluation_started_on = timezone.now().date()
+    deal.technical_stakeholder_name = "Priya Shah"
     deal.save()
     for source, allowed in DEAL_GRAPH.items():
         for destination in DEAL_GRAPH:
@@ -790,3 +825,285 @@ def test_every_graph_pair_is_enforced_by_html_and_api(client):
                 _deal_transition_data(deal.version, destination),
             )
             assert response.status_code == (302 if destination in allowed else 422)
+
+
+def test_technical_evaluation_needs_a_start_and_not_a_full_bant_review(client):
+    ensure_picklists()
+    admin = make_user("ada", admin=True)
+    api = APIClient()
+    api.force_authenticate(user=admin)
+    lead = api.post("/api/v1/leads/", lead_form(), format="json")
+    created = api.post(
+        "/api/v1/deals/",
+        deal_form(lead.json()["id"]),
+        format="json",
+    )
+    deal = Deal.objects.get(pk=created.json()["id"])
+    _place(deal, "QUALIFIED")
+    with pytest.raises(ValidationError):
+        transition_deal(
+            actor=admin,
+            deal_id=deal.pk,
+            version=deal.version,
+            to_stage="TECHNICAL_EVALUATION",
+            reason="sandbox must pass SSO",
+        )
+    deal.refresh_from_db()
+    moved = transition_deal(
+        actor=admin,
+        deal_id=deal.pk,
+        version=deal.version,
+        to_stage="TECHNICAL_EVALUATION",
+        reason="sandbox must pass SSO",
+        data={
+            "evaluation_started_on": "2026-11-02",
+            "technical_stakeholder_name": "Priya Shah",
+        },
+    )
+    assert moved.stage == "TECHNICAL_EVALUATION"
+    assert str(moved.evaluation_started_on) == "2026-11-02"
+    assert moved.technical_stakeholder_name == "Priya Shah"
+    assert moved.bant_need_status == "UNKNOWN"
+    client.force_login(admin)
+    page = client.get(reverse("sales:detail", args=[deal.pk]))
+    assert b"POC/Tech Evaluation" in page.content
+    assert b"Priya Shah" in page.content
+    assert b"Requirements note" in page.content
+    assert b'data-stages="CLOSED_LOST"' in page.content
+    assert b'name="bant_budget_status"' in page.content
+    assert b'name="bant_authority_status"' in page.content
+    assert b'name="bant_need_status"' in page.content
+    assert b'name="bant_timeline_status"' in page.content
+    assert b"no separate approval" in page.content
+    editor = client.get(reverse("sales:edit", args=[deal.pk]))
+    assert b"Budget" in editor.content
+    assert b"Timeline" in editor.content
+    assert b"Why the probability changed" in editor.content
+    assert b'name="evaluation_started_on"' in editor.content
+    dated = update_deal(
+        actor=admin,
+        deal_id=deal.pk,
+        version=moved.version,
+        data={"evaluation_started_on": "2026-12-01"},
+    )
+    assert str(dated.evaluation_started_on) == "2026-12-01"
+    deal.refresh_from_db()
+    _place(deal, "DISCOVERY")
+    qualified = transition_deal(
+        actor=admin,
+        deal_id=deal.pk,
+        version=deal.version,
+        to_stage="QUALIFIED",
+        data={"amount": "100.00", "expected_close_date": "2027-01-15"},
+    )
+    assert qualified.stage == "QUALIFIED"
+    assert qualified.bant_budget_status == "UNKNOWN"
+    recorded = update_deal(
+        actor=admin,
+        deal_id=deal.pk,
+        version=qualified.version,
+        data={
+            "bant_budget_status": "CONFIRMED",
+            "bant_authority_status": "PARTIAL",
+            "bant_need_status": "NOT_MET",
+            "bant_timeline_status": "UNKNOWN",
+        },
+    )
+    assert recorded.bant_budget_status == "CONFIRMED"
+    assert recorded.bant_authority_status == "PARTIAL"
+    assert recorded.bant_need_status == "NOT_MET"
+    _place(recorded, "PROPOSAL")
+    Deal.objects.filter(pk=deal.pk).update(expected_close_date=None)
+    deal.refresh_from_db()
+    with pytest.raises(ValidationError):
+        transition_deal(
+            actor=admin,
+            deal_id=deal.pk,
+            version=deal.version,
+            to_stage="NEGOTIATION",
+            reason="redlines on the order form",
+        )
+
+
+def test_edit_can_change_probability_when_a_reason_is_given():
+    ensure_picklists()
+    admin = make_user("ada", admin=True)
+    api = APIClient()
+    api.force_authenticate(user=admin)
+    lead = api.post("/api/v1/leads/", lead_form(), format="json")
+    created = api.post(
+        "/api/v1/deals/",
+        deal_form(lead.json()["id"], title="Odds edit"),
+        format="json",
+    )
+    deal = Deal.objects.get(pk=created.json()["id"])
+    with pytest.raises(ValidationError):
+        update_deal(
+            actor=admin,
+            deal_id=deal.pk,
+            version=deal.version,
+            data={"probability": "55.00"},
+        )
+    deal.refresh_from_db()
+    saved = update_deal(
+        actor=admin,
+        deal_id=deal.pk,
+        version=deal.version,
+        data={
+            "probability": "55.00",
+            "probability_reason": "Sponsor asked for a higher chance",
+        },
+    )
+    assert saved.probability == Decimal("55.00")
+    assert saved.confidence == "MEDIUM"
+    row = StageHistory.objects.filter(object_type="deal", object_id=deal.pk).get()
+    assert row.from_stage == row.to_stage == deal.stage
+    assert row.probability_reason == "Sponsor asked for a higher chance"
+    unchanged = update_deal(
+        actor=admin,
+        deal_id=deal.pk,
+        version=saved.version,
+        data={"probability": "55.00", "notes": "No probability change"},
+    )
+    assert unchanged.probability == Decimal("55.00")
+    assert (
+        StageHistory.objects.filter(object_type="deal", object_id=deal.pk).count() == 1
+    )
+
+
+def test_demo_stage_requires_a_date_and_old_stages_are_rewritten():
+    import importlib
+
+    from django.apps import apps
+
+    ensure_picklists()
+    admin = make_user("ada", admin=True)
+    created = APIClient()
+    created.force_authenticate(user=admin)
+    lead = Lead.objects.get(
+        pk=created.post("/api/v1/leads/", lead_form(), format="json").json()["id"]
+    )
+    _place(lead, "MQL")
+    with pytest.raises(ValidationError):
+        transition_lead(
+            actor=admin,
+            lead_id=lead.pk,
+            version=lead.version,
+            to_stage="DEMO_POC",
+            reason="booked",
+        )
+    lead.refresh_from_db()
+    moved = transition_lead(
+        actor=admin,
+        lead_id=lead.pk,
+        version=lead.version,
+        to_stage="DEMO_POC",
+        reason="booked",
+        data={
+            "demo_scheduled_on": "2026-11-18",
+            "technical_contact_name": "Priya Shah",
+        },
+    )
+    assert moved.stage == "DEMO_POC"
+    assert str(moved.demo_scheduled_on) == "2026-11-18"
+    assert moved.technical_contact_name == "Priya Shah"
+    Lead.objects.filter(pk=lead.pk).update(
+        stage="SQL_REACTIVATION",
+        nurture_reason="",
+        disqualification_reason="NO_AUTHORITY",
+    )
+    history = StageHistory.objects.create(
+        object_type="lead",
+        object_id=lead.pk,
+        from_stage="SQL_READY",
+        to_stage="SQL_REACTIVATION",
+        changed_by=admin,
+        duration_seconds=0,
+        reason="old stage",
+    )
+    importlib.import_module("core.migrations.0007_lead_stages").apply_lead_stages(
+        apps, None
+    )
+    lead.refresh_from_db()
+    history.refresh_from_db()
+    assert lead.stage == "NURTURING"
+    assert lead.nurture_reason == "REACTIVATION"
+    assert lead.disqualification_reason == "WRONG_DECISION_MAKER"
+    assert history.from_stage == "SQL"
+    assert history.to_stage == "NURTURING"
+
+
+def test_old_deal_stages_map_without_touching_leads():
+    import importlib
+
+    from django.apps import apps
+
+    ensure_picklists()
+    admin = make_user("ada", admin=True)
+    api = APIClient()
+    api.force_authenticate(user=admin)
+    lead = Lead.objects.get(
+        pk=api.post("/api/v1/leads/", lead_form(), format="json").json()["id"]
+    )
+    early = Deal.objects.get(
+        pk=api.post(
+            "/api/v1/deals/",
+            deal_form(lead.pk, title="Early"),
+            format="json",
+        ).json()["id"]
+    )
+    later = Deal.objects.get(
+        pk=api.post(
+            "/api/v1/deals/",
+            deal_form(lead.pk, title="Later"),
+            format="json",
+        ).json()["id"]
+    )
+    held = Deal.objects.get(
+        pk=api.post(
+            "/api/v1/deals/",
+            deal_form(lead.pk, title="Held"),
+            format="json",
+        ).json()["id"]
+    )
+    PicklistValue.objects.update_or_create(
+        list_key="DEAL_STAGE",
+        key="CONTACTED",
+        defaults={"label": "Contacted", "order": 2, "active": True},
+    )
+    Deal.objects.filter(pk=early.pk).update(stage="CONTACTED")
+    Deal.objects.filter(pk=later.pk).update(
+        stage="DISCOVERY",
+        close_reason="REQUIREMENTS_GAP",
+    )
+    Deal.objects.filter(pk=held.pk).update(stage="CLOSED_HOLD", close_reason="BUDGET")
+    Lead.objects.filter(pk=lead.pk).update(stage="CONTACTED")
+    history = StageHistory.objects.create(
+        object_type="deal",
+        object_id=later.pk,
+        from_stage="CONTACTED",
+        to_stage="DISCOVERY",
+        changed_by=admin,
+        duration_seconds=0,
+        reason="old path",
+    )
+    importlib.import_module("core.migrations.0008_deal_stages").apply_deal_stages(
+        apps, None
+    )
+    early.refresh_from_db()
+    later.refresh_from_db()
+    held.refresh_from_db()
+    lead.refresh_from_db()
+    history.refresh_from_db()
+    assert early.stage == "DISCOVERY"
+    assert later.stage == "TECHNICAL_EVALUATION"
+    assert later.close_reason == "NO_TECHNICAL_FIT"
+    assert held.stage == "CLOSED_HOLD"
+    assert held.close_reason == "BUDGET"
+    assert lead.stage == "CONTACTED"
+    assert history.from_stage == "DISCOVERY"
+    assert history.to_stage == "TECHNICAL_EVALUATION"
+    assert not PicklistValue.objects.get(list_key="DEAL_STAGE", key="CONTACTED").active
+    assert PicklistValue.objects.get(
+        list_key="CLOSED_LOST_REASON", key="NO_TECHNICAL_FIT"
+    ).active

@@ -1,41 +1,47 @@
 {% extends "base.html" %}
 {% load crm %}
-{% block title %}Lead board · FluxCRM{% endblock %}
+{% block title %}Lead board · GlideCRM{% endblock %}
 {% block content %}
-  <h1>Lead board</h1>
-  <p><a href="{% url 'leads:list' %}">List</a></p>
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="mb-0">Lead board</h1>
+    <p class="mb-0"><a href="{% url 'leads:list' %}">List</a></p>
+  </div>
+  <p>Each stage is one row. Open the lead when a move needs a reason, a date, a follow-up, or contact status. Those fields are marked on the lead page.</p>
   <p id="board-error" role="alert"></p>
-  <div class="row g-2">
+  <div class="board">
     {% for stage, cards in columns %}
-      <section class="col-md-3" data-stage="{{ stage }}">
-        <h2 class="h6">{{ stage }}</h2>
-        {% for lead in cards %}
-          <article
-            class="border rounded p-2 mb-2"
-            draggable="true"
-            data-version="{{ lead.version }}"
-            data-url="{% url 'leads:transition' lead.pk %}"
-          >
-            <a href="{% url 'leads:detail' lead.pk %}">{{ lead.first_name }} {{ lead.last_name }}</a>
-            <p class="mb-1">{{ lead.company_name }}</p>
-            <p class="mb-1">{{ lead.rating|choice_label }} · Lead Age {{ lead.created_at|elapsed }} · Stage-Age {{ lead.stage_entered_at|elapsed }}</p>
-            <form method="post" action="{% url 'leads:transition' lead.pk %}">
-              {% csrf_token %}
-              <input type="hidden" name="version" value="{{ lead.version }}">
-              <label class="form-label" for="move-{{ lead.pk }}">Move</label>
-              <input class="form-control form-control-sm mb-1" name="reason" placeholder="Reason">
-              <input class="form-control form-control-sm mb-1" name="contact_substatus" placeholder="Contact substatus">
-              <select class="form-select form-select-sm mb-1" id="move-{{ lead.pk }}" name="to_stage">
-                {% for target in lead.allowed_stage_targets %}
-                  <option value="{{ target }}">{{ target }}</option>
-                {% endfor %}
-              </select>
-              <button class="btn btn-sm btn-outline-primary" type="submit">Move</button>
-            </form>
-          </article>
-        {% empty %}
-          <p>No leads in this stage.</p>
-        {% endfor %}
+      <section class="board-lane" data-stage="{{ stage }}">
+        <header>
+          <h2>{{ stage|stage_label }}</h2>
+          <span class="board-count">{{ cards|length }}</span>
+        </header>
+        <div class="board-lane-cards">
+          {% for lead in cards %}
+            <article
+              class="board-card"
+              draggable="true"
+              data-version="{{ lead.version }}"
+              data-url="{% url 'leads:transition' lead.pk %}"
+            >
+              <a href="{% url 'leads:detail' lead.pk %}">{{ lead.first_name }} {{ lead.last_name }}</a>
+              <p class="mb-1">{{ lead.company_name }}</p>
+              <p class="mb-1">{{ lead.rating|choice_label }} · Lead Age {{ lead.created_at|elapsed }} · Stage-Age {{ lead.stage_entered_at|elapsed }}</p>
+              <form method="post" action="{% url 'leads:transition' lead.pk %}">
+                {% csrf_token %}
+                <input type="hidden" name="version" value="{{ lead.version }}">
+                <label class="form-label" for="move-{{ lead.pk }}">Move</label>
+                <select class="form-select form-select-sm mb-1" id="move-{{ lead.pk }}" name="to_stage">
+                  {% for target in lead.allowed_stage_targets %}
+                    <option value="{{ target }}">{{ target|stage_label }}</option>
+                  {% endfor %}
+                </select>
+                <button class="btn btn-sm btn-outline-primary" type="submit">Move</button>
+              </form>
+            </article>
+          {% empty %}
+            <p class="board-empty">No leads in this stage.</p>
+          {% endfor %}
+        </div>
       </section>
     {% endfor %}
   </div>

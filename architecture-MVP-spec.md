@@ -50,7 +50,7 @@
 
 ### Conventions
 
-- IDs are UUIDs. Every business record has a unique immutable `external_id` for imports and integrations.
+- IDs are UUIDs. Every business record has a unique immutable `external_id` for imports and integrations. Account and contact forms do not ask for either id, and those pages do not display them. Lead, account, and contact exports include the application UUID as `id`. A contact export also includes `account_id`.
 - `created_at`, `updated_at` are UTC timestamps; `created_by_id`, `updated_by_id` reference User. Use optimistic locking (`version`) on records edited inline to prevent silent overwrites.
 - Soft-deleted records have `deleted_at`, `deleted_by_id`, and `delete_reason`; normal queries exclude them. Admin-only restore is logged.
 - Money is `Decimal(18,2)` plus ISO-4217 currency code. No floating-point arithmetic. MVP reporting uses base currency only.
@@ -62,19 +62,19 @@
 | Entity | Fields (type; required unless `?`) | Relationships / constraints |
 |---|---|---|
 | **CompanySettings** | `legal_name` (str), `display_name` (str), `address` (JSON address), `industry` (str?), `offered_services` (JSON list), `base_currency` (char(3)), `fiscal_year_start_month` (int 1–12), `default_timezone` (IANA str), `logo_file` (file?) | Singleton settings row. Changing currency/fiscal start affects new report interpretation but does not rewrite historical values. |
-| **User** | Django auth user; `display_name`, `email`, `is_active`, `timezone`, `manager` (User?), `role` (Role), `last_seen_at`? | `manager` is a self-FK. Prevent cycles. Manager visibility includes recursive descendants. Team membership is `Team.members`, not a single team column. |
+| **User** | Django auth user; `display_name`, `email`, `phone`?, `is_active`, `timezone`, `manager` (User?), `role` (Role), `last_seen_at`? | `email` is required and unique. Password reset and invitation links are addressed to it. `phone` is optional, stored as (XXX) XXX-XXXX, and is not a reset channel. `manager` is a self-FK. Prevent cycles. Manager visibility includes recursive descendants. Team membership is `Team.members`, not a single team column. |
 | **Role** | `name`, `description`, `permissions` (versioned object-action matrix), `scope_policy`, `grants_version` | Seed roles below, plus the Phase 1 Standard User role. Admin can edit grants. Each edit increments `grants_version`. Enforce in server-side policy services and DRF permissions, not just UI. |
 | **Team** | `name`, `manager` (User?), `members` (M2M User), `active` | Optional organizational grouping. A person may belong to more than one active team. `TEAM` scope is the union of those members. The manager tree remains authoritative for Sales Director visibility. |
-| **Lead** | Profile: `first_name`, `last_name`, `title`?, `email`?, `work_phone`?, `mobile_phone`?, `address`?, `company_name`, `website_url`?, `industry`?, `products_services`?, `company_size_band`?, `employee_count`?, `annual_revenue` (Decimal?) . Tracking: `source` (LeadSource), `stage` (LeadStage), `contact_substatus`?, `stage_entered_at`, `owner`, `nurture_reason`?, `disqualification_reason`?, `next_follow_up_at`?, `last_activity_at` (derived), `notes`?; `converted_at`?, `converted_account`?, `converted_contact`?; timestamps/audit/soft delete. | One Lead represents one person and their prospective organization. Email is normalized for matching but not unique globally. `age_days` is calculated from `created_at`; `last_activity_at` from activity links. Converted lead remains as source/history. |
-| **Account** | `name`, `type` (Customer/Prospect/Partner/Referral/Competitor/OEM Vendor/Other), `parent_account`?, `industry`?, `website_url`?, `phone`?, `billing_address`?, `shipping_address`?, `employee_count`?, `annual_revenue`?, `owner`, `status`, `converted_from_lead`?, notes? | Self-FK parent; prohibit cycles. Directly created accounts supported. Duplicates identified by normalized domain + name, never auto-merged. A parent may have many children. |
-| **Contact** | `first_name`, `last_name`, `title`?, `department`?, `email`?, `work_phone`?, `mobile_phone`?, `account`, `is_primary`, `reports_to`?, `communication_preferences` (JSON/list), `owner`, `converted_from_lead`?, notes? | Many Contacts to Account. At most one primary Contact per Account; when a Contact is marked primary, clear the former one in the same transaction. Reports-to must belong to same Account unless Admin overrides. |
-| **Deal** | `title`, `lead`? XOR `account` (exactly one source at creation), `primary_contact`?, `deal_type`, `amount`?, `currency`, `temperature`, `expected_close_date`?, `target_quarter_override`?, `owner`, `stage`, `probability` (Decimal 0–100), `outcome`?, `close_reason`?, `competitor_account`?, `bant_budget_status/notes`, `bant_authority_status/notes`, `bant_need_status/notes`, `bant_timeline_status/notes`; OEM conditional: `oem_vendor_account`?, `product_name`?, `quantity`?, `license_term`?, `renewal_date`?; timestamps/audit/soft delete. | Lead XOR Account. `primary_contact` must belong to linked Account after conversion. For OEM type, vendor type must be OEM Vendor and quantity > 0. Lost/Hold requires reason. Closed Won requires final amount/date. `bant_score` is derived (0–4 confirmed; Not Met is flagged separately). |
+| **Lead** | Profile: `first_name`, `last_name`, `title`?, `email`, `work_phone`?, `mobile_phone`?, `address`?, `company_name`, `website_url`?, `industry`?, `products_services`?, `company_size_band`?, `employee_count`?, `annual_revenue` (Decimal?) . Tracking: `source` (LeadSource), `stage` (LeadStage), `contact_substatus`?, `stage_entered_at`, `owner`, `nurture_reason`?, `disqualification_reason`?, `next_follow_up_at`?, `last_activity_at` (derived), `notes`?; `converted_at`?, `converted_account`?, `converted_contact`?; timestamps/audit/soft delete. | Phone numbers are stored as (XXX) XXX-XXXX. One Lead represents one person and their prospective organization. Email is required, normalized for matching, and not unique globally. `age_days` is calculated from `created_at`; `last_activity_at` from activity links. Converted lead remains as source/history. |
+| **Account** | `name`, `type` (Customer/Prospect/Partner/Referral/Competitor/OEM Vendor/Other), `parent_account`?, `industry`?, `website_url`?, `phone`?, `address`? (street, city, state, postal code, country), `employee_count`?, `annual_revenue`?, `owner`, `status`, `converted_from_lead`?, notes? | Self-FK parent; prohibit cycles. Directly created accounts supported. Duplicates identified by normalized domain + name, never auto-merged. A parent may have many children. Soft delete is at the bottom of the account page. It requires a reason and one confirmation. An account with child accounts, contacts, or deals stays until those are removed. |
+| **Contact** | `first_name`, `last_name`, `title`?, `department`?, `email`, `work_phone`?, `mobile_phone`?, `address`? (street, city, state, postal code, country), `account`, `is_primary`, `reports_to`?, `communication_preferences` (JSON/list), `owner`, `converted_from_lead`?, notes? | Many Contacts to Account. Email is required. At most one primary Contact per Account; when a Contact is marked primary, clear the former one in the same transaction. Reports-to must belong to same Account unless Admin overrides. Soft delete is at the bottom of the contact page. It requires a reason and one confirmation. A contact who is the primary contact on a deal, or who other contacts report to, stays until that link is removed. |
+| **Deal** | `title`, `lead`? XOR `account` (exactly one source at creation), `primary_contact`?, `deal_type`, `amount`?, `currency`, `temperature`, `expected_close_date`?, `actual_close_date`?, `target_quarter_override`?, `owner`, `stage`, `probability` (Decimal 0–100), `outcome`?, `close_reason`?, `competitor_account`?, `bant_budget_status/notes`, `bant_authority_status/notes`, `bant_need_status/notes`, `bant_timeline_status/notes`; OEM conditional: `oem_vendor_account`?, `product_name`?, `quantity`?, `license_term`?, `renewal_date`?; timestamps/audit/soft delete. | Lead XOR Account. A deal created on an account requires `primary_contact`, and that contact must belong to the account. From the Deals page, the form asks whether the deal is linked to a lead or an account, then lists leads or the chosen account’s contacts. After a lead converts, `primary_contact` must belong to the linked account. Amount, probability, confidence, and stage rules are the same for both sources. For OEM type, vendor type must be OEM Vendor and quantity > 0. Lost/Hold requires reason. Closed Won requires final amount/date. `bant_score` is derived (0–4 confirmed; Not Met is flagged separately). |
 | **LeadStageConfig** | `key`, `label`, `order`, `active`, `is_terminal`, `allowed_next_keys`, `required_fields`, `default_stale_days`? | Managed by Admin. System validates transition and field requirements. Stage history is retained even if config is later renamed/retired. |
 | **DealStageConfig** | `key`, `label`, `order`, `default_probability`, `active`, `is_closed`, `required_fields`, `stale_days`? | Managed by Admin. Stage change copies default probability to Deal; manual override permission is Admin/Manager only and is recorded. |
 | **StageHistory** | `object_type`, `object_id`, `from_stage`, `to_stage`, `changed_at`, `changed_by`, `duration_seconds`, `probability_snapshot`, `reason`? | Append-only; indexed by object/date. Used for velocity and time-in-stage. |
-| **Activity** | `type` (Call/Email/Meeting/Note), `subject`, `body`?, `occurred_at`, `duration_minutes`?, `outcome`?, `owner`, `created_by`, `source` (manual/import/integration), timestamps | Link many-to-many through ActivityLink to Lead, Account, Contact, Deal. Activity quick-add opens from the record’s timeline and defaults the current record. An activity can be edited or soft-deleted from that timeline. The body stays out of the audit snapshot. |
+| **Activity** | `type` (Call/Email/Meeting/Note), `subject`, `with_whom` (one contact or one lead), `body`?, `occurred_at`, `duration_minutes`?, `outcome`?, `owner`, `created_by`, `source` (manual/import/integration), timestamps | Link many-to-many through ActivityLink to Lead, Account, Contact, Deal. A logged activity asks who it was with, when it happened, and for notes. Who it was with is an existing contact or lead, listed by name. Open the field to search the scrolling list. Create that person first if the name is not listed. Note is an activity type again. A name saved before this link stays visible until the activity is edited. Activity quick-add opens from the record’s timeline and defaults the current record. Edit and Delete are on the activity. Delete asks for a reason and one confirmation. The body stays out of the audit snapshot. |
 | **ActivityLink** | `activity`, `content_type`, `object_id`, `relationship_role`? | Unique activity/object pair. Supports activity appearing on multiple related records without duplicating it. |
-| **Task** | `title`, `description`?, `due_at`, `status` (Open/On hold/Done/Cancelled), `priority`, `owner`, `created_by`, `completed_at`?, `reminder_sent_at`?, `snooze_until`?, timestamps | M2M links to CRM records. Due reminder generated once per open task/user. Complete, snooze, hold, resume, cancel, and soft-delete are audited. Hold is reversible and does not send reminders. |
+| **Task** | `title`, `description`?, `due_at`, `status` (Open/On hold/Done/Cancelled), `priority`, `owner`, `created_by`, `completed_at`?, `reminder_sent_at`?, `snooze_until`?, timestamps | M2M links to CRM records. Notes are optional and show on the Tasks screen, not on the deal. The task title is bold on that list. A lead, account, or deal offers complete and edit. Hold, resume, snooze, cancel, and delete stay on the Tasks screen. Edit sits next to Complete. The delete button sits on the same line as the confirmation. Due reminder generated once per open task/user. Complete, edit, snooze, hold, resume, cancel, and soft-delete are audited. Notes stay out of the audit snapshot. Hold is reversible and does not send reminders. |
 | **Attachment** | `file_key`, `original_filename`, `mime_type`, `size_bytes`, `checksum`, `uploaded_by`, `uploaded_at`, `external_provider`?, `external_file_id`?, `url`? | Local storage adapter in Phase 1. Never store absolute machine paths in DB. Validate size/type, store outside web root. Phase 2 external provider IDs support OneDrive. |
 | **Tag / RecordTag** | Tag `name`, `color`?; link `tag`, `object_type`, `object_id`, `added_by` | Reusable labels across Leads, Accounts, Contacts and Deals. |
 | **AuditEvent** | `actor`, `occurred_at`, `action`, `object_type`, `object_id`, `before_json`, `after_json`, `request_id`, `source`, `ip_hash`? | Append-only; indexes by object, actor, time. Exclude passwords/secrets and redact sensitive fields. No user-facing update/delete. |
@@ -130,26 +130,26 @@ The stored pipeline stage is one of the user’s defined stages. Contacted’s s
 stateDiagram-v2
   [*] --> New
   New --> Contacted: first outreach / set sub-status
-  New --> Unqualified: bad data or not a fit / reason
-  Contacted --> MQL: marketing criteria met
+  New --> Unqualified: not a fit / reason from the list
+  Contacted --> MQL: marketing criteria met / qualification note
   Contacted --> Nurturing: not sales-ready / reason + follow-up
-  Contacted --> Unqualified: not relevant / reason
-  MQL --> SQL_Ready: sales qualification accepted
-  MQL --> Nurturing: MQL not sales-ready / reason + follow-up
-  MQL --> Unqualified: not relevant / reason
-  SQL_Ready --> Nurturing: not sales-ready / reason + follow-up
-  SQL_Ready --> SQL_Reactivation: lost prospect enters reactivation
+  Contacted --> Unqualified: not a fit / reason from the list
+  MQL --> DemoPOC: scheduled date and technical contact
+  MQL --> SQL: note and next follow-up
+  MQL --> Nurturing: not sales-ready / reason + follow-up
+  MQL --> Unqualified: not a fit / reason from the list
+  DemoPOC --> SQL: note and next follow-up
+  DemoPOC --> Nurturing: not sales-ready / reason + follow-up
+  SQL --> Nurturing: not sales-ready / reason + follow-up
   Nurturing --> MQL: marketing-ready again
-  Nurturing --> SQL_Ready: sales-ready again
-  Nurturing --> SQL_Reactivation: reactivation accepted
-  SQL_Reactivation --> SQL_Ready: requalified
-  SQL_Reactivation --> Nurturing: not ready; reason + follow-up
-  New --> Archived: no interest / reason
-  Contacted --> Archived: no interest / reason
-  MQL --> Archived: no interest / reason
-  Nurturing --> Archived: no interest / reason
-  SQL_Ready --> Archived: no interest / reason
-  SQL_Reactivation --> Archived: no interest / reason
+  Nurturing --> DemoPOC: demo scheduled
+  Nurturing --> SQL: sales-ready again
+  New --> Archived: went silent / reason
+  Contacted --> Archived: went silent / reason
+  MQL --> Archived: went silent / reason
+  DemoPOC --> Archived: went silent / reason
+  SQL --> Archived: went silent / reason
+  Nurturing --> Archived: went silent / reason
   Archived --> New: reopen / reason
   Unqualified --> New: admin reopen only / reason
 ```
@@ -160,11 +160,11 @@ stateDiagram-v2
 |---|---|---|
 | New → Contacted | Contact sub-status = Attempted to Contact or In Contact; at least one usable email/phone or explicit “no contact details” note. | Log a Call/Email activity or create a follow-up task; stage timestamp updated. |
 | Contacted → MQL | Required contact/company fields and a managed source. Qualification fields can be configured. | Record actor/time and qualification note. |
-| MQL → SQL Ready | Need and business fit documented; lead owner assigned; next step captured. | Record actor, time, and the qualification note. This stage change does not create a Deal, Account, or Contact. |
-| Any active stage → Nurturing | Required nurture reason; `next_follow_up_at` required. | Remove from active SQL queue; remain visible in nurture queue and stale alerts. |
-| Any active stage → Unqualified | Required reason; terminal for normal users. | Exclude from active pipeline. Admin may reopen with reason and audit entry. |
-| Any active stage → Archived | Required no-interest reason; terminal but reopenable. | Close active reminders; preserve activities and history. |
-| Nurturing → SQL Reactivation | Re-engagement reason, owner and next task required. | Create reactivation task. This stage change does not create or move a Deal. |
+| MQL → Demo | Demo date and technical contact name. | Record actor and time. Company size, current tools, budget range, and timeline on MQL are optional. |
+| MQL or Demo → SQL | A note and the next follow-up. | Record actor, time, and the note. This stage change does not create a Deal, Account, or Contact. |
+| Any active stage → Nurturing | Required nurture reason, including Reactivation; `next_follow_up_at` required. | Former SQL Reactivation leads are Nurturing with reason Reactivation. |
+| Any active stage → Unqualified | Required reason from No Budget, No Technical Fit, Wrong Decision-Maker, Security-Compliance Mismatch, or Timing. | Not a fit. Exclude from the active pipeline. Admin may reopen with a reason. |
+| Any active stage → Archived | Required reason the lead went silent. | This is not Unqualified. Close active reminders; preserve activities and history. Reopening needs a reason. |
 | Conversion | Separate from every lead stage change. See the workflow below. A deal stage change also does not move the lead. | Set `converted_at`, converted Account/Contact IDs. Preserve the lead stage and timeline; hide the lead from the open lead pipeline by default. |
 
 ### Deal state machine
@@ -172,24 +172,25 @@ stateDiagram-v2
 ```mermaid
 stateDiagram-v2
   [*] --> New
-  New --> Contacted
-  Contacted --> Qualified
-  Qualified --> Discovery
-  Discovery --> Proposal
+  New --> Discovery
+  Discovery --> Qualified
+  state "POC/Tech Evaluation" as POCTech
+  Qualified --> POCTech
+  POCTech --> Proposal
   Proposal --> Negotiation
   Negotiation --> Closing
   Closing --> ClosedWon
   New --> ClosedLost
-  Contacted --> ClosedLost
-  Qualified --> ClosedLost
   Discovery --> ClosedLost
+  Qualified --> ClosedLost
+  POCTech --> ClosedLost
   Proposal --> ClosedLost
   Negotiation --> ClosedLost
   Closing --> ClosedLost
   New --> ClosedHold
-  Contacted --> ClosedHold
-  Qualified --> ClosedHold
   Discovery --> ClosedHold
+  Qualified --> ClosedHold
+  POCTech --> ClosedHold
   Proposal --> ClosedHold
   Negotiation --> ClosedHold
   Closing --> ClosedHold
@@ -200,20 +201,22 @@ stateDiagram-v2
 
 | Stage | Default probability | Default gate before entry (Admin-editable) |
 |---|---:|---|
-| New | 5% | Title, owner, source Lead or Account, deal type. |
-| Contacted | 10% | Log a contact attempt or create next task. |
-| Qualified | 20% | Amount/currency, expected close date or target quarter, Need status not Unknown, Authority at least Partial. |
-| Discovery | 30% | Primary contact (unless not yet identified, with reason), discovery meeting/activity, BANT statuses reviewed. |
-| Proposal | 50% | Proposal amount, expected close date, proposal sent activity/date. |
-| Negotiation | 70% | Decision process and next step recorded; competitor captured if known. |
-| Closing | 90% | Close plan and target close date confirmed; latest next task due date. |
+| New | 5% | Title, owner, source Lead or Account, deal type. An account source also requires a contact on that account. Landing stage before discovery. |
+| Discovery | 10% | A note on the requirements and needs gathered. This is not the lead Contacted stage. |
+| Qualified | 20% | Amount and expected close date. |
+| POC/Tech Evaluation | 30% | POC or trial start date, technical stakeholder name, and a success-criteria note. Edit deal can change the start date later. |
+| Proposal | 50% | Proposal amount, expected close date, and a note that the proposal was sent. |
+| Negotiation | 70% | A note on terms or redlines, and the expected close date. |
+| Closing | 90% | A sign-off note and the expected close date. |
 | Closed Won | 100% | Outcome Won; final amount and close date. |
-| Closed Lost | 0% | Outcome Lost and loss reason required. |
-| Closed Hold | 0% | Outcome Hold, hold reason and optional revisit date required. Reopen creates stage-history event. |
+| Closed Lost | 0% | Outcome Lost and a loss reason: Price, Competitor, No Technical Fit, Timing, or Lost to Internal Build. |
+| Closed Hold | 0% | Outcome Hold and a hold reason. Reopening needs a reason. Hold does not convert the lead. |
+
+Budget, Authority, Need, and Timeline are stored on every deal. They are optional. Record a status when it is known and leave Unknown when it is not. They do not block a stage change.
 
 At every stage change, record `StageHistory` and snapshot probability. The stage default updates the probability; authorized Managers may override it with a required reason. A closed Deal is excluded from open pipeline totals. Hold is closed for forecasting but reopenable. `target_close_quarter` is calculated from expected close date and Company fiscal calendar; an optional override is allowed when the date is not known.
 
-Lead stages and deal stages are separate machines. Changing a lead stage does not change any deal. Changing a deal stage does not change the lead stage. Create Deal and Convert remain separate actions on the lead; they are not edges in either graph.
+Lead stages and deal stages are separate machines. Changing a lead stage does not change any deal. Changing a deal stage does not change the lead stage. Create Deal and Convert remain separate actions on the lead; they are not edges in either graph. Create Deal is also available on an account. That deal is tied to one contact on the account, and closing it leaves the account and contact in place.
 
 When a deal enters Closed Won or Closed Lost and still belongs to a lead, that lead is converted in the same transaction. The lead stage stays where it is. If an account already has the same website domain, or the same normalized company name, the lead is added as a contact on that account and existing account and contact fields are left unchanged. A similar name alone does not select an account; a new account is created instead. Closed Won creates a Customer account. Closed Lost creates a Prospect account. Closed Hold does not convert the lead. Other deals on that lead stay where they are. A second close for the same lead reuses the account and contact from the first conversion. The manual conversion wizard remains available before a deal closes.
 
@@ -229,7 +232,7 @@ Lead conversion is not a lead stage and not a deal stage. A person can convert a
 4. Match Contacts under the chosen Account by normalized email, then name + title. User may link an existing Contact or create a new one. Do not overwrite existing data silently; show field-level differences and require explicit choices.
 5. User reviews Account, Contact, owner, primary-contact flag, and conversion notes. Account is unique by application-level duplicate policy, not a database uniqueness assumption on company name.
 6. User chooses to create a Deal now, convert existing open Lead-linked Deals to the Account, or convert without a Deal. A new Deal is created only after its minimum fields validate.
-7. In one database transaction: create/link Account and Contact, re-parent open Deals from Lead to Account, set their primary Contact if selected, write conversion IDs/date on Lead, add timeline note, and append audit events. If any write fails, the conversion is rolled back. The lead stage is not changed.
+7. In one database transaction: create/link Account and Contact, re-parent open Deals from Lead to Account, set their primary Contact if selected, write conversion IDs/date on Lead, add timeline note, and append audit events. If any write fails, the conversion is rolled back. The lead stage is not changed. A new contact receives the lead’s title, email, work phone, mobile phone, and address. A new account receives the lead’s address.
 8. Keep the Lead as a historical record, marked converted, visible in Account/Contact origin references and audit. Do not hard-delete it.
 
 ### Automatic conversion when a deal closes
@@ -237,7 +240,7 @@ Lead conversion is not a lead stage and not a deal stage. A person can convert a
 1. The deal transition to Closed Won or Closed Lost is the trigger. Closed Hold is not.
 2. If the deal has no lead, or the lead is already converted, reuse the existing account and contact. Do not create another account or contact.
 3. Otherwise match an account by website domain, then by the same normalized company name. Do not use a fuzzy or partial name match.
-4. When an exact account exists, add the lead as a contact on that account's contact list. If that account already has a contact with the same email, use that contact and do not overwrite its fields. When no exact account exists, create one (Customer for Closed Won, Prospect for Closed Lost) and create the contact from the lead. The person leaves the active lead list and appears under that account on the Contacts page.
+4. When an exact account exists, add the lead as a contact on that account's contact list. If that account already has a contact with the same email, use that contact. A phone or address already stored on that contact stays. A blank work phone, mobile phone, or address is filled from the lead. An existing account keeps an address it already has, and a blank account address is filled from the lead. When no exact account exists, create one (Customer for Closed Won, Prospect for Closed Lost) and create the contact from the lead, including title, email, work phone, mobile phone, and address. The new account receives the lead’s address. The person leaves the active lead list and appears under that account on the Contacts page.
 5. Move only the deal that just closed onto that account, and keep a link to the originating lead. Leave every other deal on its current lead or account.
 6. Run this in the same transaction as the deal stage change. A failure rolls the stage change back with the account and contact writes.
 
@@ -272,7 +275,7 @@ Legend: `C` create, `R` read, `U` update, `D` soft-delete, `X` export, `A` admin
 
 Admin is a bootstrap/configuration role and should not be assigned for day-to-day sales. Manager export is allowed by default; company may switch to Admin-only. Owner/team scope is applied consistently across list, search, count, aggregate, report, and export queries. “Read-only” means no mutating API or import path, even if the UI is manipulated.
 
-Phase 1 Standard User remains beside this matrix: create, read, update, and soft-delete on records that person owns, with no export. Sales Director/Manager may correct a stage and override probability. SDR/BDR may create a deal only when the source lead is SQL Ready. Report and import screens arrive in later phases; their grants are already enforced on the preparatory export and import checks. Audit search is read-only. Denial and privilege logs store the actor, object, action, and reason, not CRM field values.
+Phase 1 Standard User remains beside this matrix: create, read, update, and soft-delete on records that person owns, with no export. Sales Director/Manager may correct a stage and override probability. SDR/BDR may create a deal only when the source lead is SQL. Report and import screens arrive in later phases; their grants are already enforced on the preparatory export and import checks. Audit search is read-only. Denial and privilege logs store the actor, object, action, and reason, not CRM field values.
 
 ## 7. Screen inventory and fast-entry patterns
 
@@ -282,15 +285,15 @@ Phase 1 Standard User remains beside this matrix: create, read, update, and soft
 | Dashboard | Role-specific cards; date range/team/owner filters; stale follow-ups and tasks first; pipeline charts link to filtered list. No dashboard data leaks beyond viewer scope. |
 | Lead list | Search, saved filters, owner/source/stage/date filters, table with editable owner/stage/follow-up fields, bulk assign/update, import/export, list/Kanban toggle. Sort by age, stage, rating, follow-up, owner, or company. Pagination required. |
 | Lead Kanban | Columns by stage; cards show company, name, owner, age, last activity, next follow-up. Drag action invokes same server-side transition validation as forms; blocked moves explain missing fields. |
-| Lead detail | Header: stage, owner, next follow-up, convert action. Summary fields in two columns, contact actions, timeline, related Deals/tasks/attachments. Quick-log menu for Call/Email/Meeting/Note; open form prefilled from record. |
+| Lead detail | Header: stage, owner, next follow-up, convert action. Summary fields in two columns, contact actions, timeline, related Deals/tasks/attachments. Quick-log menu for Call/Email/Meeting/Note; the form asks who it was with, when it happened, and for notes. |
 | Conversion wizard | Stepper: duplicate review → Account match/create → Contact match/create → open Deal transfer/new Deal → final review. Explicit merge/overwrite decisions. |
 | Account hierarchy | Searchable tree/list with parent/child, type, owner, open pipeline amount. Related tabs for Contacts, Deals, Activities and attachments. |
-| Contact list | Navigation item Contacts. Search by name, email, title, or account. Filter by account and primary contact. Sort by account, contact name, or title. Contacts are grouped under their account. |
+| Contact list | Navigation item Contacts. Search by name, email, title, or account. Filter by account and primary contact. Sort by account, contact name, or title. Contacts are grouped under their account. A name opens the contact for editing. Required fields are marked. The application id is not shown. |
 | Contact detail | Contact channels, Account/primary marker, reports-to, preferences, timeline and open tasks. |
 | Deal list/Kanban | Saved views, stage/owner/type/confidence/close-date filters; sort by age, amount, stage, confidence, expected close, or owner; amount and weighted amount; Kanban by stage. Stage gates validated at transition. |
 | Deal detail | Summary, stage history/time-in-stage, BANT panel, primary contact, source, close/competitor/OEM sections, activities, tasks and attachments. |
-| Activity quick-add | From a record, choose type then enter subject/outcome/time; save. One interaction to open menu, one to save (keyboard shortcut available). Logged on linked record(s). |
-| Task center | Opens on every open task: overdue, still due today, and upcoming. Overdue means the due time has passed. Due today means it is still due later today. Upcoming means it is due after today. Completed, cancelled, and on-hold tasks have their own lists. Each row shows the linked lead, contact, and deal. Actions: complete, snooze, hold, resume, cancel, and delete. Reminders batched for open tasks; no per-task email required for MVP. |
+| Activity quick-add | From a record, choose Call, Email, or Meeting, then enter the subject, who it was with, when it happened, and notes. One interaction to open the form, one to save (keyboard shortcut available). Logged on linked record(s). Edit and Delete are on the activity. |
+| Task center | Opens on every open task: overdue, still due today, and upcoming. Overdue means the due time has passed. Due today means it is still due later today. Upcoming means it is due after today. Completed, cancelled, and on-hold tasks have their own lists. Each row shows the title in bold and the linked lead, contact, and deal. Notes are optional and are not repeated on the deal. Actions on this screen: complete, edit, snooze, hold, resume, cancel, and delete. A lead, account, or deal offers complete and edit only. Edit is next to Complete. Delete is on the same line as the confirmation. Reminders batched for open tasks; no per-task email required for MVP. |
 | Import center | Template download → upload → map → validation preview → choose duplicate policy → confirm → progress/results → rollback eligible rows. |
 | Admin | Settings: Company, Users and the manager tree, role grants, Teams, and Audit. Also picklists, lead/deal stages/probabilities/gates, stale thresholds, import/export policy. |
 
@@ -312,7 +315,7 @@ All reports enforce the viewer’s record scope before aggregation. Common filte
 | Prior-period comparison | (current − previous) / previous × 100 | KPI card/line | Monthly, quarter, year based on fiscal calendar. If prior is zero, show N/A. |
 | Won/Lost/Hold | Count and amount by outcome/reason/type/owner | Bar + table | Reason required for Lost/Hold; use close date. |
 | Temperature | Count and amount by Cold/Warm/Hot | Stacked bar | Open vs closed toggle. |
-| Lead→SQL rate | Unique Leads reaching SQL Ready during cohort / eligible Leads created in cohort | Funnel/KPI | Cohort by Lead created date; denominator excludes Unqualified only if policy says so; default includes all valid Leads. |
+| Lead→SQL rate | Unique Leads reaching SQL during cohort / eligible Leads created in cohort | Funnel/KPI | Cohort by Lead created date; denominator excludes Unqualified only if policy says so; default includes all valid Leads. |
 | SQL→Won rate | SQL Leads converted to Deals that close Won / SQL Leads in same cohort | Funnel/KPI | Use conversion links and cohort date; avoid mixing with same-period bookings. |
 | Average deal size | Closed Won amount / count closed Won | KPI/trend | Base currency only in MVP. |
 | Sales cycle | Median days from Deal created_at to closed_won_at | Box/line + table | Show median and average. |
@@ -324,6 +327,8 @@ All reports enforce the viewer’s record scope before aggregation. Common filte
 - **Rep:** own open Leads/Deals, due/overdue tasks, stale records, pipeline by stage, recent activity, this-period wins.
 - **Manager:** team pipeline/forecast, rep activity, conversion, stale queue, deal aging and stage velocity.
 - **Executive:** company pipeline, forecast and won revenue, quarter/year trends, wins/losses, team comparisons. Raw row access remains read-only and scoped by the permission matrix.
+
+The shipped reports are grouped as Leads (by stage, by source, aging, conversion), Deals (by stage, by confidence, by age, by quarter, by sales owner, pipeline, forecast, won/lost/hold), Accounts (account pipeline, contacts), and Activity (activity per rep), plus Rep, Manager, and Executive dashboard presets. The dashboard is three rows: open leads, the count of open deals, and pipeline value; wins this fiscal quarter and fiscal year against the prior period, counted on each deal’s actual close date rather than the day the stage changed to Closed Won; then overdue tasks and stale leads. The Deals page shows Pipeline (by stage and by confidence), Timing (by age and by quarter), and Ownership (by sales owner). Deal confidence is derived from win probability: High at 80% or more, Medium from 40% up to 80%, and Low under 40%. The person sets the win probability; confidence is not edited. Contacts groups the people you can see by account and names the primary contact. Every report downloads as UTF-8 CSV: the summary table, then the records behind it. A cell that starts with `=`, `+`, `-`, or `@` is prefixed. Each grouped row names the companies that make up that total, and the record list shows the company or account. Date filters are inclusive days in the viewer’s time zone. Leaving both dates blank includes every matching record. Forecast groups open deals by the fiscal quarter of the expected close date, names the current quarter, and lists deals with no expected close date as Unscheduled. Commit is the Closing stage. The account company total is the sum of each account’s own open amount; the rollup column adds descendants for that row only. Deals still on a lead stay on the deal pipeline until they have an account. Prior-period change on the dashboard is `(current − previous) / previous × 100`, and a zero prior period shows N/A. The dashboard query budget is 30; the measured page used 15 queries. Export writes an audit row with the actor, filters, fields, and row count. Sales-cycle median, time in stage, and a separate temperature chart are not in this release. Rating and confidence remain on the lead and deal records.
 
 ## 9. Import/export specification
 
@@ -344,6 +349,8 @@ All reports enforce the viewer’s record scope before aggregation. Common filte
 6. Download success/error report and view import history. A batch can be rolled back if no conflicting later edits exist. Rollback restores before-images and soft-deletes batch-created rows; conflicts are listed and require manual review.
 
 **Limits:** start with 25 MB and 50,000 rows per batch; make configurable. Large imports are background jobs; normal web requests never hold a 500k-row transaction. At 500k total records, test real import/query sizes and tune chunk sizes/indexes.
+
+The CSV templates for leads, accounts, and contacts are `imports/csv_templates/leads.csv`, `accounts.csv`, and `contacts.csv`. The same files download from Import. Instruction lines start with `#` and name each column as required or optional, including the accepted keys and formats. A header row follows, then one `row_action=example` sample that is not imported. Blank dates are not used on these three files. Enums use keys. The owner column is the person's name, not the login username, and a blank owner assigns the row to the person importing it. Export writes that same name. Booleans are `true` or `false`. Cells starting with `=`, `+`, or `@`, or a minus that is not a number, are rejected. Commit runs in groups of 200 rows. A blank retry key is optional; reusing a key does not insert the same rows again. Workbooks and the deal, activity, and task templates stay out of this release.
 
 ### Export
 
@@ -400,7 +407,7 @@ Pagination is required (default 50, maximum 200). Filters use allow-listed field
 - Uploads are untrusted: whitelist extensions/MIME, size-limit, random storage keys, private storage outside web root, no execution or inline HTML rendering. Antivirus scanning can be added if policy requires.
 - Backup database and uploads daily; encrypt before copying to an off-host target. Keep 14 daily + 12 monthly copies initially. A backup is not proven until a restore is performed; test restore before cutover and quarterly.
 - Indexes: `owner_id`, `stage`, `created_at`, `updated_at`, `next_follow_up_at`, `expected_close_date`, `external_id`, normalized email/domain, stage history `(object_type, object_id, changed_at)`, activity/task foreign keys. Use pagination and select/prefetch related rows. Aggregate in SQL.
-- Target <2 sec for normal filtered list views at 500k total rows with representative indexes/hardware. This is an acceptance target to measure, not a guarantee from record count alone. Add caching/rollup tables only after profiling.
+- Target <2 sec for normal filtered list views at 500k total rows with representative indexes/hardware. This is an acceptance target to measure, not a guarantee from record count alone. Add caching/rollup tables only after profiling. The lead list resolves a page by primary key before it loads full rows. On 2026-10-12 the open list and the New-stage list at 500,000 leads measured 0.400s and 0.180s on local Docker MySQL 8.4. See D-028.
 - Observability: structured logs with request ID; health endpoint; DB/volume disk alerts; job failure alerts; redact PII. Use error reporting only after confirming data-handling terms.
 
 ## 12. Delivery roadmap and acceptance test plan
@@ -413,7 +420,7 @@ Build and release this as a sequence of small, working increments. Each phase sh
 | 1. Company setup and user login | Editable company profile (name, logo, base currency, fiscal-year start, default time zone); bootstrap first administrator; administrator can invite/create, disable and reset users; login/logout and password reset. No public self-registration. Start with Admin and Standard User roles. | First-run setup is repeatable and safe; active users can log in; disabled users cannot; password reset tokens expire and are single-use; company settings persist; no default production password. Walk through first-run setup using a clean database. | Log sign-in success/failure and account changes without logging passwords, tokens or unnecessary PII; rate-limit login/reset; secure cookies and CSRF; audit company and user changes; alert on repeated login failures and failed email delivery if email is enabled. |
 | 2. Leads and lead-linked opportunities | Lead create/list/detail/edit, owner, source, qualification, status/stage, search and filters. Add a simple opportunity/deal record that must belong to a lead; support value, currency, expected close date, stage and notes. Keep Account/Contact conversion out of this slice. | Create, edit, search and filter leads and opportunities through both UI and API; opportunity cannot be orphaned; owner and stage values validate; reject stale edits; verify list pagination and useful empty/error states. Seed a small synthetic scenario and reconcile displayed values to stored records. | Record actor and timestamps; audit lead/opportunity create, update, owner and stage changes; log request latency, error rate and DB failures; enforce server-side owner scope on every endpoint; validate fields and cap page sizes; redact lead notes and contact details from logs. |
 | 3. Lead and opportunity workflow | Explicit stage transition rules and history; basic Kanban/list views; qualification reasons; close-lost reason; stage timestamps and probability snapshot if used. Keep the workflow configurable only where the current process requires it. | Test allowed and rejected transitions at service, UI and API layers; verify history actor/time and stage-duration calculations; concurrent edits return a conflict instead of silently overwriting; confirm closed opportunities do not appear in open pipeline totals. | Alert on repeated workflow errors and failed writes; maintain append-only stage history; require reasons for terminal outcomes; provide a reversible admin correction path that records the correction. |
-| 4. Follow-up activities and tasks | Log calls, meetings, emails and notes against a lead or opportunity; create, assign, complete and snooze follow-up tasks; basic due/overdue views. Add reminders only after task lifecycle works. | Activity appears once on each linked record; task completion/snooze changes are consistent; due dates render in the user's time zone; reminder delivery is idempotent and can be retried; test time-zone and daylight-saving boundaries. | Track scheduler last-run time, duration, successes, failures and retries; alert on missed runs or repeated delivery failures; use a single scheduler process and unique job-run keys; keep activity history auditable and avoid sending duplicate reminders. |
+| 4. Follow-up activities and tasks | Log calls, emails, and meetings against a lead or opportunity, including who it was with, when it happened, and notes. Create, edit, assign, complete and snooze follow-up tasks. Basic due/overdue views. Add reminders only after task lifecycle works. | Activity appears once on each linked record; task completion/snooze changes are consistent; due dates render in the user's time zone; reminder delivery is idempotent and can be retried; test time-zone and daylight-saving boundaries. | Track scheduler last-run time, duration, successes, failures and retries; alert on missed runs or repeated delivery failures; use a single scheduler process and unique job-run keys; keep activity history auditable and avoid sending duplicate reminders. |
 | 5. Accounts, contacts and lead conversion | Add account/contact records and explicit duplicate review. Convert a qualified lead into an account/contact, link or create related records, and re-parent open opportunities while preserving the lead and its history. | Conversion is one database transaction and idempotent; injected failure leaves no partial conversion; duplicate matches require human choice; open opportunities retain their values and history; verify permissions and audit trail for conversion. | Alert on conversion failures and duplicate conflicts; retain conversion IDs/timestamp and before/after audit; require confirmation before irreversible-looking actions; provide a tested backup/restore path before any bulk cleanup or production conversion. |
 | 6. Teams, access control and audit review | Manager/team hierarchy, role-by-object permissions, scoped record lists and detail/API access, audit search. Expand roles only when real workflows require them. | Maintain a role/object positive and negative test matrix; test direct URLs, APIs, exports and bulk actions; verify managers see only their allowed hierarchy; ensure read-only users cannot mutate data; audit records cannot be edited through the app. | Security logs for denied access and privilege changes; alert on unusual denial spikes and administrator changes; regularly review active administrators; ensure every data-changing service checks authorization server-side. |
 | 7. Basic reports and dashboards | Rep views for open leads, pipeline, overdue follow-ups and recent activity; manager summaries after team scope is proven. Add exports only for these defined reports if needed. | Reconcile totals to a hand-checked synthetic fixture; verify date/time-zone boundaries, owner filters and closed/open logic; reports honor the same access scope as source records; large lists remain paginated. | Track slow queries, report duration, error rates and DB connection saturation; set thresholds from observed usage; avoid exporting sensitive fields by default; log export actor, filters and row count. |
@@ -470,10 +477,10 @@ Use fictional names/domains only. Fixture should include at least two users/mana
 ```json
 [
   {"external_id":"lead-1001","first_name":"Jamie","last_name":"Ng","company_name":"Pinecone Health Group","email":"jamie.ng@example.test","source":"web","stage":"MQL","owner":"morgan.patel","industry":"healthcare","company_size_band":"201-500","employee_count":320},
-  {"external_id":"lead-1002","first_name":"Alex","last_name":"Wong","company_name":"Northstar Robotics","email":"alex.wong@example.test","source":"referral","stage":"SQL_READY","owner":"riley.chen","industry":"manufacturing"},
+  {"external_id":"lead-1002","first_name":"Alex","last_name":"Wong","company_name":"Northstar Robotics","email":"alex.wong@example.test","source":"referral","stage":"SQL","owner":"riley.chen","industry":"manufacturing"},
   {"external_id":"lead-1003","first_name":"Drew","last_name":"Singh","company_name":"Example Unknown Co","email":"drew.singh@example.test","source":"conference","stage":"NURTURING","nurture_reason":"MQL_NOT_SALES_READY","next_follow_up_at":"2026-11-15T10:00:00-08:00","owner":"morgan.patel"},
   {"external_id":"lead-1004","first_name":"Casey","last_name":"Morgan","company_name":"Pinecone Health Group","email":"casey.morgan@example.test","source":"partner","stage":"CONTACTED","contact_substatus":"IN_CONTACT","owner":"riley.chen"},
-  {"external_id":"lead-1005","first_name":"Robin","last_name":"Fox","company_name":"Bad Data Example","source":"list_purchase","stage":"UNQUALIFIED","disqualification_reason":"BAD_DATA","owner":"morgan.patel"}
+  {"external_id":"lead-1005","first_name":"Robin","last_name":"Fox","company_name":"Bad Data Example","email":"robin.fox@example.test","source":"list_purchase","stage":"UNQUALIFIED","disqualification_reason":"NO_TECHNICAL_FIT","owner":"morgan.patel"}
 ]
 ```
 
@@ -481,7 +488,7 @@ Use fictional names/domains only. Fixture should include at least two users/mana
 
 ```json
 [
-  {"external_id":"deal-2001","title":"Pinecone cloud migration assessment","account":"pinecone-health-group","deal_type":"CONSULTING_SERVICES","amount":"48000.00","currency":"USD","temperature":"HOT","stage":"DISCOVERY","probability":"30.00","expected_close_date":"2026-12-18","owner":"riley.chen","bant":{"budget":"PARTIAL","authority":"CONFIRMED","need":"CONFIRMED","timeline":"PARTIAL"}},
+  {"external_id":"deal-2001","title":"Pinecone cloud migration assessment","account":"pinecone-health-group","deal_type":"CONSULTING_SERVICES","amount":"48000.00","currency":"USD","temperature":"HOT","stage":"TECHNICAL_EVALUATION","probability":"30.00","expected_close_date":"2026-12-18","owner":"riley.chen","bant":{"budget":"PARTIAL","authority":"CONFIRMED","need":"CONFIRMED","timeline":"PARTIAL"}},
   {"external_id":"deal-2002","title":"Northstar endpoint security renewal","lead":"lead-1002","deal_type":"OEM_RESALE","amount":"12500.00","currency":"USD","temperature":"WARM","stage":"PROPOSAL","probability":"50.00","expected_close_date":"2027-02-15","owner":"riley.chen","oem_vendor":"contoso-cloud-tools","product":"Secure Endpoint Annual","quantity":50,"license_term":"12 months","renewal_date":"2028-02-15"},
   {"external_id":"deal-2003","title":"Meridian analytics services","account":"northstar-robotics","deal_type":"SOFTWARE_SERVICES","amount":"22000.00","currency":"USD","temperature":"COLD","stage":"CLOSED_LOST","outcome":"LOST","close_reason":"COMPETITOR","competitor":"meridian-systems","owner":"jordan.lee"}
 ]

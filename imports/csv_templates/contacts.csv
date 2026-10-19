@@ -1,0 +1,29 @@
+# Save this file as UTF-8 CSV. Lines starting with # are instructions and are not imported.
+# Keep the header row. Column names must stay as written.
+# Dates, when a future template has them, use YYYY-MM-DD.
+# Booleans use true or false.
+# Do not start a cell with =, +, or @. A leading minus is allowed only on a number.
+# Skip leaves a match unchanged. Update changes it. Create adds a new row.
+# Matching uses external_id first, then an exact email, or an exact account domain or name. Similar names are not duplicates.
+# Imported leads always start at New. Change the stage in GlideCRM after import.
+# Error row numbers count the header as row 1 and do not count lines that start with #.
+# row_action: optional. Leave blank to import the row. Use example to keep a sample row; example rows are not imported.
+# external_id: optional. Your own id. Letters, numbers, hyphens, or underscores, up to 64 characters, and unique. Blank lets GlideCRM assign one.
+# account_external_id: required. external_id of an account you can see. Import that account first.
+# first_name: required. Text, up to 80 characters.
+# last_name: required. Text, up to 80 characters.
+# title: optional. Text, up to 120 characters.
+# email: required. name@domain. Used as the duplicate match when external_id is blank.
+# work_phone: optional. Optional. 10 digits, stored as (XXX) XXX-XXXX.
+# mobile_phone: optional. Optional. 10 digits, stored as (XXX) XXX-XXXX.
+# street: optional. Text, up to 200 characters. Leave blank when unknown.
+# city: optional. Text, up to 100 characters.
+# region: optional. State or province, up to 100 characters.
+# postal_code: optional. Text, up to 20 characters.
+# country: optional. Text, up to 100 characters, such as US.
+# is_primary: optional. true or false. Blank means false. One primary contact per account.
+# reports_to_external_id: optional. external_id of another contact at the same account. That contact must already exist, or appear on an earlier row.
+# owner: optional. The person's name as shown in GlideCRM, not the login username. Blank means you.
+# notes: optional. Text.
+row_action,external_id,account_external_id,first_name,last_name,title,email,work_phone,mobile_phone,street,city,region,postal_code,country,is_primary,reports_to_external_id,owner,notes
+example,example-contact,example-account,Ada,Lovelace,Engineer,ada.lovelace@example.com,(949) 555-0100,(949) 555-0199,26040 Acero,Mission Viejo,CA,92691,US,true,,,Sample row. Import the account template first if you reuse this id.

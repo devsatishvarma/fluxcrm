@@ -1,7 +1,11 @@
 {% extends "base.html" %}
-{% block title %}Log in · FluxCRM{% endblock %}
+{% block title %}Log in · GlideCRM{% endblock %}
+{% block body_class %}page-auth{% endblock %}
 {% block content %}
-  <h1>FluxCRM</h1>
+  <h1>
+    <img class="brand-logo brand-logo-hero" src="{% url 'core:brand_logo' %}" alt="">
+    <span class="visually-hidden">GlideCRM</span>
+  </h1>
   <h2>Log in</h2>
   {% if throttled %}
     <p role="alert">Too many sign-in attempts. Wait and try again.</p>

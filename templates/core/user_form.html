@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-{% block title %}Add user · FluxCRM{% endblock %}
+{% block title %}{% if editing %}Edit user{% else %}Add user{% endif %} · GlideCRM{% endblock %}
 {% block content %}
   {% include "core/_settings_nav.html" %}
-  <h1>Add user</h1>
+  <h1>{% if editing %}Edit {{ editing.display_name }}{% else %}Add user{% endif %}</h1>
   <form method="post">
     {% csrf_token %}
-    {{ form.as_p }}
-    <button class="btn btn-primary" type="submit">Create user</button>
+    {% include "crm/_form_fields.html" %}
+    <button class="btn btn-primary" type="submit">{% if editing %}Save user{% else %}Create user{% endif %}</button>
   </form>
 {% endblock %}

@@ -1,11 +1,119 @@
 {% extends "base.html" %}
-{% block title %}{% if deal %}Edit deal{% else %}Add deal{% endif %} · FluxCRM{% endblock %}
+{% block title %}{% if deal %}Edit deal{% else %}Add deal{% endif %} · GlideCRM{% endblock %}
 {% block content %}
   <h1>{% if deal %}Edit deal{% else %}Add deal{% endif %}</h1>
-  <form method="post">
+  {% if account %}
+    <p>
+      This deal is on
+      <a href="{% url 'accounts:detail' account.pk %}">{{ account.name }}</a>.
+      Choose a contact on that account. Amount, win probability, and stage changes work the same way as a deal on a lead.
+    </p>
+    {% if not form.primary_contact.field.queryset %}
+      <p>
+        Add a contact on this account before adding a deal.
+        <a href="{% url 'accounts:contact_create' account.pk %}">Add contact</a>
+      </p>
+    {% endif %}
+  {% endif %}
+  <form method="post"{% if form.choose_source %} data-contact-url="{% url 'accounts:contact_create' '00000000-0000-0000-0000-000000000000' %}"{% endif %}>
     {% csrf_token %}
     {% include "crm/_form_fields.html" %}
+    {% if form.choose_source %}
+      {{ form.contact_options|json_script:"deal-contacts" }}
+      <script>
+        var linked = document.getElementById("id_linked_to");
+        var lead = document.getElementById("id_lead");
+        var account = document.getElementById("id_account");
+        var contact = document.getElementById("id_primary_contact");
+        var contacts = JSON.parse(document.getElementById("deal-contacts").textContent);
+        var contactUrl = document.querySelector("form[data-contact-url]").dataset.contactUrl;
+        var emptyNote = document.createElement("p");
+        emptyNote.id = "deal-contact-empty";
+        emptyNote.hidden = true;
+        emptyNote.innerHTML = 'Add a contact on this account before adding a deal. <a id="deal-contact-add">Add contact</a>';
+        contact.closest(".field-control").appendChild(emptyNote);
+
+        function lineFor(input) {
+          return input.closest(".field-line");
+        }
+
+        function showLine(input, shown) {
+          var line = lineFor(input);
+          line.hidden = !shown;
+          input.disabled = !shown;
+          input.required = shown;
+        }
+
+        function fillContacts() {
+          var accountId = account.value;
+          var current = contact.value;
+          var people = contacts.filter(function (person) {
+            return person.account === accountId;
+          });
+          contact.replaceChildren();
+          var blank = document.createElement("option");
+          blank.value = "";
+          blank.textContent = "Select a contact";
+          contact.appendChild(blank);
+          people.forEach(function (person) {
+            var option = document.createElement("option");
+            option.value = person.id;
+            option.textContent = person.name;
+            contact.appendChild(option);
+          });
+          if (people.some(function (person) { return person.id === current; })) {
+            contact.value = current;
+          }
+          var addLink = document.getElementById("deal-contact-add");
+          if (accountId && people.length === 0) {
+            addLink.href = contactUrl.replace(
+              "00000000-0000-0000-0000-000000000000",
+              accountId
+            );
+            emptyNote.hidden = false;
+          } else {
+            emptyNote.hidden = true;
+          }
+        }
+
+        function applySource() {
+          var mode = linked.value;
+          showLine(lead, mode === "lead");
+          showLine(account, mode === "account");
+          showLine(contact, mode === "account");
+          if (mode === "account") {
+            fillContacts();
+          }
+        }
+
+        linked.addEventListener("change", applySource);
+        account.addEventListener("change", fillContacts);
+        applySource();
+      </script>
+    {% endif %}
     <button class="btn btn-primary" type="submit">Save deal</button>
     {% if deal %}<a href="{% url 'sales:detail' deal.pk %}">Cancel</a>{% endif %}
   </form>
+  {% if deal %}
+    <script>
+      var probability = document.getElementById("id_probability");
+      var reason = document.getElementById("id_probability_reason");
+      if (probability && reason) {
+        var original = probability.value;
+        function probabilityChanged() {
+          var next = Number(probability.value);
+          var current = Number(original);
+          if (Number.isNaN(next) || Number.isNaN(current)) {
+            return probability.value !== original;
+          }
+          return Math.abs(next - current) >= 0.001;
+        }
+        function markReason() {
+          reason.required = probabilityChanged();
+        }
+        probability.addEventListener("input", markReason);
+        markReason();
+      }
+    </script>
+  {% endif %}
 {% endblock %}

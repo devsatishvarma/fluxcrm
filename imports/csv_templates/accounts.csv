@@ -1,0 +1,26 @@
+# Save this file as UTF-8 CSV. Lines starting with # are instructions and are not imported.
+# Keep the header row. Column names must stay as written.
+# Dates, when a future template has them, use YYYY-MM-DD.
+# Booleans use true or false.
+# Do not start a cell with =, +, or @. A leading minus is allowed only on a number.
+# Skip leaves a match unchanged. Update changes it. Create adds a new row.
+# Matching uses external_id first, then an exact email, or an exact account domain or name. Similar names are not duplicates.
+# Imported leads always start at New. Change the stage in GlideCRM after import.
+# Error row numbers count the header as row 1 and do not count lines that start with #.
+# row_action: optional. Leave blank to import the row. Use example to keep a sample row; example rows are not imported.
+# external_id: optional. Your own id. Letters, numbers, hyphens, or underscores, up to 64 characters, and unique. Blank lets GlideCRM assign one.
+# name: required. Text, up to 200 characters.
+# account_type: required. One key: CUSTOMER (Customer), PROSPECT (Prospect), PARTNER (Partner), REFERRAL (Referral), COMPETITOR (Competitor), OEM_VENDOR (OEM Vendor), OTHER (Other). Use the key, not the label.
+# parent_external_id: optional. external_id of the parent account. It must already exist, or appear on an earlier row in this file.
+# industry: optional. One key: INFORMATION_TECHNOLOGY (Information Technology), TECHNOLOGY_SAAS (Technology & SaaS), PROFESSIONAL_SERVICES (Professional Services), HEALTHCARE (Healthcare), FINANCIAL_SERVICES (Financial Services), INSURANCE (Insurance), MANUFACTURING (Manufacturing), AUTOMOTIVE (Automotive), RETAIL (Retail & E-Commerce), HOSPITALITY_TRAVEL (Hospitality & Travel), EDUCATION (Education), GOVERNMENT (Government), NONPROFIT (Nonprofit), OTHER (Other). Use the key, not the label.
+# website_url: optional. example.com or https://example.com. An exact domain matches an existing account before the name does.
+# phone: optional. Optional. 10 digits, stored as (XXX) XXX-XXXX.
+# street: optional. Text, up to 200 characters. Leave blank when unknown.
+# city: optional. Text, up to 100 characters.
+# region: optional. State or province, up to 100 characters.
+# postal_code: optional. Text, up to 20 characters.
+# country: optional. Text, up to 100 characters, such as US.
+# owner: optional. The person's name as shown in GlideCRM, not the login username. Blank means you.
+# notes: optional. Text.
+row_action,external_id,name,account_type,parent_external_id,industry,website_url,phone,street,city,region,postal_code,country,owner,notes
+example,example-account,Analytical Engines,PROSPECT,,INFORMATION_TECHNOLOGY,https://example.com,(949) 555-0100,26040 Acero,Mission Viejo,CA,92691,US,,Sample row. It is not imported while row_action is example.

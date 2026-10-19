@@ -1,0 +1,9 @@
+{% load crm %}
+{% if stage_order %}
+  <ol class="stage-path" aria-label="Stages in order">
+    {% for stage in stage_order %}
+      {% if not forloop.first %}<li class="stage-arrow" aria-hidden="true">→</li>{% endif %}
+      <li class="stage-step{% if stage == current_stage %} is-current{% endif %}"{% if stage == current_stage %} aria-current="step"{% endif %}>{{ stage|stage_label }}</li>
+    {% endfor %}
+  </ol>
+{% endif %}

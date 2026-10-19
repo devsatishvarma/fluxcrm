@@ -12,10 +12,10 @@ env:
   DJANGO_SECRET_KEY: ci-only-secret-key-never-use-in-production
   DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
   DJANGO_SECURE_COOKIES: "false"
-  MYSQL_DATABASE: fluxcrm
-  MYSQL_USER: fluxcrm
-  MYSQL_PASSWORD: fluxcrm-ci-password
-  MYSQL_ROOT_PASSWORD: fluxcrm-ci-root-password
+  MYSQL_DATABASE: glidecrm
+  MYSQL_USER: glidecrm
+  MYSQL_PASSWORD: glidecrm-ci-password
+  MYSQL_ROOT_PASSWORD: glidecrm-ci-root-password
   MYSQL_HOST: 127.0.0.1
   MYSQL_PORT: "3306"
 
@@ -26,15 +26,15 @@ jobs:
       mysql:
         image: mysql:8.4
         env:
-          MYSQL_DATABASE: fluxcrm
-          MYSQL_USER: fluxcrm
-          MYSQL_PASSWORD: fluxcrm-ci-password
-          MYSQL_ROOT_PASSWORD: fluxcrm-ci-root-password
+          MYSQL_DATABASE: glidecrm
+          MYSQL_USER: glidecrm
+          MYSQL_PASSWORD: glidecrm-ci-password
+          MYSQL_ROOT_PASSWORD: glidecrm-ci-root-password
         ports:
           - 3306:3306
         options: >-
           --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot
-          -pfluxcrm-ci-root-password --silent"
+          -pglidecrm-ci-root-password --silent"
           --health-interval=5s
           --health-timeout=5s
           --health-retries=20
@@ -66,7 +66,7 @@ jobs:
       - name: Run tests
         env:
           MYSQL_USER: root
-          MYSQL_PASSWORD: fluxcrm-ci-root-password
+          MYSQL_PASSWORD: glidecrm-ci-root-password
         run: uv run pytest --cov=. --cov-report=term-missing
 
   browser-smoke:
@@ -76,15 +76,15 @@ jobs:
       mysql:
         image: mysql:8.4
         env:
-          MYSQL_DATABASE: fluxcrm
-          MYSQL_USER: fluxcrm
-          MYSQL_PASSWORD: fluxcrm-ci-password
-          MYSQL_ROOT_PASSWORD: fluxcrm-ci-root-password
+          MYSQL_DATABASE: glidecrm
+          MYSQL_USER: glidecrm
+          MYSQL_PASSWORD: glidecrm-ci-password
+          MYSQL_ROOT_PASSWORD: glidecrm-ci-root-password
         ports:
           - 3306:3306
         options: >-
           --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot
-          -pfluxcrm-ci-root-password --silent"
+          -pglidecrm-ci-root-password --silent"
           --health-interval=5s
           --health-timeout=5s
           --health-retries=20

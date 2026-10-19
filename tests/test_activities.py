@@ -66,6 +66,7 @@ def test_one_activity_appears_once_on_every_linked_record(client):
         data={
             "activity_type": "CALL",
             "subject": "Shared discovery call",
+            "with_party": f"lead:{lead.pk}",
             "body": "private call notes",
             "occurred_at": datetime(2026, 7, 15, 17, 0, tzinfo=UTC),
         },
@@ -82,7 +83,7 @@ def test_one_activity_appears_once_on_every_linked_record(client):
     deal_page = client.get(reverse("sales:detail", args=[deal.pk]))
     assert lead_page.content.count(b"<strong>Shared discovery call</strong>") == 1
     assert deal_page.content.count(b"<strong>Shared discovery call</strong>") == 1
-    assert lead_page.content.count(b"private call notes") == 1
+    assert lead_page.content.count(b"<div>private call notes</div>") == 1
     event = AuditEvent.objects.get(
         action="activity.created", object_id=str(activity.pk)
     )
@@ -179,8 +180,9 @@ def test_due_times_render_across_dst_boundaries(client):
         create_activity(
             actor=admin,
             data={
-                "activity_type": "NOTE",
+                "activity_type": "CALL",
                 "subject": subject,
+                "with_party": f"lead:{lead.pk}",
                 "occurred_at": occurred_at,
             },
             links=[{"kind": "lead", "id": lead.pk}],
@@ -271,6 +273,16 @@ def test_quick_add_defaults_the_record_and_ignores_form_fields(client):
     assert 'id="quick-activity"' in html
     assert f'name="object_id" value="{lead.pk}"' in html
     assert 'value="CALL" selected' in html
+    assert 'name="with_party"' in html
+    assert f'name="with_party" value="lead:{lead.pk}" checked' in html
+    assert "party-search" in html
+    assert 'class="party-menu" id="quick-activity-with-menu" hidden' in html
+    assert 'class="party-list"' in html
+    assert "Jamie Ng" in html
+    assert "Create the contact or lead first" in html
+    assert 'name="occurred_at"' in html
+    assert 'name="body"' in html
+    assert 'value="NOTE"' in html
     assert 'tag === "INPUT"' in html
     assert "isContentEditable" in html
     saved = client.post(
@@ -280,16 +292,54 @@ def test_quick_add_defaults_the_record_and_ignores_form_fields(client):
             "object_id": str(lead.pk),
             "activity_type": "CALL",
             "subject": "Quick intro",
+            "with_party": f"lead:{lead.pk}",
+            "occurred_at": "2026-07-15T10:00",
+            "body": "Left a message",
         },
     )
     assert saved.status_code == 302
-    assert Activity.objects.get(subject="Quick intro").links.get().object_id == lead.pk
+    recorded = Activity.objects.get(subject="Quick intro")
+    assert recorded.links.get().object_id == lead.pk
+    assert recorded.with_lead_id == lead.pk
+    assert recorded.with_whom == "Jamie Ng"
+    assert recorded.body == "Left a message"
+    assert recorded.occurred_at is not None
+    saved_note = client.post(
+        reverse("activities:activity_create"),
+        {
+            "kind": "lead",
+            "object_id": str(lead.pk),
+            "activity_type": "NOTE",
+            "subject": "A leftover note",
+            "with_party": f"lead:{lead.pk}",
+            "occurred_at": "2026-07-15T10:00",
+            "body": "Remember the follow-up",
+        },
+    )
+    assert saved_note.status_code == 302
+    noted = Activity.objects.get(subject="A leftover note")
+    assert noted.activity_type == "NOTE"
+    assert noted.body == "Remember the follow-up"
     invalid = client.post(
         reverse("activities:activity_create"),
         {"kind": "lead", "object_id": str(lead.pk), "activity_type": "CALL"},
     )
     assert invalid.status_code == 422
     assert Activity.objects.filter(subject="").count() == 0
+    unknown = client.post(
+        reverse("activities:activity_create"),
+        {
+            "kind": "lead",
+            "object_id": str(lead.pk),
+            "activity_type": "CALL",
+            "subject": "Call with a new name",
+            "with_whom": "Pat New",
+            "occurred_at": "2026-07-15T10:00",
+        },
+    )
+    assert unknown.status_code == 422
+    assert b"Create that person first" in unknown.content
+    assert Activity.objects.filter(subject="Call with a new name").count() == 0
 
 
 def test_task_buckets_and_stale_badges_stay_flat(client):
@@ -399,7 +449,11 @@ def test_task_links_and_hold_cancel_delete(client):
     assert task.status == Task.Status.CANCELLED
     removed = client.post(
         reverse("activities:delete", args=[task.pk]),
-        {"version": task.version, "delete_reason": "Added on the wrong lead"},
+        {
+            "version": task.version,
+            "delete_reason": "Added on the wrong lead",
+            "confirm_delete": "yes",
+        },
     )
     assert removed.status_code == 302
     assert Task.objects.filter(pk=task.pk).count() == 0
@@ -431,8 +485,9 @@ def test_activity_can_be_edited_and_deleted(client):
     activity = create_activity(
         actor=admin,
         data={
-            "activity_type": "NOTE",
+            "activity_type": "EMAIL",
             "subject": "Wrong company note",
+            "with_party": f"lead:{lead.pk}",
             "body": "private notebook",
             "occurred_at": datetime(2026, 8, 1, 16, 0, tzinfo=UTC),
         },
@@ -442,7 +497,9 @@ def test_activity_can_be_edited_and_deleted(client):
     client.force_login(admin)
     page = client.get(reverse("leads:detail", args=[lead.pk]))
     assert b"detail-fields" in page.content
-    assert b"Edit or delete" in page.content
+    assert b">Edit</summary>" in page.content
+    assert b">Delete</summary>" in page.content
+    assert b">Jamie Ng</a>" in page.content
     updated = client.post(
         reverse("activities:activity_update", args=[activity.pk]),
         {
@@ -451,7 +508,9 @@ def test_activity_can_be_edited_and_deleted(client):
             "object_id": str(lead.pk),
             "activity_type": "CALL",
             "subject": "Corrected call",
+            "with_party": f"lead:{lead.pk}",
             "body": "private notebook",
+            "occurred_at": "2026-08-01T09:00",
             "outcome": "Reached Jamie",
         },
     )
@@ -467,10 +526,128 @@ def test_activity_can_be_edited_and_deleted(client):
             "kind": "lead",
             "object_id": str(lead.pk),
             "delete_reason": "Added on the wrong record",
+            "confirm_delete": "yes",
         },
     )
     assert deleted.status_code == 302
     assert Activity.objects.filter(pk=activity.pk).count() == 0
+
+
+def test_activity_with_whom_must_be_an_existing_contact_or_lead(client):
+    from accounts.services import create_account, create_contact
+
+    admin = make_user("jordan", admin=True)
+    lead = make_lead(admin)
+    account = create_account(
+        actor=admin,
+        data={"name": "Northwind", "account_type": "CUSTOMER"},
+    )
+    contact = create_contact(
+        actor=admin,
+        data={
+            "first_name": "Avery",
+            "last_name": "Cole",
+            "email": "avery.cole@example.test",
+            "account": account.pk,
+        },
+    )
+    activity = create_activity(
+        actor=admin,
+        data={
+            "activity_type": "MEETING",
+            "subject": "Working session",
+            "with_party": f"contact:{contact.pk}",
+            "occurred_at": datetime(2026, 9, 2, 17, 0, tzinfo=UTC),
+        },
+        links=[{"kind": "lead", "id": lead.pk}, {"kind": "account", "id": account.pk}],
+        request_id="test",
+    )
+    assert activity.with_contact_id == contact.pk
+    assert activity.with_lead_id is None
+    assert activity.with_whom == "Avery Cole"
+    client.force_login(admin)
+    page = client.get(reverse("accounts:detail", args=[account.pk]))
+    assert b">Avery Cole</a>" in page.content
+    moved = client.post(
+        reverse("activities:activity_update", args=[activity.pk]),
+        {
+            "version": activity.version,
+            "kind": "account",
+            "object_id": str(account.pk),
+            "activity_type": "MEETING",
+            "subject": "Working session",
+            "with_party": f"lead:{lead.pk}",
+            "occurred_at": "2026-09-02T10:00",
+        },
+    )
+    assert moved.status_code == 302
+    activity.refresh_from_db()
+    assert activity.with_lead_id == lead.pk
+    assert activity.with_contact_id is None
+    assert activity.with_whom == "Jamie Ng"
+
+
+def test_task_details_and_notes_can_be_edited(client):
+    admin = make_user("jordan", admin=True)
+    lead = make_lead(admin)
+    task = create_task(
+        actor=admin,
+        data={
+            "title": "Send the recap",
+            "description": "First draft",
+            "due_at": timezone.now() + timedelta(days=1),
+        },
+        links=[{"kind": "lead", "id": lead.pk}],
+        request_id="test",
+    )
+    client.force_login(admin)
+    page = client.get(reverse("activities:tasks"))
+    html = page.content.decode()
+    assert html.index("Complete</button>") < html.index(">Edit</summary>")
+    assert html.index('class="delete-line"') < html.index(">Delete</button>")
+    assert html.index('name="confirm_delete"') < html.index(">Delete</button>")
+    updated = client.post(
+        reverse("activities:task_update", args=[task.pk]),
+        {
+            "version": task.version,
+            "title": "Send the revised recap",
+            "description": "private task notes",
+            "due_at": "2026-11-15T10:00",
+            "priority": "HIGH",
+        },
+    )
+    assert updated.status_code == 302
+    task.refresh_from_db()
+    assert task.title == "Send the revised recap"
+    assert task.description == "private task notes"
+    assert task.priority == "HIGH"
+    event = AuditEvent.objects.get(action="task.updated")
+    assert "private task notes" not in json.dumps(event.after_json)
+    listed = client.get(reverse("leads:detail", args=[lead.pk]))
+    assert b"private task notes" in listed.content
+    assert b'id="quick-task-notes"' in listed.content
+    assert b">Hold</button>" not in listed.content
+    assert b">Cancel</button>" not in listed.content
+    deal = make_deal(admin, lead)
+    create_task(
+        actor=admin,
+        data={
+            "title": "Deal follow-up",
+            "description": "Deal page notes",
+            "due_at": timezone.now() + timedelta(days=2),
+        },
+        links=[{"kind": "deal", "id": deal.pk}],
+        request_id="test",
+    )
+    deal_page = client.get(reverse("sales:detail", args=[deal.pk]))
+    assert b"Deal follow-up" in deal_page.content
+    assert b"Deal page notes" not in deal_page.content
+    assert b'id="quick-task-notes"' not in deal_page.content
+    assert b">Hold</button>" not in deal_page.content
+    assert b">Delete</button>" not in deal_page.content
+    tasks_page = client.get(reverse("activities:tasks"))
+    assert b"<strong>Deal follow-up</strong>" in tasks_page.content
+    assert b">Hold</button>" in tasks_page.content
 
 
 def test_lists_sort_by_rating_and_amount(client):

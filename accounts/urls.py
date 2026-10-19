@@ -15,8 +15,28 @@ urlpatterns = [
         name="detail",
     ),
     path(
+        "accounts/<uuid:account_id>/edit/",
+        login_required(views.account_edit),
+        name="edit",
+    ),
+    path(
+        "accounts/<uuid:account_id>/delete/",
+        login_required(views.account_delete),
+        name="delete",
+    ),
+    path(
         "accounts/<uuid:account_id>/contacts/new/",
         login_required(views.contact_create),
         name="contact_create",
+    ),
+    path(
+        "contacts/<uuid:contact_id>/edit/",
+        login_required(views.contact_edit),
+        name="contact_edit",
+    ),
+    path(
+        "contacts/<uuid:contact_id>/delete/",
+        login_required(views.contact_delete),
+        name="contact_delete",
     ),
 ]

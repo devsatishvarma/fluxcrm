@@ -10,6 +10,7 @@ urlpatterns = [
     path("ready/", views.readiness, name="readiness"),
     path("setup/", identity_views.setup, name="setup"),
     path("login/", identity_views.login_view, name="login"),
+    path("brand/glidecrm-logo.png", identity_views.brand_logo, name="brand_logo"),
     path("logout/", identity_views.logout_view, name="logout"),
     path(
         "password-reset/",
@@ -18,17 +19,17 @@ urlpatterns = [
     ),
     path(
         "password-reset/sent/",
-        identity_views.FluxPasswordResetDoneView.as_view(),
+        identity_views.GlidePasswordResetDoneView.as_view(),
         name="password_reset_done",
     ),
     path(
         "password-reset/<uidb64>/<token>/",
-        identity_views.FluxPasswordResetConfirmView.as_view(),
+        identity_views.GlidePasswordResetConfirmView.as_view(),
         name="password_reset_confirm",
     ),
     path(
         "password-reset/complete/",
-        identity_views.FluxPasswordResetCompleteView.as_view(),
+        identity_views.GlidePasswordResetCompleteView.as_view(),
         name="password_reset_complete",
     ),
     path("settings/", identity_views.settings_home, name="settings"),
@@ -37,6 +38,7 @@ urlpatterns = [
     path("company/logo/", identity_views.company_logo, name="company_logo"),
     path("users/", identity_views.user_list, name="user_list"),
     path("users/new/", identity_views.user_create, name="user_create"),
+    path("users/<int:user_id>/edit/", identity_views.user_edit, name="user_edit"),
     path(
         "users/<int:user_id>/active/",
         identity_views.user_set_active,

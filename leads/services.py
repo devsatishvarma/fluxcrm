@@ -13,6 +13,7 @@ from core.access import get_scoped, scoped
 from core.display import age_days
 from core.exceptions import VersionConflict
 from core.validation import (
+    clean_address,
     clean_date,
     clean_datetime,
     clean_delete_reason,
@@ -22,6 +23,7 @@ from core.validation import (
     clean_money,
     clean_optional_key,
     clean_owner,
+    clean_phone,
     clean_required_key,
     clean_website,
     require_version,
@@ -123,8 +125,6 @@ def normalize_lead(actor, data, *, current=None):
         "company_name": 200,
         "products_services": 255,
         "notes": 4000,
-        "work_phone": 40,
-        "mobile_phone": 40,
     }
     for field, limit in text_fields.items():
         if partial and field not in data:
@@ -135,10 +135,19 @@ def normalize_lead(actor, data, *, current=None):
         if len(value) > limit:
             raise ValidationError({field: f"Use {limit} characters or fewer."})
         normalized[field] = value
+    for field in ("work_phone", "mobile_phone"):
+        if partial and field not in data:
+            continue
+        normalized[field] = clean_phone(
+            _value(data, field, getattr(current, field, "")),
+            field=field,
+        )
     if not partial or "email" in data:
         email, domain = clean_email(
             _value(data, "email", getattr(current, "email", ""))
         )
+        if not email:
+            raise ValidationError({"email": "Enter an email address."})
         normalized["email"] = email
         normalized["email_normalized"] = email
         normalized["email_domain"] = domain
@@ -182,6 +191,24 @@ def normalize_lead(actor, data, *, current=None):
                 data, "company_size_band", getattr(current, "company_size_band", "")
             ),
             "company_size_band",
+        )
+    if not partial or "current_tools" in data:
+        normalized["current_tools"] = clean_optional_key(
+            "CURRENT_TOOLS",
+            _value(data, "current_tools", getattr(current, "current_tools", "")),
+            "current_tools",
+        )
+    if not partial or "budget_range" in data:
+        normalized["budget_range"] = clean_optional_key(
+            "BUDGET_RANGE",
+            _value(data, "budget_range", getattr(current, "budget_range", "")),
+            "budget_range",
+        )
+    if not partial or "buying_timeline" in data:
+        normalized["buying_timeline"] = clean_optional_key(
+            "BUYING_TIMELINE",
+            _value(data, "buying_timeline", getattr(current, "buying_timeline", "")),
+            "buying_timeline",
         )
     if not partial or "contact_substatus" in data:
         normalized["contact_substatus"] = clean_optional_key(
@@ -251,13 +278,28 @@ def normalize_lead(actor, data, *, current=None):
             ),
             "next_follow_up_at",
         )
+    if not partial or "demo_scheduled_on" in data:
+        normalized["demo_scheduled_on"] = clean_date(
+            _value(
+                data,
+                "demo_scheduled_on",
+                getattr(current, "demo_scheduled_on", None),
+                None,
+            ),
+            "demo_scheduled_on",
+        )
+    if not partial or "technical_contact_name" in data:
+        normalized["technical_contact_name"] = str(
+            _value(
+                data,
+                "technical_contact_name",
+                getattr(current, "technical_contact_name", ""),
+            )
+            or ""
+        ).strip()[:120]
     if not partial or "address" in data:
         address = _value(data, "address", getattr(current, "address", {}), {})
-        if address in (None, ""):
-            address = {}
-        if not isinstance(address, dict):
-            raise ValidationError({"address": "Address must be an object."})
-        normalized["address"] = address
+        normalized["address"] = clean_address(address)
     stage = normalized.get("stage", current.stage if current else "")
     nurture = normalized.get(
         "nurture_reason", current.nurture_reason if current else ""
@@ -283,11 +325,28 @@ def normalize_lead(actor, data, *, current=None):
         raise ValidationError(
             {"disqualification_reason": "Unqualified leads require a reason."}
         )
+    demo_on = normalized.get(
+        "demo_scheduled_on",
+        current.demo_scheduled_on if current else None,
+    )
+    technical_contact = normalized.get(
+        "technical_contact_name",
+        current.technical_contact_name if current else "",
+    )
+    if stage == "DEMO_POC" and (demo_on is None or not technical_contact):
+        raise ValidationError(
+            {
+                "demo_scheduled_on": ("Demo needs a date and a technical contact."),
+                "technical_contact_name": (
+                    "Demo needs a date and a technical contact."
+                ),
+            }
+        )
     return normalized
 
 
 def filter_leads(user, params):
-    queryset = scoped(Lead.objects.select_related("owner"), user)
+    queryset = scoped(Lead.objects.all(), user)
     if str(params.get("converted") or "") != "1":
         queryset = queryset.filter(converted_at__isnull=True)
     query = str(params.get("q") or "").strip()
@@ -332,6 +391,35 @@ def filter_leads(user, params):
     if ordering not in LEAD_ORDERING:
         raise ValidationError({"ordering": "Sorting is limited to indexed fields."})
     return queryset.order_by(LEAD_ORDERING[ordering], "pk")
+
+
+def page_leads(queryset, page, page_size, *, strict=False):
+    """Count and limit by primary key, then load that page with its owner.
+
+    Selecting every column of a large ordered set makes MySQL sort the full
+    rows. The id query stays on the open-list index.
+    """
+    from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
+    from django.http import Http404
+
+    identifiers = Paginator(
+        queryset.select_related(None).values_list("pk", flat=True),
+        page_size,
+    )
+    if strict:
+        try:
+            current = identifiers.page(page)
+        except (EmptyPage, PageNotAnInteger) as exc:
+            raise Http404("That page is outside the lead list.") from exc
+    else:
+        current = identifiers.get_page(page)
+    ids = list(current.object_list)
+    rows = {
+        lead.pk: lead
+        for lead in Lead.objects.select_related("owner").filter(pk__in=ids)
+    }
+    current.object_list = [rows[pk] for pk in ids if pk in rows]
+    return current
 
 
 @transaction.atomic
@@ -445,10 +533,14 @@ def lead_payload(lead: Lead) -> dict:
         "last_name": lead.last_name,
         "title": lead.title,
         "email": lead.email,
+        "address": lead.address or {},
         "company_name": lead.company_name,
         "website_url": lead.website_url,
         "industry": lead.industry,
         "company_size_band": lead.company_size_band,
+        "current_tools": lead.current_tools,
+        "budget_range": lead.budget_range,
+        "buying_timeline": lead.buying_timeline,
         "employee_count": lead.employee_count,
         "annual_revenue": (
             None if lead.annual_revenue is None else str(lead.annual_revenue)
@@ -468,6 +560,12 @@ def lead_payload(lead: Lead) -> dict:
             if lead.next_follow_up_at is None
             else lead.next_follow_up_at.isoformat()
         ),
+        "demo_scheduled_on": (
+            None
+            if lead.demo_scheduled_on is None
+            else lead.demo_scheduled_on.isoformat()
+        ),
+        "technical_contact_name": lead.technical_contact_name,
         "notes": lead.notes,
         "converted_at": (
             None if lead.converted_at is None else lead.converted_at.isoformat()
@@ -534,9 +632,21 @@ def transition_lead(
         ("contact_substatus", "CONTACT_SUBSTATUS"),
         ("nurture_reason", "NURTURE_REASON"),
         ("disqualification_reason", "DISQUALIFICATION_REASON"),
+        ("company_size_band", "COMPANY_SIZE"),
+        ("current_tools", "CURRENT_TOOLS"),
+        ("budget_range", "BUDGET_RANGE"),
+        ("buying_timeline", "BUYING_TIMELINE"),
     ):
         if incoming.get(field):
             setattr(lead, field, clean_optional_key(list_key, incoming[field], field))
+    if "demo_scheduled_on" in incoming:
+        lead.demo_scheduled_on = clean_date(
+            incoming.get("demo_scheduled_on"), "demo_scheduled_on"
+        )
+    if incoming.get("technical_contact_name"):
+        lead.technical_contact_name = str(
+            incoming.get("technical_contact_name")
+        ).strip()[:120]
     if "next_follow_up_at" in incoming:
         lead.next_follow_up_at = clean_datetime(
             incoming.get("next_follow_up_at"), "next_follow_up_at"

@@ -56,7 +56,7 @@ def test_every_matrix_cell_is_positive_or_negative():
                 assert allows(user, object_key, action) is (action in granted)
     sdr = User.objects.get(username="sdr")
     assert allows(sdr, "deal", "C", lead=SimpleNamespace(stage="NEW")) is False
-    assert allows(sdr, "deal", "C", lead=SimpleNamespace(stage="SQL_READY")) is True
+    assert allows(sdr, "deal", "C", lead=SimpleNamespace(stage="SQL")) is True
 
 
 def test_managers_see_descendants_and_not_the_other_branch(client):
@@ -208,6 +208,24 @@ def test_privilege_changes_are_logged_without_crm_content():
     assert "private notebook" not in str(event.before_json)
 
 
+def test_audit_page_shows_only_changed_fields(client):
+    admin = make_user("ada", "ADMIN")
+    AuditEvent.objects.create(
+        actor=admin,
+        action="leads.lead.updated",
+        object_type="leads.lead",
+        object_id="1",
+        before_json={"stage": "NEW", "company_name": "Acme", "version": 1},
+        after_json={"stage": "CONTACTED", "company_name": "Acme", "version": 2},
+    )
+    client.force_login(admin)
+    page = client.get(reverse("core:audit"))
+    assert b"Stage" in page.content
+    assert b"NEW" in page.content
+    assert b"CONTACTED" in page.content
+    assert b"Acme" not in page.content
+
+
 def test_audit_rows_cannot_be_changed_through_user_paths(client):
     admin = make_user("ada", "ADMIN")
     event = AuditEvent.objects.create(
@@ -337,7 +355,7 @@ def test_sdr_can_create_a_deal_only_for_sql_ready():
     }
     with pytest.raises(PermissionDenied):
         create_deal(actor=sdr, data=payload)
-    lead.stage = "SQL_READY"
+    lead.stage = "SQL"
     lead.save(update_fields=("stage",))
     deal = create_deal(actor=sdr, data=payload)
     assert deal.lead_id == lead.pk

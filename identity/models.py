@@ -33,9 +33,10 @@ class Role(models.Model):
 
 
 class User(AbstractUser):
-    """Internal FluxCRM user. CRM customer records stay in the accounts app."""
+    """Internal GlideCRM user. CRM customer records stay in the accounts app."""
 
     email = models.EmailField(unique=True)
+    phone = models.CharField(max_length=40, blank=True, default="")
     display_name = models.CharField(max_length=150)
     timezone = models.CharField(max_length=64, default="America/Los_Angeles")
     manager = models.ForeignKey(

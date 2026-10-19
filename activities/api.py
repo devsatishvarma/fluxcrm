@@ -26,6 +26,13 @@ def activity_payload(activity):
         "external_id": activity.external_id,
         "activity_type": activity.activity_type,
         "subject": activity.subject,
+        "with_whom": activity.party_name(),
+        "with_contact_id": (
+            None if activity.with_contact_id is None else str(activity.with_contact_id)
+        ),
+        "with_lead_id": (
+            None if activity.with_lead_id is None else str(activity.with_lead_id)
+        ),
         "occurred_at": activity.occurred_at.isoformat(),
         "owner_id": activity.owner_id,
         "version": activity.version,

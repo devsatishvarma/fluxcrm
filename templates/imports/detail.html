@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Import preview · GlideCRM{% endblock %}
+{% block content %}
+  <p><a href="{% url 'imports:home' %}">Import</a></p>
+  <h1>{{ label }} import</h1>
+  <p>Status: {{ batch.get_status_display }}. If a row matches an existing record, the choice for this file is {{ batch.policy }}.</p>
+  {% if errors %}
+    <p role="alert">
+      {% for field, messages in errors.items %}{{ field }}: {{ messages|join:", " }} {% endfor %}
+    </p>
+  {% endif %}
+  <dl class="detail-fields">
+    <div><dt>Rows</dt><dd>{{ batch.summary.row_count }}</dd></div>
+    <div><dt>Ready to add</dt><dd>{{ batch.summary.create_count }}</dd></div>
+    <div><dt>Ready to update</dt><dd>{{ batch.summary.update_count }}</dd></div>
+    <div><dt>Ready to skip</dt><dd>{{ batch.summary.skip_count }}</dd></div>
+    <div><dt>Rows with errors</dt><dd>{{ batch.summary.error_count }}</dd></div>
+  </dl>
+  {% if batch.summary.failure %}
+    <p role="alert">The import stopped before every row was saved. Earlier groups were kept. {{ batch.summary.failure }}</p>
+  {% endif %}
+  {% if batch.summary.errors %}
+    <h2>Row errors</h2>
+    <table class="table">
+      <thead>
+        <tr><th scope="col">Row</th><th scope="col">What to fix</th></tr>
+      </thead>
+      <tbody>
+        {% for error in batch.summary.errors %}
+          <tr><td>{{ error.row }}</td><td>{{ error.message }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% if batch.summary.error_count > batch.summary.errors|length %}
+      <p>Showing the first {{ batch.summary.errors|length }} errors.</p>
+    {% endif %}
+  {% endif %}
+  {% if batch.status == "preview" %}
+    <form method="post" action="{% url 'imports:commit' batch.pk %}">
+      {% csrf_token %}
+      <button class="btn btn-primary" type="submit">Import valid rows</button>
+    </form>
+  {% endif %}
+  {% if batch.status == "committed" or batch.status == "incomplete" %}
+    <form method="post" action="{% url 'imports:rollback' batch.pk %}">
+      {% csrf_token %}
+      <button class="btn btn-outline-danger" type="submit">Roll back this import</button>
+    </form>
+    {% if batch.summary.conflicts %}
+      <p>{{ batch.summary.conflicts }} rows had changed after import and were left in place.</p>
+    {% endif %}
+  {% endif %}
+  {% if batch.status == "rolled_back" %}
+    <p>Rolled back {{ batch.summary.reverted }} rows. {{ batch.summary.conflicts }} rows had changed afterward and were left in place. The original import audit remains.</p>
+  {% endif %}
+{% endblock %}

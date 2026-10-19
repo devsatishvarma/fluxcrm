@@ -76,7 +76,9 @@ class SetupRequiredMiddleware:
         self.get_response = get_response
 
     def __call__(self, request: HttpRequest) -> HttpResponse:
-        if request.path.startswith(("/health", "/ready", "/setup", "/static")):
+        if request.path.startswith(
+            ("/health", "/ready", "/setup", "/static", "/brand/")
+        ):
             return self.get_response(request)
         from identity.models import User
 

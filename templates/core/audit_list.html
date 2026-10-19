@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Audit · FluxCRM{% endblock %}
+{% block title %}Audit · GlideCRM{% endblock %}
 {% block content %}
   {% include "core/_settings_nav.html" %}
   <h1>Audit</h1>
@@ -35,7 +35,20 @@
           <td>{{ event.object_type }} {{ event.object_id }}</td>
           <td>{{ event.actor.display_name|default:"—" }}</td>
           {% if show_snapshots %}
-            <td><code>{{ event.after_json }}</code></td>
+            <td>
+              {% if event.changes %}
+                <ul class="audit-changes">
+                  {% for change in event.changes %}
+                    <li>
+                      <span class="audit-label">{{ change.label }}</span>
+                      {{ change.before }} → {{ change.after }}
+                    </li>
+                  {% endfor %}
+                </ul>
+              {% else %}
+                —
+              {% endif %}
+            </td>
           {% endif %}
         </tr>
       {% empty %}

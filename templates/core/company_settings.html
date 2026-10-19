@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-{% block title %}Company · FluxCRM{% endblock %}
+{% block title %}Company · GlideCRM{% endblock %}
 {% block content %}
   {% include "core/_settings_nav.html" %}
   <h1>Company settings</h1>
   <form method="post" enctype="multipart/form-data">
     {% csrf_token %}
-    {{ form.as_p }}
+    {% include "crm/_form_fields.html" %}
     <button class="btn btn-primary" type="submit">Save company settings</button>
   </form>
 {% endblock %}

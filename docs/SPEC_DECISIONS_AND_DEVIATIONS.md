@@ -1,4 +1,4 @@
-# FluxCRM Specification Decisions and Deviations
+# GlideCRM Specification Decisions and Deviations
 
 ## Purpose
 
@@ -64,7 +64,7 @@ here before implementing it.
 - Phase 0 must test the combined dependency lock for version conflicts,
   platform compatibility, install size, and known vulnerabilities.
 - The current project metadata name is `agents`; whether the distribution name
-  should become `fluxcrm` is a Phase 0 design decision and must not be changed
+  should become `glidecrm` is a Phase 0 design decision and must not be changed
   silently.
 - **Affected phase:** 0
 - **Specification impact:** The architecture only names CRM dependencies. This
@@ -113,8 +113,8 @@ here before implementing it.
 
 - **Date/status:** 2026-10-11 — Confirmed
 - Rename the Python distribution from the unrelated `agents` value to
-  `fluxcrm`.
-- Use `fluxcrm` as the Django project/settings package and keep the architecture
+  `glidecrm`.
+- Use `glidecrm` as the Django project/settings package and keep the architecture
   app boundaries as top-level Django apps.
 - Preserve all existing AI dependencies while adding locked CRM and test
   dependencies.
@@ -132,7 +132,7 @@ here before implementing it.
 - The `accounts` app remains reserved for CRM customer and prospect records.
 - `AUTH_USER_MODEL` is `identity.User`, with a manager relationship and an
   Admin or Standard User role. Team membership remains a Phase 6 addition.
-- FluxCRM Admin is an application role, not Django staff/superuser access.
+- GlideCRM Admin is an application role, not Django staff/superuser access.
   The Django admin route is not exposed; company and user changes use audited
   application services.
 - Development databases created before this user model must be recreated.
@@ -413,6 +413,518 @@ here before implementing it.
 - **Approval source:** User request to drop decimals, put the currency symbol
   in front, and use thousands separators.
 
+### D-023 — Reports and dashboards
+
+- **Date/status:** 2026-10-11 — Implemented with Phase 7
+- **Decision:** Reports total the same lead, deal, account, activity, and
+  task records the viewer can already read. An administrator opens reports
+  through the report Administer grant. A blank date range includes every
+  record. Forecast groups open deals by the quarter of the expected close
+  date and keeps deals with no expected close date visible as Unscheduled.
+  Date bounds are inclusive viewer-local days. Each report names the companies
+  or accounts behind the total. A parent account rollup adds
+  each descendant’s open amount once, and the company total is the sum of
+  own amounts. If the prior period has no wins, the comparison shows N/A.
+  Export writes `report.exported` with the actor, filters, fields, and row
+  count, and stores no CRM field values. The dashboard query budget is 30.
+  Sales-cycle median and time-in-stage reports stay out of this release.
+- **Affected phases:** 7
+- **Specification impact:** Section 8 of `architecture-MVP-spec.md`.
+- **Approval source:** Phase 7 gate in the delivery plan, using the January
+  fiscal year and existing record scope.
+
+### D-024 — CSV import templates
+
+- **Date/status:** 2026-10-11 — Implemented with Phase 8
+- **Decision:** Leads, accounts, and contacts import from UTF-8 CSV.
+  The template files are `imports/csv_templates/leads.csv`,
+  `accounts.csv`, and `contacts.csv`. Lines starting with `#` say whether
+  each column is required or optional and which key or format to use.
+  The sample row is skipped while `row_action` is `example`. Preview writes
+  no lead, account, or contact. A match uses `external_id` first, then an
+  exact email or an exact account domain or name. Skip, Update, and Create
+  are the only policies. Commit saves 200 rows at a time. Reusing a retry
+  key does not insert those rows again. Rollback soft-deletes rows that
+  were not edited later and leaves edited rows in place. Workbooks are
+  not accepted yet.
+- **Affected phases:** 8
+- **Specification impact:** Section 9 of `architecture-MVP-spec.md`.
+- **Approval source:** User request for lead, contact, and account CSV
+  templates, and the Phase 8 gate.
+
+### D-025 — Stage and conversion fields
+
+- **Date/status:** 2026-10-11 — Implemented
+- **Decision:** A stage form shows only the fields that destination requires,
+  and an asterisk marks each one. Contacted, nurturing, unqualified,
+  archived, SQL Ready, and reactivation still require the note, reason, or
+  follow-up that gives the stage its meaning. Qualified still requires an
+  amount and an expected close date. Budget, Authority, Need, and Timeline
+  stay on every deal and are optional: set each one when it is known and
+  leave Unknown when it is not. They do not block a stage change. Discovery
+  requires a note. Closed Won requires
+  a final amount and close date. Closed Lost and Closed Hold require a
+  reason from the matching list. There is no separate approval before a
+  stage change or a close. The board does not collect those fields; the
+  record page does. Manual conversion requires an account name and type
+  when creating an account. A confirmation is asked only when an account
+  or contact already matches.
+- **Affected phases:** 3 and 5
+- **Specification impact:** Deal stage table in section 4 of
+  `architecture-MVP-spec.md`.
+- **Approval source:** User request to mark required fields and drop
+  stage-change fields that do not change the decision.
+
+### D-026 — User email and phone
+
+- **Date/status:** 2026-10-12 — Implemented
+- **Decision:** An internal user keeps a required email and an optional phone.
+  Password reset and invitation instructions are addressed to that email.
+  Phone is stored for later use and is not a delivery channel. Delivery
+  still follows D-010: the development backend writes the message to the
+  application log until a production mail provider is selected.
+- **Affected phase:** 1
+- **Specification impact:** User row in section 3 of
+  `architecture-MVP-spec.md`.
+- **Approval source:** User request to store email and phone on the user.
+
+### D-027 — Release gate before a cloud host
+
+- **Date/status:** 2026-10-12 — In progress
+- **Decision:** The cloud provider, managed MySQL service, and off-host backup
+  target stay unselected, as D-006 required. No production data moves until
+  those are named. The release gate that must pass first is in place: the
+  release settings profile passes `check --deploy`, a backup contains the
+  database and uploads and is encrypted before it leaves the machine, a
+  restore is proven on an empty database, and a rollback restores that backup
+  plus the previous image. Satish, the company administrator, is the interim
+  owner of every operational alert until a second incident contact is named.
+  HSTS stays off until HTTPS works on the final host.
+- **Affected phase:** 9
+- **Specification impact:** Uses the cloud-mode and backup rules in section 11
+  of `architecture-MVP-spec.md` without choosing a vendor.
+- **Approval source:** User request to proceed with the next step.
+
+### D-028 — 500,000-lead list timing
+
+- **Date/status:** 2026-10-12 — Measured on the local Docker MySQL 8.4
+- **Decision:** The cloud host stays unselected. The 500,000-row list
+  measurement runs on this machine, in database `glidecrm_perf`, and does not
+  write to the application database. The open lead list and the New-stage
+  list must stay under 2 seconds. The first measurement was 25.808 seconds
+  and 8.363 seconds because the page sorted every column of the full set.
+  The list now resolves the page by primary key, then loads those rows and
+  their owners. Indexes `leads_open_recent_idx` and `leads_open_stage_idx`
+  cover the open-list filters and order. The remeasure was 0.400 seconds for
+  the open list and 0.180 seconds for New. The lead board still loads every
+  matching lead and is not this measurement.
+- **Affected phases:** 2 and 9
+- **Specification impact:** Confirms the section 11 list target for the paged
+  lead list. No cache or rollup table was added.
+- **Approval source:** User asked to keep hardening on this machine and
+  include the 500,000-record list measurement.
+
+### D-029 — Product name GlideCRM
+
+- **Date/status:** 2026-10-12 — Confirmed
+- **Decision:** The product, page titles, Python distribution, and Django
+  project package are GlideCRM / `glidecrm`. This replaces the name chosen in
+  D-008. The application database, database user, health-check service name,
+  and backup confirmation token use `glidecrm` as well.
+- **Rationale:** Flux CRM is an existing product, so this CRM cannot keep that
+  name.
+- **Affected phases:** 0–9
+- **Specification impact:** The package boundary in D-008 stays the same. Only
+  the name changes. App modules such as leads, accounts, and sales are
+  unchanged.
+- **Approval source:** User request to replace Flux with Glide everywhere,
+  including the code.
+- **Migration/rollback impact:** The local application database and its login
+  were renamed in place. Existing rows were not rewritten.
+
+### D-030 — Deal confidence follows win probability
+
+- **Date/status:** 2026-10-12 — Confirmed
+- **Decision:** Deal confidence is High when win probability is 80% or more,
+  Medium from 40% up to 80%, and Low under 40%. The system sets confidence
+  whenever a deal is saved or its stage changes. The person can change the
+  win probability and cannot set confidence directly. The Deals page shows
+  deals by stage and confidence under Pipeline, deals by age and quarter
+  under Timing, and deals by sales owner under Ownership.
+- **Rationale:** Confidence was a separate choice, so it could disagree with
+  the probability used for the forecast.
+- **Affected phases:** 4 and 7
+- **Specification impact:** Replaces the user-entered confidence in D-015.
+  The stored values remain High, Medium, and Low.
+- **Approval source:** User request to derive confidence from win probability
+  and to group the new deal reports on the Deals page.
+- **Migration/rollback impact:** Existing deals are updated from their current
+  probability. The previous confidence choice is not kept.
+
+### D-031 — Account and contact edit, with export ids
+
+- **Date/status:** 2026-10-12 — Confirmed
+- **Decision:** An account and a contact can be edited. Name and type are
+  required on an account. First name and last name are required on a contact,
+  and the account is required when editing a contact. GlideCRM assigns the
+  record id. That id is not shown and is not typed. Lead, account, and contact
+  exports include it. A contact export also includes the account id.
+- **Rationale:** Those records could be added but not corrected, and an export
+  could not identify them by the application id.
+- **Affected phases:** 5 and 8
+- **Specification impact:** Account and contact screens gain edit. Export adds
+  the UUID columns beside the existing external id.
+- **Approval source:** User request to edit accounts and contacts, hide the
+  assigned ids, and include those ids in the lead, account, and contact exports.
+- **Migration/rollback impact:** No stored data changes. Existing ids stay as
+  they are.
+
+### D-032 — Client account type and industry labels
+
+- **Date/status:** 2026-10-12 — Confirmed
+- **Decision:** Account type gains Client (`CLIENT`). The industry list,
+  shared by leads and accounts, gains Insurance, Automotive, Hospitality &
+  Travel, and Technology & SaaS. The Retail label becomes Retail &
+  E-Commerce. The stored key stays `RETAIL`.
+- **Rationale:** The lists did not cover these businesses, and Retail was
+  narrower than the work being tracked.
+- **Affected phases:** 2 and 5
+- **Specification impact:** Adds one account type and four industry keys, and
+  renames the Retail label. Existing Retail rows keep their key.
+- **Approval source:** User request to add Client and the industry names, and
+  to rename Retail.
+- **Migration/rollback impact:** New picklist rows are added. The Retail
+  label is rewritten. Account rows are not rewritten.
+
+### D-033 — Owner name on records and imports
+
+- **Date/status:** 2026-10-12 — Confirmed
+- **Decision:** Leads, accounts, contacts, deals, activities, and tasks show
+  the owner's name. Lead, account, and contact import and export use that
+  name for the owner column. The login username is not accepted in that
+  column. A blank owner still assigns the row to the person importing it.
+  Two active users with the same name are rejected.
+- **Rationale:** The name on the user is what people type and read. The
+  login username is a separate sign-in value.
+- **Affected phases:** 2, 5, and 8
+- **Specification impact:** The owner column in the CSV templates names the
+  person. Screens that already showed that name stay as they are.
+- **Approval source:** User request to show the owner's name on records and
+  to match import owners by that name.
+- **Migration/rollback impact:** No stored owner changes. Existing rows keep
+  the same owner.
+
+### D-034 — Client accounts become Customer
+
+- **Date/status:** 2026-10-12 — Confirmed
+- **Decision:** Client and Customer are one account type, Customer
+  (`CUSTOMER`). Accounts stored as Client are rewritten to Customer. Import
+  rollback snapshots that still say Client are rewritten the same way. The
+  audit log is left as it was written.
+- **Rationale:** The two types described the same relationship.
+- **Affected phases:** 5
+- **Specification impact:** Removes Client from the account type list.
+- **Approval source:** User request to merge Client and Customer and name
+  the result Customer.
+- **Migration/rollback impact:** Existing Client rows become Customer. The
+  reverse does not restore the Client value.
+
+### D-035 — Delete requires a reason
+
+- **Date/status:** 2026-10-12 — Confirmed
+- **Decision:** Accounts and contacts can be soft-deleted from their pages.
+  The person must enter a reason of at least 3 characters. An account that
+  still has child accounts, contacts, or deals cannot be deleted. A contact
+  who is still the primary contact on a deal, or who other contacts report
+  to, cannot be deleted. Leads, deals, activities, and tasks already required
+  a reason; those delete actions stay on the record page.
+- **Rationale:** A delete should be explainable, and related records should
+  not be removed along with the parent.
+- **Affected phases:** 5
+- **Specification impact:** Account and contact soft delete requires a reason
+  and refuses while dependent records remain.
+- **Approval source:** User request to add delete for contacts, accounts,
+  deals, and similar records, and to require a reason first.
+- **Migration/rollback impact:** No data change. Deleted rows stay in the
+  database with the reason and the deletion time.
+
+### D-036 — Delete sits at the bottom and needs one confirmation
+
+- **Date/status:** 2026-10-12 — Confirmed
+- **Decision:** Delete for a lead, deal, account, contact, activity, or task
+  is at the bottom of that record’s page. The person enters a reason and
+  checks one confirmation. The record is removed from lists only after both.
+- **Rationale:** Delete should be available without sitting above the record,
+  and a single click should not be enough. One checkbox is the confirmation.
+- **Affected phases:** 5
+- **Specification impact:** Account and contact delete, and the existing
+  lead, deal, activity, and task delete actions, require one confirmation
+  in addition to the reason.
+- **Approval source:** User request to move delete to the bottom of the
+  screen and add a double confirmation.
+- **Migration/rollback impact:** No data change.
+
+### D-037 — Lead stages for an IT sales flow
+
+- **Date/status:** 2026-10-12 — Confirmed
+- **Decision:** Lead stages are New, Contacted, MQL, Demo/POC Scheduled,
+  SQL, Nurturing, Unqualified, and Archived. SQL Ready is renamed to SQL.
+  SQL Reactivation is merged into Nurturing with nurture reason Reactivation.
+  Demo/POC Scheduled requires a scheduled date and a technical contact name.
+  MQL still requires a qualification note. Company size, current tools,
+  budget range, and timeline on that move are optional. Unqualified uses
+  No Budget, No Technical Fit, Wrong Decision-Maker, Security-Compliance
+  Mismatch, or Timing. Archived is for a lead that went silent. Unqualified
+  is for a lead that is not a fit. Reopening Unqualified stays
+  administrator-only.
+- **Rationale:** The previous list skipped the demo step used in IT lead
+  flow and split reactivation into its own stage.
+- **Affected phases:** 3
+- **Specification impact:** Lead state machine, stage gates, and the
+  starter nurture, disqualification, tools, budget, and timeline lists.
+- **Approval source:** User request to update lead stages, map current
+  records, and update the database.
+- **Migration/rollback impact:** Stored SQL Ready becomes SQL. Stored SQL
+  Reactivation becomes Nurturing with reason Reactivation when that reason
+  was blank. No Authority becomes Wrong Decision-Maker. No Fit, No Need,
+  bad data, duplicate, territory, and other old reasons become No Technical
+  Fit. Stage history for leads is rewritten the same
+  way. The audit log is left as it was written. The reverse does not
+  restore the old stage keys.
+
+### D-038 — Deal stages for an IT sales flow
+
+- **Date/status:** 2026-10-12 — Confirmed
+- **Decision:** Deal stages are New, Discovery, Qualified, Technical
+  Evaluation, Proposal, Negotiation, Closing, Closed Won, Closed Lost, and
+  Closed Hold. Contacted is renamed to Discovery so it does not collide with
+  the lead stage of the same name. The previous Discovery stage, which sat
+  after Qualified, becomes Technical Evaluation. That stage requires a POC
+  or trial start date, a technical stakeholder name, and a success-criteria
+  note. Negotiation requires a terms note and an expected close date.
+  Closed Lost reasons are Price, Competitor, No Technical Fit, Timing, and
+  Lost to Internal Build. Closed Hold is unchanged, including the reopen
+  reason. New remains the landing stage before Discovery.
+- **Rationale:** IT deals need a technical evaluation step, and Discovery
+  should mean requirements gathering rather than a second contact log.
+- **Affected phases:** 3
+- **Specification impact:** Deal state machine, stage gates, default
+  probabilities, and the Closed Lost reason list.
+- **Approval source:** User request to update deal stages and fix current
+  records.
+- **Migration/rollback impact:** Stored Discovery becomes Technical
+  Evaluation first, then stored Contacted becomes Discovery. Requirements
+  gap becomes No Technical Fit. Internally cancelled becomes Lost to
+  Internal Build. No decision becomes Timing. Relationship becomes
+  Competitor. On Closed Lost only, Budget becomes Price and Other becomes
+  No Technical Fit. Hold reasons are not rewritten. Stage history for deals
+  is rewritten the same way. Lead stages are not rewritten. The audit log
+  is left as it was written. The reverse does not restore the old stage
+  keys.
+
+### D-039 — Demo lead stage label
+
+- **Date/status:** 2026-10-12 — Confirmed
+- **Decision:** The lead stage Demo/POC Scheduled is labeled Demo. The
+  stored key stays DEMO_POC. Moving there still requires a demo date and a
+  technical contact name.
+- **Rationale:** The shorter name is what should appear on the lead screens.
+- **Affected phases:** 3
+- **Specification impact:** Lead stage label only.
+- **Approval source:** User request to rename the stage and update the screens.
+- **Migration/rollback impact:** The picklist label changes. Lead rows and
+  stage history are not rewritten. The reverse restores the previous label.
+
+### D-040 — POC/Tech Evaluation deal stage label
+
+- **Date/status:** 2026-10-12 — Confirmed
+- **Decision:** The deal stage Technical Evaluation is labeled POC/Tech
+  Evaluation. The stored key stays TECHNICAL_EVALUATION. The required fields
+  stay a POC or trial start date, a technical stakeholder name, and a
+  success-criteria note.
+- **Rationale:** The name on the deal screens should say POC/Tech Evaluation.
+- **Affected phases:** 3
+- **Specification impact:** Deal stage label only.
+- **Approval source:** User request to rename the stage and update the screens
+  and Help.
+- **Migration/rollback impact:** The picklist label changes. Deal rows and
+  stage history are not rewritten. The reverse restores the previous label.
+
+### D-041 — Deals on an account require a contact
+
+- **Date/status:** 2026-10-12 — Confirmed
+- **Decision:** A deal can be added from an account as well as from a lead.
+  An account deal requires one contact that already belongs to that account.
+  From the Deals page, the form asks whether the deal is linked to a lead
+  or an account, then lists leads or that account’s contacts.
+  Amount, win probability, confidence, and stage rules match a deal on a
+  lead. Closing an account deal does not convert a lead. The account and
+  the contact stay on the deal. The contact can be changed to another
+  contact on the same account.
+- **Rationale:** Account work needs the same deal pipeline, tied to a
+  person on that account.
+- **Affected phases:** 3 and 5
+- **Specification impact:** Deal source and the New-stage gate.
+- **Approval source:** User request to add deals on an account through a
+  contact, with the rest of the deal behavior unchanged.
+- **Migration/rollback impact:** No schema change. Existing lead deals and
+  converted deals stay as they are. Removing the screen hides the path;
+  stored account deals remain valid.
+
+### D-042 — Contact phones copy from the lead
+
+- **Date/status:** 2026-10-12 — Confirmed
+- **Decision:** A contact stores a work phone and a mobile phone. Converting
+  a lead, including when a deal closes, copies the lead’s title, email,
+  work phone, and mobile phone onto the new contact. An existing contact
+  keeps a phone it already has. A blank phone is filled from the lead.
+- **Rationale:** The person details on the lead should still be on the
+  contact after conversion.
+- **Affected phases:** 5
+- **Specification impact:** Contact fields and lead conversion.
+- **Approval source:** User request to carry lead details, including phone
+  numbers, onto the contact.
+- **Migration/rollback impact:** Two optional text columns on the contact.
+  Existing contacts keep blank phones. The reverse drops the columns.
+
+### D-043 — Wins use the actual close date
+
+- **Date/status:** 2026-10-12 — Confirmed
+- **Decision:** A deal stores an actual close date, separate from the
+  expected close date. Closed Won requires that date and the final amount.
+  Won this quarter, won this year, and the won rows of won/lost use that
+  date. They do not use the day the stage changed to Closed Won. Deals
+  already won start with the day the stage was moved, and that date can
+  be corrected.
+- **Rationale:** A deal can be marked won later than the day it closed.
+- **Affected phases:** 3 and 7
+- **Specification impact:** Deal close date and dashboard win periods.
+- **Approval source:** User request to track the actual close date instead
+  of the Closed Won stage change.
+- **Migration/rollback impact:** One optional date column. Existing wins
+  are filled from the Closed Won stage change, in America/Los_Angeles.
+  The reverse clears and drops the column.
+
+### D-044 — Optional address on leads, accounts, and contacts
+
+- **Date/status:** 2026-10-14 — Confirmed
+- **Decision:** A lead, an account, and a contact each store one optional
+  address: street, city, state, postal code, and country. None of those
+  parts is required. The account uses this one address. Converting a lead
+  copies the address onto a new account and a new contact. An existing
+  account or contact keeps an address it already has. A blank address is
+  filled from the lead. Import templates include the same columns, and
+  the state column is named region.
+- **Rationale:** The address was missing from the forms even where the
+  lead already had a place to store it.
+- **Affected phases:** 2, 5, and 8
+- **Specification impact:** Lead, account, and contact address fields, and
+  lead conversion.
+- **Approval source:** User request to add optional address information
+  for leads, accounts, and contacts, then update import and help.
+- **Migration/rollback impact:** The lead address column already existed.
+  Account and contact gain one optional JSON address, empty until entered.
+  The reverse drops those two columns.
+
+### D-045 — Phone numbers use (XXX) XXX-XXXX
+
+- **Date/status:** 2026-10-14 — Confirmed
+- **Decision:** A phone on a lead, account, contact, or user is stored and
+  shown as (XXX) XXX-XXXX. A blank phone stays blank. Ten digits are
+  accepted, and an 11-digit number that starts with 1 drops that leading
+  1. Import uses the same format.
+- **Rationale:** Phone numbers were entered and shown in mixed formats.
+- **Affected phases:** 2, 5, and 6
+- **Specification impact:** Lead, account, contact, and user phone fields.
+- **Approval source:** User request to use (XXX) XXX-XXXX on input and
+  display.
+- **Migration/rollback impact:** Existing 10-digit numbers are rewritten
+  to that format. The reverse leaves the rewritten values in place.
+
+### D-046 — Lead and contact email is required
+
+- **Date/status:** 2026-10-14 — Confirmed
+- **Decision:** A lead and a contact each require an email address. A blank
+  email is rejected on the form, the API, conversion, and import. Email
+  stays normalized for matching and is not unique.
+- **Rationale:** Every lead and contact needs an address that can be used
+  to match and follow up.
+- **Affected phases:** 2, 5, and 8
+- **Specification impact:** Lead and contact `email` are required.
+- **Approval source:** User request to make email mandatory for leads and
+  contacts.
+- **Migration/rollback impact:** New and edited records must include an
+  email. A record saved earlier with a blank email stays until it is
+  edited, and that edit must supply an email. The reverse allows a blank
+  email again.
+
+### D-047 — Activities record who, when, and notes
+
+- **Date/status:** 2026-10-16 — Confirmed
+- **Decision:** A logged activity is a call, an email, or a meeting. It
+  requires who it was with and when it happened. Notes are optional. Note
+  is not an activity type. A task has optional notes, and an open or held
+  task can be edited. Edit sits next to Complete. The task delete button
+  sits on the same line as the confirmation.
+- **Rationale:** Follow-up needed the person, the time, and notes, and
+  tasks could not be corrected after they were added.
+- **Affected phases:** 4
+- **Specification impact:** Activity type, `with_whom`, activity notes, and
+  task edit.
+- **Approval source:** User request to edit tasks, capture activity notes,
+  who the activity was with, and when it happened, and to remove Note as
+  an activity type.
+- **Migration/rollback impact:** Activities gain `with_whom`, blank until
+  entered. A row saved earlier as Note stays readable. The reverse drops
+  `with_whom`.
+
+### D-048 — Task actions stay on the Tasks screen
+
+- **Date/status:** 2026-10-16 — Confirmed
+- **Decision:** The Tasks list shows the title in bold. A lead, account, or
+  deal can complete or edit a task. Hold, resume, snooze, cancel, and
+  delete stay on the Tasks screen. Task notes are not shown on a deal.
+  Delete sits next to Edit on an activity.
+- **Rationale:** The deal page repeated task controls and notes that belong
+  on the Tasks screen.
+- **Affected phases:** 4
+- **Specification impact:** Task list, record timeline, and activity delete.
+- **Approval source:** User request to simplify the deal page and keep task
+  controls on the Tasks screen.
+- **Migration/rollback impact:** No data change.
+
+### D-049 — An activity is with a contact or a lead
+
+- **Date/status:** 2026-10-16 — Confirmed
+- **Decision:** Who an activity was with is one existing contact or one
+  existing lead. A name that is not already a contact or lead is not
+  accepted. Create that person first, then choose them. A name saved
+  earlier stays visible until the activity is edited, and a unique saved
+  name is linked when it matches one contact or one lead.
+- **Rationale:** The person on an activity has to be someone the CRM
+  already knows, so the follow-up stays attached to a record.
+- **Affected phases:** 4
+- **Specification impact:** Activity `with_whom` is a contact or a lead.
+- **Approval source:** User request to link “with whom” to a contact or
+  lead and to require that person to be created first.
+- **Migration/rollback impact:** Activities gain `with_contact` and
+  `with_lead`. A unique matching name is linked. The reverse drops both
+  links and keeps the saved name.
+
+### D-050 — Note is an activity type again
+
+- **Date/status:** 2026-10-16 — Confirmed
+- **Decision:** A logged activity can be a call, an email, a meeting, or
+  a note. It still requires who it was with and when it happened. The
+  notes field stays optional on every activity.
+- **Rationale:** A note is a follow-up of its own, separate from the
+  notes written on a call, email, or meeting.
+- **Affected phases:** 4
+- **Specification impact:** Activity type includes Note.
+- **Approval source:** User request to add notes back to activities.
+- **Migration/rollback impact:** No data change. Note was already stored
+  for older rows.
+
 ## Starter taxonomy — version 1
 
 The user approved a standard, admin-editable starter set. Keys are stable
@@ -437,11 +949,15 @@ entry.
 ### Industries
 
 - `INFORMATION_TECHNOLOGY` — Information Technology
+- `TECHNOLOGY_SAAS` — Technology & SaaS
 - `PROFESSIONAL_SERVICES` — Professional Services
 - `HEALTHCARE` — Healthcare
 - `FINANCIAL_SERVICES` — Financial Services
+- `INSURANCE` — Insurance
 - `MANUFACTURING` — Manufacturing
-- `RETAIL` — Retail
+- `AUTOMOTIVE` — Automotive
+- `RETAIL` — Retail & E-Commerce
+- `HOSPITALITY_TRAVEL` — Hospitality & Travel
 - `EDUCATION` — Education
 - `GOVERNMENT` — Government
 - `NONPROFIT` — Nonprofit
@@ -465,30 +981,51 @@ entry.
 - `MQL_NOT_SALES_READY` — Marketing-qualified but not sales-ready
 - `NO_RESPONSE` — Unable to re-engage
 - `FUTURE_EVALUATION` — Evaluating in a future period
+- `REACTIVATION` — Reactivation
 - `OTHER` — Other
 
 ### Disqualification reasons
 
-- `BAD_DATA` — Invalid or unusable data
-- `DUPLICATE` — Duplicate record
-- `NO_FIT` — Outside ideal customer profile
-- `NO_NEED` — No relevant need
-- `NO_AUTHORITY` — No access to authority
-- `NO_BUDGET` — No viable budget
-- `OUTSIDE_TERRITORY` — Outside served territory
+- `NO_BUDGET` — No Budget
+- `NO_TECHNICAL_FIT` — No Technical Fit
+- `WRONG_DECISION_MAKER` — Wrong Decision-Maker
+- `SECURITY_COMPLIANCE` — Security-Compliance Mismatch
+- `TIMING` — Timing
+
+### Current tools
+
+- `MICROSOFT_365` — Microsoft 365
+- `AZURE` — Microsoft Azure
+- `AWS` — Amazon Web Services
+- `GOOGLE_CLOUD` — Google Cloud
+- `ON_PREMISES` — On-premises
+- `HYBRID` — Hybrid
+- `UNKNOWN` — Unknown
 - `OTHER` — Other
+
+### Budget ranges
+
+- `UNDER_25K` — Under $25,000
+- `25K_100K` — $25,000–$100,000
+- `100K_250K` — $100,000–$250,000
+- `250K_PLUS` — $250,000 or more
+- `UNKNOWN` — Unknown
+
+### Buying timelines
+
+- `IMMEDIATE` — Immediate
+- `THIS_QUARTER` — This quarter
+- `NEXT_QUARTER` — Next quarter
+- `THIS_YEAR` — This year
+- `UNKNOWN` — Unknown
 
 ### Closed Lost reasons
 
 - `PRICE` — Price
-- `COMPETITOR` — Competitor selected
-- `NO_DECISION` — No decision
-- `BUDGET` — Budget unavailable
+- `COMPETITOR` — Competitor
+- `NO_TECHNICAL_FIT` — No Technical Fit
 - `TIMING` — Timing
-- `REQUIREMENTS_GAP` — Requirements gap
-- `RELATIONSHIP` — Relationship/incumbent
-- `INTERNAL_CANCELLED` — Internally cancelled
-- `OTHER` — Other
+- `LOST_TO_INTERNAL_BUILD` — Lost to Internal Build
 
 ### Closed Hold reasons
 
@@ -505,19 +1042,20 @@ entry.
 These implement the architecture's default gates and remain admin-editable:
 
 - `NEW`: title, owner, exactly one source Lead or Account, and deal type.
-- `CONTACTED`: logged contact attempt or a next task.
-- `QUALIFIED`: amount/currency; expected close date or target quarter; Need not
-  Unknown; Authority at least Partial.
-- `DISCOVERY`: primary contact, or explicit not-yet-identified reason;
-  discovery activity; all BANT statuses reviewed.
-- `PROPOSAL`: proposal amount, expected close date, and proposal-sent
-  activity/date.
-- `NEGOTIATION`: decision process and next step; competitor when known.
-- `CLOSING`: close plan, confirmed target close date, and latest next task due
-  date.
-- `CLOSED_WON`: Won outcome, final amount, and close date.
-- `CLOSED_LOST`: Lost outcome and loss reason.
-- `CLOSED_HOLD`: Hold outcome and hold reason; revisit date remains optional.
+- `DISCOVERY`: a note on the requirements and needs gathered.
+- `QUALIFIED`: amount and expected close date. Budget, Authority, Need, and
+  Timeline stay optional.
+- `TECHNICAL_EVALUATION`: POC or trial start date, technical stakeholder
+  name, and a success-criteria note.
+- `PROPOSAL`: proposal amount, expected close date, and a note that the
+  proposal was sent.
+- `NEGOTIATION`: a note on terms or redlines, and the expected close date.
+- `CLOSING`: a sign-off note and the expected close date.
+- `CLOSED_WON`: Won outcome, final amount, and the actual close date. Wins
+  are counted on that date, not the day the stage changed.
+- `CLOSED_LOST`: Lost outcome and a loss reason from Price, Competitor, No
+  Technical Fit, Timing, or Lost to Internal Build.
+- `CLOSED_HOLD`: Hold outcome and hold reason. Reopening needs a reason.
 
 ## Roadmap clarifications and improvisations
 

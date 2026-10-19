@@ -12,7 +12,7 @@ class Lead(AuditedRecord):
     first_name = models.CharField(max_length=80)
     last_name = models.CharField(max_length=80)
     title = models.CharField(max_length=120, blank=True)
-    email = models.EmailField(blank=True)
+    email = models.EmailField()
     email_normalized = models.CharField(max_length=254, blank=True, db_index=True)
     email_domain = models.CharField(max_length=253, blank=True)
     work_phone = models.CharField(max_length=40, blank=True)
@@ -24,6 +24,9 @@ class Lead(AuditedRecord):
     industry = models.CharField(max_length=64, blank=True)
     products_services = models.CharField(max_length=255, blank=True)
     company_size_band = models.CharField(max_length=64, blank=True)
+    current_tools = models.CharField(max_length=64, blank=True)
+    budget_range = models.CharField(max_length=64, blank=True)
+    buying_timeline = models.CharField(max_length=64, blank=True)
     employee_count = models.PositiveIntegerField(null=True, blank=True)
     annual_revenue = models.DecimalField(
         max_digits=18,
@@ -44,6 +47,8 @@ class Lead(AuditedRecord):
     nurture_reason = models.CharField(max_length=64, blank=True)
     disqualification_reason = models.CharField(max_length=64, blank=True)
     next_follow_up_at = models.DateTimeField(null=True, blank=True)
+    demo_scheduled_on = models.DateField(null=True, blank=True)
+    technical_contact_name = models.CharField(max_length=120, blank=True)
     notes = models.TextField(blank=True)
     converted_at = models.DateTimeField(null=True, blank=True)
     converted_account = models.ForeignKey(
@@ -66,6 +71,14 @@ class Lead(AuditedRecord):
             models.Index(fields=("owner", "stage", "created_at")),
             models.Index(fields=("owner", "updated_at")),
             models.Index(fields=("deleted_at", "owner")),
+            models.Index(
+                fields=("deleted_at", "converted_at", "created_at", "id"),
+                name="leads_open_recent_idx",
+            ),
+            models.Index(
+                fields=("deleted_at", "converted_at", "stage", "created_at", "id"),
+                name="leads_open_stage_idx",
+            ),
             models.Index(fields=("stage", "created_at")),
             models.Index(fields=("next_follow_up_at",)),
             models.Index(fields=("rating", "created_at")),

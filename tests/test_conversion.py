@@ -72,13 +72,19 @@ def test_account_and_contact_hierarchies_cannot_cycle():
 
     boss = create_contact(
         actor=user,
-        data={"first_name": "Bo", "last_name": "Boss", "account": parent.pk},
+        data={
+            "first_name": "Bo",
+            "last_name": "Boss",
+            "email": "bo.boss@example.test",
+            "account": parent.pk,
+        },
     )
     report = create_contact(
         actor=user,
         data={
             "first_name": "Ri",
             "last_name": "Report",
+            "email": "ri.report@example.test",
             "account": parent.pk,
             "reports_to": boss.pk,
         },
@@ -90,7 +96,12 @@ def test_account_and_contact_hierarchies_cannot_cycle():
     )
     outsider = create_contact(
         actor=user,
-        data={"first_name": "Out", "last_name": "Side", "account": other.pk},
+        data={
+            "first_name": "Out",
+            "last_name": "Side",
+            "email": "out.side@example.test",
+            "account": other.pk,
+        },
     )
     with pytest.raises(ValidationError):
         set_reports_to(actor=user, contact=report, manager_id=outsider.pk)
@@ -107,11 +118,21 @@ def test_one_primary_contact_under_concurrent_requests():
     )
     first = create_contact(
         actor=user,
-        data={"first_name": "Ann", "last_name": "One", "account": account.pk},
+        data={
+            "first_name": "Ann",
+            "last_name": "One",
+            "email": "ann.one@example.test",
+            "account": account.pk,
+        },
     )
     second = create_contact(
         actor=user,
-        data={"first_name": "Bea", "last_name": "Two", "account": account.pk},
+        data={
+            "first_name": "Bea",
+            "last_name": "Two",
+            "email": "bea.two@example.test",
+            "account": account.pk,
+        },
     )
     barrier = threading.Barrier(2)
     errors = []
@@ -250,7 +271,7 @@ def test_reparented_deals_keep_values_and_history():
         actor=user,
         deal_id=open_deal.pk,
         version=open_deal.version,
-        to_stage="CONTACTED",
+        to_stage="DISCOVERY",
         reason="Introduced the team",
     )
     history_before = list(deal_history(open_deal).values_list("to_stage", "reason"))
@@ -267,7 +288,7 @@ def test_reparented_deals_keep_values_and_history():
     assert open_deal.lead_id is None
     assert open_deal.account_id is not None
     assert open_deal.converted_from_lead_id == lead.pk
-    assert open_deal.stage == "CONTACTED"
+    assert open_deal.stage == "DISCOVERY"
     assert open_deal.amount == amount
     assert lead.stage == stage_before
     assert list(deal_history(open_deal).values_list("to_stage", "reason")) == (
@@ -449,12 +470,12 @@ def test_lead_and_deal_stages_move_independently(client):
         actor=user,
         deal_id=deal.pk,
         version=deal.version,
-        to_stage="CONTACTED",
+        to_stage="DISCOVERY",
         reason="Called the buyer",
     )
     lead.refresh_from_db()
     deal.refresh_from_db()
-    assert deal.stage == "CONTACTED"
+    assert deal.stage == "DISCOVERY"
     assert lead.stage == "NEW"
     assert lead.converted_at is None
     assert Account.objects.count() == 0
@@ -471,7 +492,7 @@ def test_lead_and_deal_stages_move_independently(client):
     lead.refresh_from_db()
     deal.refresh_from_db()
     assert lead.stage == "CONTACTED"
-    assert deal.stage == "CONTACTED"
+    assert deal.stage == "DISCOVERY"
     assert Account.objects.count() == 0
     client.force_login(user)
     lead_page = client.get(reverse("leads:detail", args=[lead.pk]))
@@ -570,7 +591,9 @@ def test_closing_a_deal_converts_the_lead_without_changing_its_stage(client):
     account_page = client.get(reverse("accounts:detail", args=[account.pk]))
     assert account_page.status_code == 200
     assert b"Ada Lovelace" in account_page.content
-    assert b"ada@example.test" in account_page.content
+    assert b"ada@example.test" not in account_page.content
+    contact_page = client.get(reverse("accounts:contact_edit", args=[contact.pk]))
+    assert b"ada@example.test" in contact_page.content
     contacts_page = client.get(reverse("accounts:contacts"))
     assert b"Ada Lovelace" in contacts_page.content
     assert b"Analytical Engines" in contacts_page.content
@@ -607,7 +630,7 @@ def test_closing_a_deal_converts_the_lead_without_changing_its_stage(client):
         to_stage="CLOSED_WON",
         reason="Signed",
         correction=True,
-        data={"expected_close_date": "2026-12-18"},
+        data={"actual_close_date": "2026-12-18"},
     )
     won_lead.refresh_from_db()
     assert won_lead.stage == "NEW"
@@ -778,3 +801,537 @@ def test_contacts_page_is_in_the_nav_and_groups_by_account(client):
     results = filtered.content.split(b"<section", 1)[1]
     assert b"Alpha Co" in results
     assert b"Beta Co" not in results
+
+
+def test_account_deal_requires_a_contact_and_keeps_stage_rules(client):
+    ensure_picklists()
+    admin = make_user("ada", admin=True)
+    account = create_account(
+        actor=admin, data={"name": "Northwind", "account_type": "CUSTOMER"}
+    )
+    contact = create_contact(
+        actor=admin,
+        data={
+            "first_name": "Ann",
+            "last_name": "North",
+            "email": "ann.north@example.test",
+            "account": account.pk,
+        },
+    )
+    other = create_account(
+        actor=admin, data={"name": "Other Co", "account_type": "PROSPECT"}
+    )
+    stranger = create_contact(
+        actor=admin,
+        data={
+            "first_name": "Sam",
+            "last_name": "Other",
+            "email": "sam.other@example.test",
+            "account": other.pk,
+        },
+    )
+    client.force_login(admin)
+    account_page = client.get(reverse("accounts:detail", args=[account.pk]))
+    assert b"Add deal" in account_page.content
+    assert b"No deals yet." in account_page.content
+
+    form_page = client.get(reverse("sales:create"), {"account": account.pk})
+    assert form_page.status_code == 200
+    assert b"Ann North" in form_page.content
+    assert b'name="lead"' not in form_page.content
+    assert b'name="linked_to"' not in form_page.content
+    assert b'name="primary_contact"' in form_page.content
+
+    missing = client.post(
+        reverse("sales:create"),
+        {
+            "title": "Account renewal",
+            "account": str(account.pk),
+            "deal_type": "CONSULTING_SERVICES",
+            "currency": "USD",
+        },
+    )
+    assert missing.status_code == 422
+    assert Deal.objects.filter(title="Account renewal").exists() is False
+
+    created = client.post(
+        reverse("sales:create"),
+        {
+            "title": "Account renewal",
+            "account": str(account.pk),
+            "primary_contact": str(contact.pk),
+            "deal_type": "CONSULTING_SERVICES",
+            "currency": "USD",
+            "amount": "2500",
+            "probability": "5",
+        },
+    )
+    assert created.status_code == 302
+    deal = Deal.objects.get(title="Account renewal")
+    assert deal.lead_id is None
+    assert deal.account_id == account.pk
+    assert deal.primary_contact_id == contact.pk
+    assert deal.stage == "NEW"
+    assert deal.probability == Decimal("5.00")
+    detail = client.get(created["Location"])
+    assert b"Ann North" in detail.content
+    assert b"5%" in detail.content
+    assert b"converts the lead" not in detail.content
+
+    moved = client.post(
+        reverse("sales:transition", args=[deal.pk]),
+        {
+            "version": deal.version,
+            "to_stage": "DISCOVERY",
+            "reason": "They need a renewal review",
+        },
+    )
+    assert moved.status_code == 302
+    deal.refresh_from_db()
+    assert deal.stage == "DISCOVERY"
+    assert deal.lead_id is None
+    assert deal.account_id == account.pk
+    assert deal.primary_contact_id == contact.pk
+
+    second = create_contact(
+        actor=admin,
+        data={
+            "first_name": "Bea",
+            "last_name": "North",
+            "email": "bea.north@example.test",
+            "account": account.pk,
+        },
+    )
+    saved = client.post(
+        reverse("sales:edit", args=[deal.pk]),
+        {
+            "title": "Account renewal",
+            "account": str(account.pk),
+            "primary_contact": str(second.pk),
+            "deal_type": "CONSULTING_SERVICES",
+            "currency": "USD",
+            "amount": "2500",
+            "probability": "10",
+            "version": deal.version,
+        },
+    )
+    assert saved.status_code == 302
+    deal.refresh_from_db()
+    assert deal.primary_contact_id == second.pk
+    assert deal.stage == "DISCOVERY"
+    listed = client.get(reverse("accounts:detail", args=[account.pk]))
+    assert b"Account renewal" in listed.content
+    assert b"Bea North" in listed.content
+
+    api = APIClient()
+    api.force_authenticate(user=admin)
+    rejected = api.post(
+        "/api/v1/deals/",
+        {
+            "title": "Wrong person",
+            "account": str(account.pk),
+            "primary_contact": str(stranger.pk),
+            "deal_type": "CONSULTING_SERVICES",
+        },
+        format="json",
+    )
+    assert rejected.status_code == 422
+    bare = api.post(
+        "/api/v1/deals/",
+        {
+            "title": "No person",
+            "account": str(account.pk),
+            "deal_type": "CONSULTING_SERVICES",
+        },
+        format="json",
+    )
+    assert bare.status_code == 422
+
+
+def test_deals_page_asks_whether_the_deal_is_on_a_lead_or_an_account(client):
+    ensure_picklists()
+    admin = make_user("ada", admin=True)
+    lead = make_lead(admin, email="chooser@example.test")
+    account = create_account(
+        actor=admin, data={"name": "Northwind", "account_type": "CUSTOMER"}
+    )
+    contact = create_contact(
+        actor=admin,
+        data={
+            "first_name": "Ann",
+            "last_name": "North",
+            "email": "ann.north@example.test",
+            "account": account.pk,
+        },
+    )
+    other = create_account(
+        actor=admin, data={"name": "Other Co", "account_type": "PROSPECT"}
+    )
+    stranger = create_contact(
+        actor=admin,
+        data={
+            "first_name": "Sam",
+            "last_name": "Other",
+            "email": "sam.other@example.test",
+            "account": other.pk,
+        },
+    )
+    client.force_login(admin)
+    form_page = client.get(reverse("sales:create"))
+    body = form_page.content
+    assert b"This deal is linked to" in body
+    assert body.find(b'name="linked_to"') < body.find(b'name="lead"')
+    assert body.find(b'name="lead"') < body.find(b'name="account"')
+    assert body.find(b'name="account"') < body.find(b'name="primary_contact"')
+    assert b"Ada Lovelace (Analytical Engines)" in body
+    assert b"Ann North" in body
+    assert b"Sam Other" in body
+
+    missing = client.post(
+        reverse("sales:create"),
+        {
+            "title": "Unlinked",
+            "deal_type": "CONSULTING_SERVICES",
+            "currency": "USD",
+        },
+    )
+    assert missing.status_code == 422
+    assert b"Choose whether this deal is linked to a lead or an account." in (
+        missing.content
+    )
+
+    lead_deal = client.post(
+        reverse("sales:create"),
+        {
+            "title": "Lead sourced",
+            "linked_to": "lead",
+            "lead": lead.pk,
+            "deal_type": "CONSULTING_SERVICES",
+            "currency": "USD",
+        },
+    )
+    assert lead_deal.status_code == 302
+    saved_lead = Deal.objects.get(title="Lead sourced")
+    assert saved_lead.lead_id == lead.pk
+    assert saved_lead.account_id is None
+    assert saved_lead.primary_contact_id is None
+
+    account_deal = client.post(
+        reverse("sales:create"),
+        {
+            "title": "Account sourced",
+            "linked_to": "account",
+            "account": str(account.pk),
+            "primary_contact": str(contact.pk),
+            "deal_type": "CONSULTING_SERVICES",
+            "currency": "USD",
+        },
+    )
+    assert account_deal.status_code == 302
+    saved_account = Deal.objects.get(title="Account sourced")
+    assert saved_account.lead_id is None
+    assert saved_account.account_id == account.pk
+    assert saved_account.primary_contact_id == contact.pk
+
+    wrong = client.post(
+        reverse("sales:create"),
+        {
+            "title": "Wrong sourced",
+            "linked_to": "account",
+            "account": str(account.pk),
+            "primary_contact": str(stranger.pk),
+            "deal_type": "CONSULTING_SERVICES",
+            "currency": "USD",
+        },
+    )
+    assert wrong.status_code == 422
+    assert Deal.objects.filter(title="Wrong sourced").exists() is False
+
+
+def test_conversion_copies_phones_from_the_lead(client):
+    user = make_user("phones")
+    lead = make_lead(
+        user,
+        company_name="Phone Co",
+        email="ada.phone@example.test",
+        website_url="https://phone.example",
+        title="Director",
+        work_phone="949-555-0100",
+        mobile_phone="949-555-0199",
+    )
+    converted = convert_lead(
+        actor=user,
+        lead_id=lead.pk,
+        version=lead.version,
+        data={
+            "account_mode": "create",
+            "account_type": "PROSPECT",
+            "deal_action": "leave",
+        },
+    )
+    contact = Contact.objects.get(pk=converted["contact_id"])
+    assert contact.title == "Director"
+    assert contact.email == "ada.phone@example.test"
+    assert contact.work_phone == "(949) 555-0100"
+    assert contact.mobile_phone == "(949) 555-0199"
+
+    closer = make_user("closer")
+    account = create_account(
+        actor=closer,
+        data={
+            "name": "Kept Phones",
+            "account_type": "CUSTOMER",
+            "website_url": "https://kept.example",
+        },
+    )
+    existing = create_contact(
+        actor=closer,
+        data={
+            "first_name": "Ada",
+            "last_name": "Lovelace",
+            "email": "ada@example.test",
+            "title": "Kept title",
+            "work_phone": "(111) 000-0000",
+            "account": account.pk,
+        },
+    )
+    closing_lead = make_lead(
+        closer,
+        website_url="https://kept.example",
+        title="New title",
+        work_phone="(222) 000-0000",
+        mobile_phone="(333) 000-0000",
+    )
+    deal = create_deal(
+        actor=closer,
+        data={
+            "title": "Phone close",
+            "lead": closing_lead.pk,
+            "deal_type": "CONSULTING_SERVICES",
+            "amount": "15.00",
+            "currency": "USD",
+            "stage": "NEW",
+        },
+    )
+    transition_deal(
+        actor=closer,
+        deal_id=deal.pk,
+        version=deal.version,
+        to_stage="CLOSED_LOST",
+        reason="Price",
+        data={"close_reason": "PRICE"},
+    )
+    existing.refresh_from_db()
+    assert existing.title == "Kept title"
+    assert existing.work_phone == "(111) 000-0000"
+    assert existing.mobile_phone == "(333) 000-0000"
+
+    fresh = make_lead(
+        closer,
+        first_name="Grace",
+        last_name="Hopper",
+        company_name="Fresh Phones",
+        email="grace@fresh.example",
+        website_url="https://fresh.example",
+        title="Captain",
+        work_phone="949-555-0140",
+        mobile_phone="949-555-0141",
+    )
+    fresh_deal = create_deal(
+        actor=closer,
+        data={
+            "title": "Fresh close",
+            "lead": fresh.pk,
+            "deal_type": "CONSULTING_SERVICES",
+            "amount": "20.00",
+            "currency": "USD",
+            "stage": "NEW",
+        },
+    )
+    transition_deal(
+        actor=closer,
+        deal_id=fresh_deal.pk,
+        version=fresh_deal.version,
+        to_stage="CLOSED_LOST",
+        reason="Price",
+        data={"close_reason": "PRICE"},
+    )
+    created = Contact.objects.get(email_normalized="grace@fresh.example")
+    assert created.title == "Captain"
+    assert created.work_phone == "(949) 555-0140"
+    assert created.mobile_phone == "(949) 555-0141"
+    client.force_login(closer)
+    page = client.get(reverse("accounts:contact_edit", args=[created.pk]))
+    assert b"(949) 555-0140" in page.content
+    assert b"(949) 555-0141" in page.content
+    saved = client.post(
+        reverse("accounts:contact_edit", args=[created.pk]),
+        {
+            "account": str(created.account_id),
+            "first_name": "Grace",
+            "last_name": "Hopper",
+            "title": "Captain",
+            "email": "grace@fresh.example",
+            "work_phone": "949-555-0142",
+            "mobile_phone": "949-555-0141",
+            "version": created.version,
+        },
+    )
+    assert saved.status_code == 302
+    created.refresh_from_db()
+    assert created.work_phone == "(949) 555-0142"
+
+
+def test_address_is_optional_and_conversion_copies_it(client):
+    user = make_user("address")
+    client.force_login(user)
+    lead_page = client.get(reverse("leads:create"))
+    assert b'name="street"' in lead_page.content
+    assert b"Street" in lead_page.content
+    account_page = client.get(reverse("accounts:create"))
+    assert b'name="postal_code"' in account_page.content
+    created = client.post(
+        reverse("accounts:create"),
+        {"name": "Postal Sample", "account_type": "PROSPECT"},
+    )
+    assert created.status_code == 302
+    account = Account.objects.get(name="Postal Sample")
+    assert account.address == {}
+    contact_page = client.get(reverse("accounts:contact_create", args=[account.pk]))
+    assert b'name="region"' in contact_page.content
+    lead = make_lead(
+        user,
+        company_name="Address Engines",
+        email="ada.address@example.test",
+        website_url="https://address.example",
+        address={
+            "street": "26040 Acero",
+            "city": "Mission Viejo",
+            "region": "CA",
+            "postal_code": "92691",
+            "country": "US",
+        },
+    )
+    convert_lead(
+        actor=user,
+        lead_id=lead.pk,
+        version=lead.version,
+        data={"account_name": "Address Engines", "account_type": "PROSPECT"},
+    )
+    saved_account = Account.objects.get(name="Address Engines")
+    saved_contact = Contact.objects.get(email_normalized="ada.address@example.test")
+    assert saved_account.address["street"] == "26040 Acero"
+    assert saved_contact.address["city"] == "Mission Viejo"
+    detail = client.get(reverse("accounts:detail", args=[saved_account.pk]))
+    assert b"26040 Acero, Mission Viejo, CA 92691, US" in detail.content
+    kept = create_contact(
+        actor=user,
+        data={
+            "first_name": "Grace",
+            "last_name": "Hopper",
+            "account": saved_account.pk,
+            "email": "grace.address@example.test",
+            "address": {"street": "1 Kept Street", "city": "Irvine"},
+        },
+    )
+    second = make_lead(
+        user,
+        company_name="Address Engines",
+        email="grace.address@example.test",
+        website_url="https://address.example",
+        address={"street": "9 Lead Street", "city": "Irvine"},
+    )
+    convert_lead(
+        actor=user,
+        lead_id=second.pk,
+        version=second.version,
+        data={
+            "account_mode": "existing",
+            "account_id": saved_account.pk,
+            "contact_mode": "existing",
+            "contact_id": kept.pk,
+            "field_choices": {"first_name": "keep", "last_name": "keep"},
+        },
+    )
+    kept.refresh_from_db()
+    assert kept.address["street"] == "1 Kept Street"
+
+
+def test_phone_numbers_are_stored_and_shown_as_standard_format(client):
+    user = make_user("phones")
+    lead = create_lead(
+        actor=user,
+        data={
+            "first_name": "Ada",
+            "last_name": "Lovelace",
+            "company_name": "Phone Co",
+            "email": "ada.phone@example.test",
+            "source": "WEB",
+            "work_phone": "9495550100",
+            "mobile_phone": "1-949-555-0199",
+        },
+    )
+    assert lead.work_phone == "(949) 555-0100"
+    assert lead.mobile_phone == "(949) 555-0199"
+    with pytest.raises(ValidationError):
+        create_lead(
+            actor=user,
+            data={
+                "first_name": "Bad",
+                "last_name": "Number",
+                "company_name": "Phone Co",
+                "email": "bad.phone@example.test",
+                "source": "WEB",
+                "work_phone": "111",
+            },
+        )
+    account = create_account(
+        actor=user,
+        data={
+            "name": "Phone Co",
+            "account_type": "CUSTOMER",
+            "phone": "949.555.0100",
+        },
+    )
+    assert account.phone == "(949) 555-0100"
+    client.force_login(user)
+    detail = client.get(reverse("leads:detail", args=[lead.pk]))
+    assert detail.status_code == 200
+    assert b"(949) 555-0100" in detail.content
+    account_page = client.get(reverse("accounts:detail", args=[account.pk]))
+    assert b"(949) 555-0100" in account_page.content
+
+
+def test_a_lead_and_a_contact_require_an_email(client):
+    user = make_user("mailreq")
+    with pytest.raises(ValidationError):
+        create_lead(
+            actor=user,
+            data={
+                "first_name": "Ada",
+                "last_name": "Lovelace",
+                "company_name": "Mail Co",
+                "source": "WEB",
+            },
+        )
+    account = create_account(
+        actor=user, data={"name": "Mail Co", "account_type": "CUSTOMER"}
+    )
+    with pytest.raises(ValidationError):
+        create_contact(
+            actor=user,
+            data={"first_name": "Ada", "last_name": "Lovelace", "account": account.pk},
+        )
+    client.force_login(user)
+    lead_form = client.get(reverse("leads:create"))
+    assert b"Email" in lead_form.content
+    assert b"required" in lead_form.content
+    contact_form = client.get(reverse("accounts:contact_create", args=[account.pk]))
+    assert b'id="contact-email"' in contact_form.content
+    assert b"required" in contact_form.content
+    missing = client.post(
+        reverse("accounts:contact_create", args=[account.pk]),
+        {"first_name": "Ada", "last_name": "Lovelace"},
+    )
+    assert missing.status_code == 422
+    assert Contact.objects.count() == 0

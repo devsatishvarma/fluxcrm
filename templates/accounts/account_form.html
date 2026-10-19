@@ -1,36 +1,120 @@
 {% extends "base.html" %}
-{% block title %}Add account · FluxCRM{% endblock %}
+{% block title %}{% if account %}Edit account{% else %}Add account{% endif %} · GlideCRM{% endblock %}
 {% block content %}
-  <h1>Add account</h1>
-  {% if errors %}
-    <p role="alert">
-      {% for field, messages in errors.items %}{{ field }}: {{ messages|join:", " }} {% endfor %}
-    </p>
-  {% endif %}
+  <h1>{% if account %}Edit account{% else %}Add account{% endif %}</h1>
   <form method="post">
     {% csrf_token %}
-    <div class="row g-3">
-      <div class="col-md-6">
-        <label class="form-label" for="account-name">Name</label>
-        <input class="form-control" id="account-name" name="name" value="{{ posted.name }}" required>
+    {% if values.version %}<input type="hidden" name="version" value="{{ values.version }}">{% endif %}
+    <div class="form-grid">
+      <div class="field-line">
+        <label class="form-label" for="account-name">Name<abbr class="req" title="Required">*</abbr></label>
+        <div class="field-control">
+          <input class="form-control" id="account-name" name="name" value="{{ values.name }}" required>
+        </div>
       </div>
-      <div class="col-md-6">
-        <label class="form-label" for="account-type">Type</label>
-        <select class="form-select" id="account-type" name="account_type" required>
-          {% for key, label in types %}
-            <option value="{{ key }}">{{ label }}</option>
-          {% endfor %}
-        </select>
+      <div class="field-line">
+        <label class="form-label" for="account-type">Type<abbr class="req" title="Required">*</abbr></label>
+        <div class="field-control">
+          <select class="form-select" id="account-type" name="account_type" required>
+            {% for key, label in types %}
+              <option value="{{ key }}"{% if values.account_type == key %} selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
       </div>
-      <div class="col-md-6">
+      <div class="field-line">
+        <label class="form-label" for="account-status">Status</label>
+        <div class="field-control">
+          <select class="form-select" id="account-status" name="status">
+            {% for key, label in statuses %}
+              <option value="{{ key }}"{% if values.status == key or not values.status and key == "ACTIVE" %} selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div class="field-line">
+        <label class="form-label" for="account-industry">Industry</label>
+        <div class="field-control">
+          <select class="form-select" id="account-industry" name="industry">
+            {% for key, label in industries %}
+              <option value="{{ key }}"{% if values.industry == key %} selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div class="field-line">
         <label class="form-label" for="account-website">Website</label>
-        <input class="form-control" id="account-website" name="website_url" value="{{ posted.website_url }}">
+        <div class="field-control">
+          <input class="form-control" id="account-website" name="website_url" value="{{ values.website_url }}">
+        </div>
       </div>
-      <div class="col-md-6">
+      <div class="field-line">
         <label class="form-label" for="account-phone">Phone</label>
-        <input class="form-control" id="account-phone" name="phone" value="{{ posted.phone }}">
+        <div class="field-control">
+          <input class="form-control" id="account-phone" name="phone" value="{{ values.phone }}" maxlength="40" placeholder="(XXX) XXX-XXXX">
+        </div>
+      </div>
+      <div class="field-line">
+        <label class="form-label" for="account-street">Street</label>
+        <div class="field-control">
+          <input class="form-control" id="account-street" name="street" value="{{ values.street }}" maxlength="200">
+        </div>
+      </div>
+      <div class="field-line">
+        <label class="form-label" for="account-city">City</label>
+        <div class="field-control">
+          <input class="form-control" id="account-city" name="city" value="{{ values.city }}" maxlength="100">
+        </div>
+      </div>
+      <div class="field-line">
+        <label class="form-label" for="account-region">State</label>
+        <div class="field-control">
+          <input class="form-control" id="account-region" name="region" value="{{ values.region }}" maxlength="100">
+        </div>
+      </div>
+      <div class="field-line">
+        <label class="form-label" for="account-postal">Postal code</label>
+        <div class="field-control">
+          <input class="form-control" id="account-postal" name="postal_code" value="{{ values.postal_code }}" maxlength="20">
+        </div>
+      </div>
+      <div class="field-line">
+        <label class="form-label" for="account-country">Country</label>
+        <div class="field-control">
+          <input class="form-control" id="account-country" name="country" value="{{ values.country }}" maxlength="100">
+        </div>
+      </div>
+      <div class="field-line">
+        <label class="form-label" for="account-parent">Parent account</label>
+        <div class="field-control">
+          <select class="form-select" id="account-parent" name="parent">
+            <option value="">—</option>
+            {% for parent in parents %}
+              <option value="{{ parent.pk }}"{% if values.parent == parent.pk|stringformat:"s" %} selected{% endif %}>{{ parent.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      {% if owners %}
+        <div class="field-line">
+          <label class="form-label" for="account-owner">Owner</label>
+          <div class="field-control">
+            <select class="form-select" id="account-owner" name="owner">
+              {% for owner in owners %}
+                <option value="{{ owner.pk }}"{% if values.owner == owner.pk|stringformat:"s" %} selected{% endif %}>{{ owner.display_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+      {% endif %}
+      <div class="field-line">
+        <label class="form-label" for="account-notes">Notes</label>
+        <div class="field-control">
+          <textarea class="form-control" id="account-notes" name="notes">{{ values.notes }}</textarea>
+        </div>
       </div>
     </div>
-    <button class="btn btn-primary mt-3" type="submit">Save</button>
+    <button class="btn btn-primary mt-3" type="submit">Save account</button>
+    {% if account %}<a href="{% url 'accounts:detail' account.pk %}">Cancel</a>{% endif %}
   </form>
 {% endblock %}

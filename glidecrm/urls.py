@@ -1,5 +1,5 @@
 """
-URL configuration for fluxcrm project.
+URL configuration for glidecrm project.
 
 The `urlpatterns` list routes URLs to views. For more information please see:
     https://docs.djangoproject.com/en/6.0/topics/http/urls/
@@ -25,6 +25,8 @@ urlpatterns = [
     path("", include("sales.urls")),
     path("", include("activities.urls")),
     path("", include("accounts.urls")),
+    path("", include("reporting.urls")),
+    path("", include("imports.urls")),
     path("api/v1/", include("leads.api_urls")),
     path("api/v1/", include("sales.api_urls")),
     path("api/v1/", include("activities.api_urls")),

@@ -9,7 +9,7 @@ from leads.models import Lead
 
 
 class Deal(AuditedRecord):
-    """A sales deal that belongs to a lead or, after conversion, an account."""
+    """A sales deal on a lead, or on an account and one of its contacts."""
 
     title = models.CharField(max_length=200)
     lead = models.ForeignKey(
@@ -50,6 +50,9 @@ class Deal(AuditedRecord):
     currency = models.CharField(max_length=3, default="USD")
     confidence = models.CharField(max_length=16)
     expected_close_date = models.DateField(null=True, blank=True)
+    actual_close_date = models.DateField(null=True, blank=True)
+    evaluation_started_on = models.DateField(null=True, blank=True)
+    technical_stakeholder_name = models.CharField(max_length=120, blank=True)
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,

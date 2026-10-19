@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% load crm %}
-{% block title %}Tasks · FluxCRM{% endblock %}
+{% block title %}Tasks · GlideCRM{% endblock %}
 {% block content %}
   <h1>Tasks</h1>
   <p>
@@ -11,7 +11,7 @@
     Completed and cancelled tasks are on their own lists.
     On hold stays out of the open list until you resume it.
   </p>
-  <nav class="mb-3">
+  <nav class="task-buckets mb-3" aria-label="Task lists">
     {% for key, label in buckets %}
       {% if bucket == key %}
         <strong>{{ label }}</strong>
@@ -36,11 +36,11 @@
   <form class="row g-2 mb-4" method="post" action="{% url 'activities:task_create' %}">
     {% csrf_token %}
     <div class="col-md-4">
-      <label class="form-label" for="task-title">Title</label>
+      <label class="form-label" for="task-title">Title<abbr class="req" title="Required">*</abbr></label>
       <input class="form-control" id="task-title" name="title" required>
     </div>
     <div class="col-md-4">
-      <label class="form-label" for="task-due">Due</label>
+      <label class="form-label" for="task-due">Due<abbr class="req" title="Required">*</abbr></label>
       <input class="form-control" id="task-due" name="due_at" type="datetime-local" required>
     </div>
     <div class="col-md-4">
@@ -79,6 +79,10 @@
       </select>
     </div>
     <div class="col-12">
+      <label class="form-label" for="task-notes">Notes</label>
+      <textarea class="form-control" id="task-notes" name="description" rows="2"></textarea>
+    </div>
+    <div class="col-12">
       <button class="btn btn-primary" type="submit">Add task</button>
     </div>
   </form>
@@ -98,7 +102,10 @@
         {% can "task" "D" as can_delete_task %}
         {% for task in tasks %}
           <tr>
-            <td>{{ task.title }}</td>
+            <td>
+              <strong>{{ task.title }}</strong>
+              {% if task.description %}<div>{{ task.description }}</div>{% endif %}
+            </td>
             <td>
               {% for item in task.related %}
                 <div>
@@ -122,57 +129,70 @@
             </td>
             <td>{{ task.owner.display_name }}</td>
             <td>
+              <div class="task-actions">
               {% if can_update_task %}
                 {% if task.status == "OPEN" %}
-                  <form method="post" action="{% url 'activities:complete' task.pk %}">
-                    {% csrf_token %}
-                    <input type="hidden" name="version" value="{{ task.version }}">
-                    <button class="btn btn-sm btn-primary" type="submit">Complete</button>
-                  </form>
-                  <form method="post" action="{% url 'activities:snooze' task.pk %}">
-                    {% csrf_token %}
-                    <input type="hidden" name="version" value="{{ task.version }}">
-                    <label class="visually-hidden" for="snooze-{{ task.pk }}">Snooze until</label>
-                    <input id="snooze-{{ task.pk }}" name="snooze_until" type="datetime-local" required>
-                    <button class="btn btn-sm btn-outline-secondary" type="submit">Snooze</button>
-                  </form>
-                  <form method="post" action="{% url 'activities:hold' task.pk %}">
-                    {% csrf_token %}
-                    <input type="hidden" name="version" value="{{ task.version }}">
-                    <button class="btn btn-sm btn-outline-secondary" type="submit">Hold</button>
-                  </form>
-                  <form method="post" action="{% url 'activities:cancel' task.pk %}">
-                    {% csrf_token %}
-                    <input type="hidden" name="version" value="{{ task.version }}">
-                    <button class="btn btn-sm btn-outline-secondary" type="submit">Cancel</button>
-                  </form>
+                  <div class="task-pair">
+                    <form method="post" action="{% url 'activities:complete' task.pk %}">
+                      {% csrf_token %}
+                      <input type="hidden" name="version" value="{{ task.version }}">
+                      <button class="btn btn-sm btn-primary" type="submit">Complete</button>
+                    </form>
+                    {% include "activities/_task_edit.html" %}
+                  </div>
+                  <div class="task-pair task-line">
+                    <form method="post" action="{% url 'activities:snooze' task.pk %}">
+                      {% csrf_token %}
+                      <input type="hidden" name="version" value="{{ task.version }}">
+                      <label class="visually-hidden" for="snooze-{{ task.pk }}">Snooze until<abbr class="req" title="Required">*</abbr></label>
+                      <input id="snooze-{{ task.pk }}" name="snooze_until" type="datetime-local" required>
+                      <button class="btn btn-sm btn-outline-secondary" type="submit">Snooze</button>
+                    </form>
+                    <form method="post" action="{% url 'activities:hold' task.pk %}">
+                      {% csrf_token %}
+                      <input type="hidden" name="version" value="{{ task.version }}">
+                      <button class="btn btn-sm btn-outline-secondary" type="submit">Hold</button>
+                    </form>
+                    <form method="post" action="{% url 'activities:cancel' task.pk %}">
+                      {% csrf_token %}
+                      <input type="hidden" name="version" value="{{ task.version }}">
+                      <button class="btn btn-sm btn-outline-secondary" type="submit">Cancel</button>
+                    </form>
+                  </div>
                 {% elif task.status == "HOLD" %}
-                  <form method="post" action="{% url 'activities:resume' task.pk %}">
-                    {% csrf_token %}
-                    <input type="hidden" name="version" value="{{ task.version }}">
-                    <button class="btn btn-sm btn-outline-secondary" type="submit">Resume</button>
-                  </form>
-                  <form method="post" action="{% url 'activities:complete' task.pk %}">
-                    {% csrf_token %}
-                    <input type="hidden" name="version" value="{{ task.version }}">
-                    <button class="btn btn-sm btn-primary" type="submit">Complete</button>
-                  </form>
-                  <form method="post" action="{% url 'activities:cancel' task.pk %}">
-                    {% csrf_token %}
-                    <input type="hidden" name="version" value="{{ task.version }}">
-                    <button class="btn btn-sm btn-outline-secondary" type="submit">Cancel</button>
-                  </form>
+                  <div class="task-pair">
+                    <form method="post" action="{% url 'activities:resume' task.pk %}">
+                      {% csrf_token %}
+                      <input type="hidden" name="version" value="{{ task.version }}">
+                      <button class="btn btn-sm btn-outline-secondary" type="submit">Resume</button>
+                    </form>
+                    <form method="post" action="{% url 'activities:complete' task.pk %}">
+                      {% csrf_token %}
+                      <input type="hidden" name="version" value="{{ task.version }}">
+                      <button class="btn btn-sm btn-primary" type="submit">Complete</button>
+                    </form>
+                    {% include "activities/_task_edit.html" %}
+                    <form method="post" action="{% url 'activities:cancel' task.pk %}">
+                      {% csrf_token %}
+                      <input type="hidden" name="version" value="{{ task.version }}">
+                      <button class="btn btn-sm btn-outline-secondary" type="submit">Cancel</button>
+                    </form>
+                  </div>
                 {% endif %}
               {% endif %}
               {% if can_delete_task %}
-                <form method="post" action="{% url 'activities:delete' task.pk %}">
+                <form class="delete-form" method="post" action="{% url 'activities:delete' task.pk %}">
                   {% csrf_token %}
                   <input type="hidden" name="version" value="{{ task.version }}">
-                  <label class="visually-hidden" for="delete-{{ task.pk }}">Delete reason</label>
-                  <input id="delete-{{ task.pk }}" name="delete_reason" placeholder="Delete reason" required minlength="3">
-                  <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+                  <label class="visually-hidden" for="delete-{{ task.pk }}">Delete reason<abbr class="req" title="Required">*</abbr></label>
+                  <input id="delete-{{ task.pk }}" name="delete_reason" placeholder="Delete reason" required minlength="3" maxlength="200">
+                  <div class="delete-line">
+                    {% include "crm/_delete_confirm.html" with field_id=task.pk record_label="task" %}
+                    <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+                  </div>
                 </form>
               {% endif %}
+              </div>
             </td>
           </tr>
         {% endfor %}

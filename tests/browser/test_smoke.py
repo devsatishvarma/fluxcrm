@@ -9,7 +9,7 @@ def test_foundation_home_and_health(page: Page):
     base_url = os.getenv("PLAYWRIGHT_BASE_URL", "http://127.0.0.1:8000")
 
     page.goto(base_url)
-    assert page.get_by_role("heading", name="FluxCRM").is_visible()
+    assert page.get_by_role("heading", name="GlideCRM").is_visible()
 
     response = page.goto(f"{base_url}/health/")
     assert response is not None

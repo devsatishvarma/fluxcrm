@@ -14,10 +14,11 @@ class RoleAdmin(admin.ModelAdmin):
 class UserAdmin(DjangoUserAdmin):
     fieldsets = DjangoUserAdmin.fieldsets + (
         (
-            "FluxCRM",
+            "GlideCRM",
             {
                 "fields": (
                     "display_name",
+                    "phone",
                     "timezone",
                     "manager",
                     "role",

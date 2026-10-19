@@ -36,6 +36,7 @@ class Account(AuditedRecord):
     website_url = models.URLField(blank=True)
     website_domain = models.CharField(max_length=253, blank=True, db_index=True)
     phone = models.CharField(max_length=40, blank=True)
+    address = models.JSONField(default=dict, blank=True)
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
@@ -73,8 +74,11 @@ class Contact(AuditedRecord):
     first_name = models.CharField(max_length=80)
     last_name = models.CharField(max_length=80)
     title = models.CharField(max_length=120, blank=True)
-    email = models.EmailField(blank=True)
+    email = models.EmailField()
     email_normalized = models.CharField(max_length=254, blank=True, db_index=True)
+    work_phone = models.CharField(max_length=40, blank=True)
+    mobile_phone = models.CharField(max_length=40, blank=True)
+    address = models.JSONField(default=dict, blank=True)
     account = models.ForeignKey(
         Account,
         on_delete=models.PROTECT,

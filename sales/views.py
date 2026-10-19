@@ -1,4 +1,4 @@
-"""HTML pages for lead-linked deals."""
+"""HTML pages for deals on a lead or an account."""
 
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
@@ -7,9 +7,17 @@ from django.views.decorators.http import require_http_methods, require_POST
 
 from core.access import activate_viewer_timezone, get_scoped
 from core.exceptions import VersionConflict
-from core.policy import assignable_users, can_correct
+from core.notices import (
+    fail_with,
+    failed,
+    form_text,
+    stage_name,
+    succeeded,
+    validation_text,
+)
+from core.policy import assignable_users, can_correct, require_action
 from core.taxonomy import choice_pairs
-from core.validation import add_form_errors
+from core.validation import add_form_errors, require_delete_confirmation
 from sales.forms import DealDeleteForm, DealForm
 from sales.models import Deal
 from sales.services import (
@@ -48,7 +56,7 @@ def deal_list(request):
     attach_freshness(list(page.object_list), "deal")
     filters = request.GET.copy()
     filters.pop("page", None)
-    from sales.services import open_pipeline_total
+    from sales.services import open_pipeline_total, owner_amount_totals
 
     context = {
         "page_obj": page,
@@ -56,6 +64,7 @@ def deal_list(request):
         "query": request.GET,
         "filter_query": filters.urlencode(),
         "open_total": open_pipeline_total(request.user),
+        "owner_totals": owner_amount_totals(queryset),
         "stage_choices": choice_pairs("DEAL_STAGE"),
         "type_choices": choice_pairs("DEAL_TYPE"),
         "confidence_choices": choice_pairs("DEAL_CONFIDENCE"),
@@ -65,17 +74,48 @@ def deal_list(request):
             else ()
         ),
     }
+    if not request.htmx:
+        from reporting.services import deal_report_groups
+
+        context["report_groups"] = deal_report_groups(request.user)
     template = "sales/_deal_results.html" if request.htmx else "sales/deal_list.html"
     return render(request, template, context, status=status)
+
+
+def _account_for_new_deal(request):
+    if request.method == "POST" and (
+        request.POST.get("lead") or request.POST.get("linked_to")
+    ):
+        return None
+    account_id = ""
+    if request.method == "POST":
+        account_id = request.POST.get("account") or ""
+    if not account_id:
+        account_id = request.GET.get("account") or ""
+    if not account_id:
+        return None
+    from accounts.models import Account
+
+    return get_scoped(Account, request.user, account_id)
 
 
 @require_http_methods(["GET", "POST"])
 def deal_create(request):
     activate_viewer_timezone(request.user)
+    try:
+        account = _account_for_new_deal(request)
+    except PermissionDenied:
+        return render(request, "crm/forbidden.html", status=403)
     initial = {}
-    if request.GET.get("lead"):
+    if account is None and request.GET.get("lead"):
         initial["lead"] = request.GET.get("lead")
-    form = DealForm(request.POST or None, user=request.user, initial=initial)
+        initial["linked_to"] = "lead"
+    form = DealForm(
+        request.POST or None,
+        user=request.user,
+        initial=initial,
+        account=account,
+    )
     status = 200
     if request.method == "POST" and form.is_valid():
         try:
@@ -86,12 +126,20 @@ def deal_create(request):
             )
         except ValidationError as exc:
             add_form_errors(form, exc)
+            fail_with(request, "Could not add the deal.", validation_text(exc))
             status = 422
         else:
+            succeeded(request, f"Deal {deal.title} added.")
             return redirect("sales:detail", deal.pk)
     elif request.method == "POST":
+        fail_with(request, "Could not add the deal.", form_text(form))
         status = 422
-    return render(request, "sales/deal_form.html", {"form": form}, status=status)
+    return render(
+        request,
+        "sales/deal_form.html",
+        {"form": form, "account": account},
+        status=status,
+    )
 
 
 def deal_detail(request, deal_id):
@@ -105,6 +153,7 @@ def deal_detail(request, deal_id):
     from sales.services import deal_history
 
     stages = allowed_targets(DEAL_GRAPH, deal.stage)
+    bant_choices = choice_pairs("BANT_STATUS")
     from activities.services import timeline
 
     activities, tasks = timeline(deal)
@@ -117,7 +166,13 @@ def deal_detail(request, deal_id):
             "tasks": tasks,
             "history": deal_history(deal).select_related("changed_by"),
             "allowed_stages": stages,
-            "bant_choices": choice_pairs("BANT_STATUS"),
+            "stage_order": tuple(DEAL_STAGE_PROBABILITY),
+            "stage_labels": {
+                key: label for key, label in choice_pairs("DEAL_STAGE") if key
+            },
+            "can_override": can_correct(request.user),
+            "bant_choices": bant_choices,
+            "bant_labels": {key: label for key, label in bant_choices if key},
             "lost_reason_choices": choice_pairs("CLOSED_LOST_REASON"),
             "hold_reason_choices": choice_pairs("CLOSED_HOLD_REASON"),
             "correction_stages": (
@@ -135,7 +190,13 @@ def deal_edit(request, deal_id):
         deal = get_scoped(Deal, request.user, deal_id, related=DEAL_RELATED)
     except PermissionDenied:
         return render(request, "crm/forbidden.html", status=403)
-    form = DealForm(request.POST or None, user=request.user, instance=deal)
+    source_account = deal.account if deal.lead_id is None else None
+    form = DealForm(
+        request.POST or None,
+        user=request.user,
+        instance=deal,
+        account=source_account,
+    )
     status = 200
     if request.method == "POST" and form.is_valid():
         try:
@@ -148,18 +209,33 @@ def deal_edit(request, deal_id):
             )
         except ValidationError as exc:
             add_form_errors(form, exc)
+            fail_with(request, "Could not save the deal.", validation_text(exc))
             status = 422
+        except PermissionDenied:
+            message = (
+                "Only an administrator or sales director can change "
+                "the win probability."
+            )
+            form.add_error("probability", message)
+            fail_with(request, "Could not save the deal.", message)
+            status = 403
         except VersionConflict:
             form.add_error(None, "This record was updated. Reload and retry.")
+            failed(
+                request,
+                "Could not save the deal. This record was updated. Reload and retry.",
+            )
             status = 409
         else:
+            succeeded(request, f"Deal {deal.title} saved.")
             return redirect("sales:detail", deal.pk)
     elif request.method == "POST":
+        fail_with(request, "Could not save the deal.", form_text(form))
         status = 422
     return render(
         request,
         "sales/deal_form.html",
-        {"form": form, "deal": deal},
+        {"form": form, "deal": deal, "account": source_account},
         status=status,
     )
 
@@ -169,6 +245,7 @@ def deal_delete(request, deal_id):
     form = DealDeleteForm(request.POST)
     if not form.is_valid():
         deal = get_scoped(Deal, request.user, deal_id, related=DEAL_RELATED)
+        fail_with(request, "Could not delete the deal.", form_text(form))
         return render(
             request,
             "sales/deal_detail.html",
@@ -176,7 +253,9 @@ def deal_delete(request, deal_id):
             status=422,
         )
     try:
-        delete_deal(
+        require_action(request.user, "deal", "D", object_id=deal_id)
+        require_delete_confirmation(request.POST)
+        deal = delete_deal(
             actor=request.user,
             deal_id=deal_id,
             version=form.cleaned_data["version"],
@@ -188,6 +267,7 @@ def deal_delete(request, deal_id):
     except ValidationError as exc:
         deal = get_scoped(Deal, request.user, deal_id, related=DEAL_RELATED)
         add_form_errors(form, exc)
+        fail_with(request, "Could not delete the deal.", validation_text(exc))
         return render(
             request,
             "sales/deal_detail.html",
@@ -197,12 +277,17 @@ def deal_delete(request, deal_id):
     except VersionConflict:
         deal = get_scoped(Deal, request.user, deal_id, related=DEAL_RELATED)
         form.add_error(None, "This record was updated. Reload and retry.")
+        failed(
+            request,
+            "Could not delete the deal. This record was updated. Reload and retry.",
+        )
         return render(
             request,
             "sales/deal_detail.html",
             {"deal": deal, "delete_form": form},
             status=409,
         )
+    succeeded(request, f"Deal {deal.title} deleted.")
     return redirect("sales:list")
 
 
@@ -263,6 +348,10 @@ def deal_transition(request, deal_id):
         else:
             payload = {"detail": exc.messages}
         return _transition_error(request, payload, 422)
+    if correction:
+        succeeded(request, "Deal correction saved.")
+    else:
+        succeeded(request, f"Deal moved to {stage_name('DEAL_STAGE', deal.stage)}.")
     if request.headers.get("X-Requested-With") == "fetch":
         from django.http import JsonResponse
 

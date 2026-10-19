@@ -27,7 +27,7 @@
           <td>{{ lead.company_name }}</td>
           <td>{{ lead.source }}</td>
           <td>{{ lead.rating|choice_label }}</td>
-          <td>{{ lead.stage }}</td>
+          <td>{{ lead.stage|stage_label }}</td>
           <td>{{ lead.created_at|elapsed }}</td>
           <td>{{ lead.stage_entered_at|elapsed }}</td>
           <td>{{ lead.owner.display_name }}</td>

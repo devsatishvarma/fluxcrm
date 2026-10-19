@@ -9,13 +9,14 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import Max
 from django.db.models.functions import Coalesce
+from django.http import Http404
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from accounts.models import Account, Contact
 from activities.models import Activity, ActivityLink, Task, TaskLink
 from audit.models import AuditEvent
-from core.access import activate_viewer_timezone, get_scoped
+from core.access import activate_viewer_timezone, get_scoped, scoped
 from core.exceptions import VersionConflict
 from core.policy import require_action
 from core.validation import (
@@ -30,6 +31,16 @@ from sales.models import Deal
 
 logger = logging.getLogger(__name__)
 LINKABLE = {"lead": Lead, "deal": Deal, "account": Account, "contact": Contact}
+LOGGED_ACTIVITY_TYPES = (
+    Activity.Type.CALL,
+    Activity.Type.EMAIL,
+    Activity.Type.MEETING,
+    Activity.Type.NOTE,
+)
+NOTE_LIMIT = 4000
+PARTY_MESSAGE = (
+    "Choose a contact or lead. Create that person first if they are not listed."
+)
 TASK_BUCKETS = (
     ("open", "Open"),
     ("overdue", "Overdue"),
@@ -135,7 +146,7 @@ def timeline(record):
             links__content_type=content_type,
             links__object_id=record.pk,
         )
-        .select_related("owner")
+        .select_related("owner", "with_contact", "with_contact__account", "with_lead")
         .distinct()
     )
     tasks = list(
@@ -235,6 +246,15 @@ def _snapshot(instance):
             "external_id": instance.external_id,
             "activity_type": instance.activity_type,
             "subject": instance.subject,
+            "with_whom": instance.with_whom,
+            "with_contact_id": (
+                None
+                if instance.with_contact_id is None
+                else str(instance.with_contact_id)
+            ),
+            "with_lead_id": (
+                None if instance.with_lead_id is None else str(instance.with_lead_id)
+            ),
             "occurred_at": instance.occurred_at.isoformat(),
             "owner_id": instance.owner_id,
             "version": instance.version,
@@ -252,27 +272,156 @@ def _snapshot(instance):
     }
 
 
-@transaction.atomic
-def create_activity(*, actor, data, links, request_id=""):
-    from core.policy import require_action
-
-    require_action(actor, "activity", "C")
-    activity_type = str(data.get("activity_type") or "").strip()
-    if activity_type not in Activity.Type.values:
+def _logged_type(value):
+    activity_type = str(value or "").strip()
+    if activity_type not in LOGGED_ACTIVITY_TYPES:
         raise ValidationError(
             {"activity_type": "Choose a call, email, meeting, or note."}
         )
+    return activity_type
+
+
+def activity_parties(user):
+    """Contacts and leads this person can assign to an activity."""
+    from accounts.services import contacts_for_user
+
+    contacts = []
+    for contact in contacts_for_user(user).order_by(
+        "last_name", "first_name", "account__name"
+    ):
+        name = f"{contact.first_name} {contact.last_name}".strip()
+        contacts.append(
+            {
+                "value": f"contact:{contact.pk}",
+                "label": name,
+                "search": f"{name} {contact.account.name}".casefold(),
+            }
+        )
+    leads = []
+    for lead in scoped(Lead.objects.all(), user).order_by(
+        "last_name", "first_name", "company_name"
+    ):
+        name = f"{lead.first_name} {lead.last_name}".strip()
+        leads.append(
+            {
+                "value": f"lead:{lead.pk}",
+                "label": name,
+                "search": f"{name} {lead.company_name}".casefold(),
+            }
+        )
+    return {"contacts": contacts, "leads": leads}
+
+
+def suggested_party(user, kind, object_id):
+    """Prefer the person already open on this page."""
+    if not object_id:
+        return ""
+    if kind == "lead" and scoped(Lead.objects.filter(pk=object_id), user).exists():
+        return f"lead:{object_id}"
+    if kind == "account":
+        from accounts.services import contacts_for_user
+
+        contact = (
+            contacts_for_user(user)
+            .filter(account_id=object_id, is_primary=True)
+            .order_by("last_name", "first_name")
+            .first()
+        )
+        if contact is not None:
+            return f"contact:{contact.pk}"
+    if kind == "deal":
+        deal = (
+            scoped(Deal.objects.select_related("primary_contact"), user)
+            .filter(pk=object_id)
+            .first()
+        )
+        if deal is None:
+            return ""
+        if deal.primary_contact_id:
+            from accounts.services import contacts_for_user
+
+            if contacts_for_user(user).filter(pk=deal.primary_contact_id).exists():
+                return f"contact:{deal.primary_contact_id}"
+        if deal.lead_id and scoped(Lead.objects.filter(pk=deal.lead_id), user).exists():
+            return f"lead:{deal.lead_id}"
+    return ""
+
+
+def _visible_party(model, actor, object_id):
+    try:
+        return get_scoped(model, actor, object_id)
+    except PermissionDenied:
+        raise
+    except (Http404, ValidationError, ValueError):
+        raise ValidationError({"with_party": PARTY_MESSAGE}) from None
+
+
+def _party(actor, data, *, required):
+    raw = str(data.get("with_party") or "").strip()
+    contact_id = str(data.get("with_contact") or "").strip()
+    lead_id = str(data.get("with_lead") or "").strip()
+    if raw:
+        kind, separator, value = raw.partition(":")
+        if separator and kind == "contact" and value:
+            contact_id, lead_id = value, ""
+        elif separator and kind == "lead" and value:
+            lead_id, contact_id = value, ""
+        else:
+            raise ValidationError({"with_party": PARTY_MESSAGE})
+    if contact_id and lead_id:
+        raise ValidationError({"with_party": "Choose one contact or one lead."})
+    if not contact_id and not lead_id:
+        if required:
+            raise ValidationError({"with_party": PARTY_MESSAGE})
+        return None, None, ""
+    if contact_id:
+        contact = _visible_party(Contact, actor, contact_id)
+        name = f"{contact.first_name} {contact.last_name}".strip()
+        return contact, None, name[:200]
+    lead = _visible_party(Lead, actor, lead_id)
+    name = f"{lead.first_name} {lead.last_name}".strip()
+    return None, lead, name[:200]
+
+
+def _notes(value, field):
+    text = str(value or "").strip()
+    if len(text) > NOTE_LIMIT:
+        raise ValidationError({field: "Notes must be 4000 characters or fewer."})
+    return text
+
+
+@transaction.atomic
+def create_activity(*, actor, data, links, request_id="", logged=True):
+    from core.policy import require_action
+
+    require_action(actor, "activity", "C")
+    if logged:
+        activity_type = _logged_type(data.get("activity_type"))
+    else:
+        activity_type = str(data.get("activity_type") or "").strip()
+        if activity_type not in Activity.Type.values:
+            raise ValidationError(
+                {"activity_type": "Choose a call, email, meeting, or note."}
+            )
     subject = str(data.get("subject") or "").strip()
     if not subject:
         raise ValidationError({"subject": "This field is required."})
+    occurred_at = user_datetime(data.get("occurred_at"), actor, "occurred_at")
+    if occurred_at is None:
+        if logged:
+            raise ValidationError({"occurred_at": "Enter when this activity happened."})
+        occurred_at = timezone.now()
+    contact, lead, party_name = _party(actor, data, required=logged)
     resolved = _links(actor, links)
     activity = Activity(
         external_id=clean_external_id(data.get("external_id")),
         activity_type=activity_type,
         subject=subject[:200],
-        body=str(data.get("body") or "").strip(),
-        occurred_at=user_datetime(data.get("occurred_at"), actor, "occurred_at")
-        or timezone.now(),
+        with_whom=party_name,
+        with_contact=contact,
+        with_lead=lead,
+        body=_notes(data.get("body"), "body"),
+        occurred_at=occurred_at,
         outcome=str(data.get("outcome") or "").strip()[:200],
         owner=clean_owner(actor, data.get("owner"), object_key="activity"),
         created_by=actor,
@@ -311,7 +460,7 @@ def create_task(*, actor, data, links, request_id=""):
     task = Task(
         external_id=clean_external_id(data.get("external_id")),
         title=title[:200],
-        description=str(data.get("description") or "").strip(),
+        description=_notes(data.get("description"), "description"),
         due_at=due_at,
         priority=priority,
         owner=clean_owner(actor, data.get("owner"), object_key="task"),
@@ -414,6 +563,34 @@ def delete_task(*, actor, task_id, version, delete_reason, request_id=""):
     return task
 
 
+@transaction.atomic
+def update_task(*, actor, task_id, version, data, request_id=""):
+    task = _locked_task(actor, task_id, version)
+    if task.status not in {Task.Status.OPEN, Task.Status.HOLD}:
+        raise ValidationError({"status": "Only an open or held task can be edited."})
+    title = str(data.get("title") or "").strip()
+    if not title:
+        raise ValidationError({"title": "This field is required."})
+    due_at = user_datetime(data.get("due_at"), actor, "due_at")
+    if due_at is None:
+        raise ValidationError({"due_at": "Enter a due time."})
+    priority = str(data.get("priority") or task.priority)
+    if priority not in Task.Priority.values:
+        raise ValidationError({"priority": "Choose a valid priority."})
+    before = _snapshot(task)
+    task.title = title[:200]
+    if "description" in data:
+        task.description = _notes(data.get("description"), "description")
+    task.due_at = due_at
+    task.priority = priority
+    task.updated_by = actor
+    task.version += 1
+    task.full_clean()
+    task.save()
+    _audit(actor, "task.updated", task, before, request_id)
+    return task
+
+
 def _locked_activity(actor, activity_id, version):
     require_action(actor, "activity", "U", object_id=activity_id)
     activity = get_scoped(Activity, actor, activity_id, for_update=True)
@@ -425,23 +602,27 @@ def _locked_activity(actor, activity_id, version):
 @transaction.atomic
 def update_activity(*, actor, activity_id, version, data, request_id=""):
     activity = _locked_activity(actor, activity_id, version)
-    activity_type = str(data.get("activity_type") or activity.activity_type).strip()
-    if activity_type not in Activity.Type.values:
-        raise ValidationError(
-            {"activity_type": "Choose a call, email, meeting, or note."}
-        )
+    activity_type = _logged_type(data.get("activity_type") or activity.activity_type)
     subject = str(data.get("subject") or "").strip()
     if not subject:
         raise ValidationError({"subject": "This field is required."})
     before = _snapshot(activity)
     activity.activity_type = activity_type
     activity.subject = subject[:200]
-    activity.body = str(data.get("body") if "body" in data else activity.body).strip()
+    if any(key in data for key in ("with_party", "with_contact", "with_lead")):
+        contact, lead, party_name = _party(actor, data, required=True)
+        activity.with_contact = contact
+        activity.with_lead = lead
+        activity.with_whom = party_name
+    if "body" in data:
+        activity.body = _notes(data.get("body"), "body")
     activity.outcome = str(
         data.get("outcome") if "outcome" in data else activity.outcome
     ).strip()[:200]
-    occurred_at = user_datetime(data.get("occurred_at"), actor, "occurred_at")
-    if occurred_at is not None:
+    if "occurred_at" in data:
+        occurred_at = user_datetime(data.get("occurred_at"), actor, "occurred_at")
+        if occurred_at is None:
+            raise ValidationError({"occurred_at": "Enter when this activity happened."})
         activity.occurred_at = occurred_at
     activity.updated_by = actor
     activity.version += 1

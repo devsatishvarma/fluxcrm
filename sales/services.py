@@ -1,4 +1,4 @@
-"""Lead-linked deal list, change, and audit operations."""
+"""Deal list, change, and audit operations."""
 
 import logging
 from datetime import UTC, datetime
@@ -6,7 +6,7 @@ from decimal import Decimal
 
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Case, IntegerField, Q, Sum, Value, When
 from django.http import Http404
 from django.utils import timezone
 
@@ -53,6 +53,13 @@ DEAL_ORDERING = {
     "age": "created_at",
     "-age": "-created_at",
 }
+CONFIDENCE_RANK = Case(
+    When(confidence="HIGH", then=Value(0)),
+    When(confidence="MEDIUM", then=Value(1)),
+    When(confidence="LOW", then=Value(2)),
+    default=Value(3),
+    output_field=IntegerField(),
+)
 
 
 def deal_snapshot(deal: Deal) -> dict:
@@ -61,6 +68,9 @@ def deal_snapshot(deal: Deal) -> dict:
         "title": deal.title,
         "lead_id": None if deal.lead_id is None else str(deal.lead_id),
         "account_id": None if deal.account_id is None else str(deal.account_id),
+        "primary_contact_id": (
+            None if deal.primary_contact_id is None else str(deal.primary_contact_id)
+        ),
         "converted_from_lead_id": (
             None
             if deal.converted_from_lead_id is None
@@ -70,23 +80,38 @@ def deal_snapshot(deal: Deal) -> dict:
         "probability": str(deal.probability),
         "outcome": deal.outcome,
         "close_reason": deal.close_reason,
+        "evaluation_started_on": (
+            None
+            if deal.evaluation_started_on is None
+            else deal.evaluation_started_on.isoformat()
+        ),
+        "technical_stakeholder_name": deal.technical_stakeholder_name,
+        "actual_close_date": (
+            None
+            if deal.actual_close_date is None
+            else deal.actual_close_date.isoformat()
+        ),
         "deal_type": deal.deal_type,
         "amount": None if deal.amount is None else str(deal.amount),
         "currency": deal.currency,
+        "confidence": deal.confidence,
         "owner_id": deal.owner_id,
         "version": deal.version,
         "deleted": deal.deleted_at is not None,
     }
 
 
-def _record(actor, action, deal, before, request_id):
+def _record(actor, action, deal, before, request_id, extra=None):
+    after = deal_snapshot(deal)
+    if extra:
+        after.update(extra)
     AuditEvent.objects.create(
         actor=actor,
         action=action,
         object_type="sales.deal",
         object_id=str(deal.pk),
         before_json=before,
-        after_json=deal_snapshot(deal),
+        after_json=after,
         request_id=request_id,
         source="web",
     )
@@ -117,6 +142,51 @@ def _visible_account(actor, account_id):
         raise ValidationError({"account": "Select an active account."}) from exc
 
 
+def _visible_contact(actor, contact_id, account):
+    if not contact_id:
+        raise ValidationError({"primary_contact": "Select a contact on this account."})
+    try:
+        from accounts.models import Contact
+
+        contact = get_scoped(Contact, actor, contact_id)
+    except PermissionDenied as exc:
+        raise ValidationError(
+            {"primary_contact": "Select a contact on this account."}
+        ) from exc
+    except Http404 as exc:
+        raise ValidationError(
+            {"primary_contact": "Select a contact on this account."}
+        ) from exc
+    if contact.account_id != account.pk:
+        raise ValidationError({"primary_contact": "Select a contact on this account."})
+    return contact
+
+
+def _deal_contact(actor, data, normalized, current):
+    """An account deal names one contact on that account. A lead deal does not."""
+    if normalized.get("lead") is not None:
+        if data.get("primary_contact"):
+            raise ValidationError(
+                {
+                    "primary_contact": (
+                        "Choose a contact when the deal is on an account."
+                    )
+                }
+            )
+        normalized["primary_contact"] = None
+        return
+    account = normalized.get("account")
+    if account is None and current is not None and "lead" not in normalized:
+        account = current.account
+    if account is None:
+        return
+    if current is not None and "primary_contact" not in data:
+        return
+    normalized["primary_contact"] = _visible_contact(
+        actor, data.get("primary_contact") or None, account
+    )
+
+
 def _deal_source(actor, data, current):
     partial = current is not None
     if partial and "lead" not in data and "account" not in data:
@@ -138,9 +208,26 @@ def _deal_source(actor, data, current):
                 "account": "Choose a lead or an account, not both.",
             }
         )
+    if current is not None:
+        if lead_id and current.account_id:
+            raise ValidationError({"lead": "This deal stays on its account."})
+        if account_id and current.lead_id:
+            raise ValidationError({"account": "This deal stays on its lead."})
+        if (
+            account_id
+            and current.account_id
+            and str(account_id) != str(current.account_id)
+        ):
+            raise ValidationError({"account": "This deal stays on its account."})
     if lead_id:
         return {"lead": _visible_lead(actor, lead_id), "account": None}
     return {"lead": None, "account": _visible_account(actor, account_id)}
+
+
+def _same_probability(left, right):
+    return Decimal(left).quantize(Decimal("0.01")) == Decimal(right).quantize(
+        Decimal("0.01")
+    )
 
 
 def _probability(stage, value):
@@ -152,10 +239,21 @@ def _probability(stage, value):
     return amount
 
 
+def confidence_for_probability(probability):
+    """High at 80% or more, Medium from 40% up to 80%, Low under 40%."""
+    amount = Decimal(probability)
+    if amount >= Decimal("80"):
+        return "HIGH"
+    if amount >= Decimal("40"):
+        return "MEDIUM"
+    return "LOW"
+
+
 def normalize_deal(actor, data, *, current=None):
     partial = current is not None
     normalized = {}
     normalized.update(_deal_source(actor, data, current))
+    _deal_contact(actor, data, normalized, current)
     if not partial or "external_id" in data:
         normalized["external_id"] = clean_external_id(
             data.get("external_id"),
@@ -182,12 +280,6 @@ def normalize_deal(actor, data, *, current=None):
             data.get("stage", "" if current is None else current.stage),
             "stage",
         )
-    if not partial or "confidence" in data:
-        normalized["confidence"] = clean_required_key(
-            "DEAL_CONFIDENCE",
-            data.get("confidence", "" if current is None else current.confidence),
-            "confidence",
-        )
     if not partial or "currency" in data:
         normalized["currency"] = clean_currency(
             data.get("currency", "USD" if current is None else current.currency)
@@ -204,6 +296,22 @@ def normalize_deal(actor, data, *, current=None):
             ),
             "expected_close_date",
         )
+    if not partial or "actual_close_date" in data:
+        normalized["actual_close_date"] = clean_date(
+            data.get(
+                "actual_close_date",
+                None if current is None else current.actual_close_date,
+            ),
+            "actual_close_date",
+        )
+    if not partial or "evaluation_started_on" in data:
+        normalized["evaluation_started_on"] = clean_date(
+            data.get(
+                "evaluation_started_on",
+                None if current is None else current.evaluation_started_on,
+            ),
+            "evaluation_started_on",
+        )
     if not partial or "owner" in data:
         normalized["owner"] = clean_owner(
             actor,
@@ -215,6 +323,18 @@ def normalize_deal(actor, data, *, current=None):
         if len(notes) > 4000:
             raise ValidationError({"notes": "Use 4000 characters or fewer."})
         normalized["notes"] = notes.strip()
+    for field in (
+        "bant_budget_status",
+        "bant_authority_status",
+        "bant_need_status",
+        "bant_timeline_status",
+    ):
+        if partial and field not in data:
+            continue
+        raw = data.get(field)
+        if raw in (None, ""):
+            raw = "UNKNOWN" if current is None else getattr(current, field)
+        normalized[field] = clean_required_key("BANT_STATUS", raw, field)
     stage = normalized.get("stage", current.stage if current else "")
     if not partial or "probability" in data or "stage" in normalized:
         supplied = data.get("probability") if "probability" in data else None
@@ -226,11 +346,19 @@ def normalize_deal(actor, data, *, current=None):
             if normalized["stage"] == current.stage:
                 supplied = current.probability
         normalized["probability"] = _probability(stage, supplied)
+    probability = normalized.get(
+        "probability", None if current is None else current.probability
+    )
+    if probability is not None:
+        normalized["confidence"] = confidence_for_probability(probability)
     return normalized
 
 
 def filter_deals(user, params):
-    queryset = scoped(Deal.objects.select_related("owner", "lead", "account"), user)
+    queryset = scoped(
+        Deal.objects.select_related("owner", "lead", "account", "primary_contact"),
+        user,
+    )
     query = str(params.get("q") or "").strip()
     if len(query) > 100:
         raise ValidationError({"q": "Use 100 characters or fewer."})
@@ -275,7 +403,22 @@ def filter_deals(user, params):
     ordering = params.get("ordering") or "-created_at"
     if ordering not in DEAL_ORDERING:
         raise ValidationError({"ordering": "Sorting is limited to indexed fields."})
-    return queryset.order_by(DEAL_ORDERING[ordering], "pk")
+    from core.workflow import CLOSED_DEAL_STAGES
+
+    closed_last = Case(
+        When(stage__in=CLOSED_DEAL_STAGES, then=Value(1)),
+        default=Value(0),
+        output_field=IntegerField(),
+    )
+    if ordering == "confidence":
+        chosen_order = CONFIDENCE_RANK
+    elif ordering == "-confidence":
+        chosen_order = CONFIDENCE_RANK.desc()
+    else:
+        chosen_order = DEAL_ORDERING[ordering]
+    if ordering in {"confidence", "-confidence"}:
+        return queryset.order_by(chosen_order, "pk")
+    return queryset.order_by(closed_last, chosen_order, "pk")
 
 
 @transaction.atomic
@@ -325,19 +468,15 @@ def update_deal(*, actor, deal_id, version, data, request_id=""):
         raise ValidationError(
             {"stage": "Change stage from the board or the transition action."}
         )
-    if (
-        "probability" in normalized
-        and normalized["probability"] != deal.probability
-        and not can_correct(actor)
-    ):
+    probability_changed = "probability" in normalized and not _same_probability(
+        normalized["probability"], deal.probability
+    )
+    reason = str(data.get("probability_reason") or "").strip()
+    if probability_changed and not can_correct(actor):
         raise PermissionDenied
-    if (
-        "probability" in normalized
-        and normalized["probability"] != deal.probability
-        and not str(data.get("probability_reason") or "").strip()
-    ):
+    if probability_changed and not reason:
         raise ValidationError(
-            {"probability_reason": "A probability override requires a reason."}
+            {"probability_reason": ("Enter why the win probability changed.")}
         )
     for field, value in normalized.items():
         setattr(deal, field, value)
@@ -345,7 +484,27 @@ def update_deal(*, actor, deal_id, version, data, request_id=""):
     deal.version += 1
     deal.full_clean()
     deal.save()
-    _record(actor, "deal.updated", deal, before, request_id)
+    if probability_changed:
+        from core.models import StageHistory
+
+        StageHistory.objects.create(
+            object_type="deal",
+            object_id=deal.pk,
+            from_stage=deal.stage,
+            to_stage=deal.stage,
+            changed_by=actor,
+            duration_seconds=0,
+            probability_snapshot=deal.probability,
+            probability_reason=reason[:500],
+        )
+    _record(
+        actor,
+        "deal.updated",
+        deal,
+        before,
+        request_id,
+        {"probability_reason": reason} if probability_changed else None,
+    )
     return deal
 
 
@@ -377,6 +536,12 @@ def deal_payload(deal: Deal) -> dict:
         "lead_company": "" if deal.lead_id is None else deal.lead.company_name,
         "account": None if deal.account_id is None else str(deal.account_id),
         "account_name": "" if deal.account_id is None else deal.account.name,
+        "primary_contact": (
+            None if deal.primary_contact_id is None else str(deal.primary_contact_id)
+        ),
+        "primary_contact_name": (
+            "" if deal.primary_contact_id is None else str(deal.primary_contact)
+        ),
         "converted_from_lead": (
             None
             if deal.converted_from_lead_id is None
@@ -393,6 +558,17 @@ def deal_payload(deal: Deal) -> dict:
             if deal.expected_close_date is None
             else deal.expected_close_date.isoformat()
         ),
+        "actual_close_date": (
+            None
+            if deal.actual_close_date is None
+            else deal.actual_close_date.isoformat()
+        ),
+        "evaluation_started_on": (
+            None
+            if deal.evaluation_started_on is None
+            else deal.evaluation_started_on.isoformat()
+        ),
+        "technical_stakeholder_name": deal.technical_stakeholder_name,
         "owner": deal.owner_id,
         "owner_name": deal.owner.display_name,
         "stage": deal.stage,
@@ -416,9 +592,24 @@ def deal_history(deal: Deal):
     return StageHistory.objects.filter(object_type="deal", object_id=deal.pk)
 
 
-def open_pipeline_total(user):
-    from django.db.models import Sum
+def owner_amount_totals(queryset):
+    """Amount of the current deal list, grouped by owner."""
+    rows = (
+        queryset.order_by()
+        .values("owner_id", "owner__display_name")
+        .annotate(total=Sum("amount"))
+        .order_by("owner__display_name")
+    )
+    return [
+        {
+            "name": row["owner__display_name"] or "—",
+            "total": row["total"] or Decimal("0.00"),
+        }
+        for row in rows
+    ]
 
+
+def open_pipeline_total(user):
     from core.workflow import OPEN_DEAL_STAGES
 
     total = (
@@ -475,6 +666,18 @@ def transition_deal(
         deal.expected_close_date = clean_date(
             incoming.get("expected_close_date"), "expected_close_date"
         )
+    if incoming.get("actual_close_date") not in (None, ""):
+        deal.actual_close_date = clean_date(
+            incoming.get("actual_close_date"), "actual_close_date"
+        )
+    if incoming.get("evaluation_started_on") not in (None, ""):
+        deal.evaluation_started_on = clean_date(
+            incoming.get("evaluation_started_on"), "evaluation_started_on"
+        )
+    if incoming.get("technical_stakeholder_name") not in (None, ""):
+        deal.technical_stakeholder_name = str(
+            incoming.get("technical_stakeholder_name")
+        ).strip()[:120]
     for field in (
         "bant_budget_status",
         "bant_authority_status",
@@ -508,11 +711,7 @@ def transition_deal(
                 raise PermissionDenied
             if not str(incoming.get("probability_reason") or "").strip():
                 raise ValidationError(
-                    {
-                        "probability_reason": (
-                            "A probability override requires a reason."
-                        )
-                    }
+                    {"probability_reason": ("Enter why the win probability changed.")}
                 )
             probability = override
             probability_reason = str(incoming["probability_reason"]).strip()
@@ -524,11 +723,14 @@ def transition_deal(
         deal.outcome = "WON"
     elif destination == "CLOSED_LOST":
         deal.outcome = "LOST"
+        deal.actual_close_date = None
     elif destination == "CLOSED_HOLD":
         deal.outcome = "HOLD"
+        deal.actual_close_date = None
     elif destination in OPEN_DEAL_STAGES:
         deal.outcome = ""
         deal.close_reason = ""
+        deal.actual_close_date = None
     before = deal_snapshot(deal)
     now = timezone.now()
     duration = max(int((now - deal.stage_entered_at).total_seconds()), 0)
@@ -546,6 +748,7 @@ def transition_deal(
     )
     deal.stage = destination
     deal.probability = probability
+    deal.confidence = confidence_for_probability(probability)
     deal.stage_entered_at = now
     deal.updated_by = actor
     if destination in {"CLOSED_WON", "CLOSED_LOST"} and deal.lead_id:

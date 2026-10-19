@@ -1,28 +1,51 @@
-# FluxCRM Development Status
+# GlideCRM Development Status
 
 > Update this file at the end of every work session and whenever a gate,
 > blocker, decision, scope, or verification result changes.
 
 ## Current position
 
-- **MVP completion:** 70% (48 of 69 Phase 0–9 gate items verified)
-- **Current phase:** Phase 7 — Reports and dashboards
-- **Phase status:** Not started
-- **Phase completion:** 0% (0 of 7 gate items verified)
+- **MVP completion:** 93% (64 of 69 Phase 0–9 gate items verified)
+- **Current phase:** Phase 9 — Cloud pilot and operational hardening
+- **Phase status:** Started. The release gate is in place and the 500,000-lead list was measured on this machine. The cloud host is not selected.
+- **Phase completion:** 17% (1 of 6 gate items verified)
 - **Planning baseline:** Complete
-- **Code baseline:** Tag `pre-phase-7` on this commit. Phase 6 access control and the later task, settings, date, and amount work are included. Phase 7 is not started.
-- **Last updated:** 2026-10-11
-- **Last verified result:** 73 MySQL tests passed, plus Ruff and system checks, before this checkpoint.
+- **Code baseline:** Tag `pre-phase-7`. Later phases and the release-gate work are not yet committed.
+- **Last updated:** 2026-10-12
+- **Last verified result:** On this machine's Docker MySQL 8.4, the open lead list at 500,000 rows returned in 0.400 seconds and the New-stage list in 0.180 seconds. Both are inside the 2 second target. See D-028.
 
-## Current phase gate — Phase 7
+## Current phase gate — Phase 9
 
-- [ ] Every total reconciles to hand-checked fixtures.
-- [ ] Parent rollups do not double-count descendants.
-- [ ] Cohort, fiscal-quarter, prior-period, and time-zone boundaries are correct.
-- [ ] Raw rows and aggregates expose no records beyond viewer scope.
-- [ ] Large detail results remain paginated.
-- [ ] Report duration and query count meet measured budgets.
-- [ ] Export audit includes actor, filters, fields, and row count.
+- [ ] `check --deploy`, TLS, host/origin, cookie, proxy, and network controls pass on the pilot host.
+- [ ] A current database-and-upload backup restores into a clean environment.
+- [ ] Backup age, restore result, app/DB health, storage, latency, errors, and jobs have named actionable alerts.
+- [x] Normal filtered lists meet the <2 second target on agreed pilot hardware, or
+      a measured remediation decision is recorded.
+- [ ] The 50-user scenario and permission matrix pass with representative data.
+- [ ] A small pilot completes with no unresolved critical defect and reviewed
+      telemetry/user feedback.
+
+## Completed phase gate — Phase 8
+
+- [x] Preview produces no business-record side effects.
+- [x] Invalid rows are isolated and explained.
+- [x] Retry/replay does not duplicate committed rows.
+- [x] Duplicate policies yield deterministic results.
+- [x] Rollback preserves audit and flags records changed after import.
+- [x] Formula cells are rejected on import and dangerous export prefixes escaped.
+- [x] File/MIME/size/row limits and all permission scopes are enforced.
+- [x] A 50,000-row representative batch completes within a recorded operational
+      budget without a request-long transaction.
+
+## Completed phase gate — Phase 7
+
+- [x] Every total reconciles to hand-checked fixtures.
+- [x] Parent rollups do not double-count descendants.
+- [x] Cohort, fiscal-quarter, prior-period, and time-zone boundaries are correct.
+- [x] Raw rows and aggregates expose no records beyond viewer scope.
+- [x] Large detail results remain paginated.
+- [x] Report duration and query count meet measured budgets.
+- [x] Export audit includes actor, filters, fields, and row count.
 
 ## Completed phase gate — Phase 6
 
@@ -99,16 +122,21 @@
   one primary contact, explicit duplicate choice, and one conversion
   transaction. See D-016.
 - **Phase 6 — Teams, RBAC, audit:** 7/7, complete. See D-018.
-- **Phase 7 — Reports and dashboards:** 0/7, not started.
-- **Phase 8 — Import/export:** 0/8, waiting for Phase 7.
-- **Phase 9 — Cloud pilot/hardening:** 0/6, waiting for Phase 8.
+- **Phase 7 — Reports and dashboards:** 7/7, complete. Scoped totals,
+  fiscal quarters, and export audit. See D-023.
+- **Phase 8 — Import/export:** 8/8, complete. CSV templates for leads,
+  accounts, and contacts. See D-024.
+- **Phase 9 — Cloud pilot/hardening:** 1/6, started. The 500,000-lead list
+  is under 2 seconds on this machine. See D-027 and D-028. The provider,
+  HTTPS host, and pilot are still open.
 - **Phase 10 — Post-MVP modules:** separately approved; excluded from MVP %.
 
 ## Active blockers
 
-None for starting Phase 7. Stage moves still use the Phase 3 reason-based
-gates; requiring a logged activity before a stage change is a later decision.
-See D-013.
+Phase 9 has no cloud provider, managed MySQL offering, or off-host backup
+target yet. Satish is the interim alert owner. Stage moves still use the
+Phase 3 reason-based gates; requiring a logged activity before a stage change
+is a later decision. See D-013.
 
 ## Decisions needed later
 
@@ -116,8 +144,9 @@ See D-013.
   failure-alert owner. Development reset uses the console/locmem backend.
 - Company logo upload is optional and was not supplied. It can be added later
   from company settings.
-- Before Phase 9: select the cloud provider, managed MySQL offering, backup
-  target, alert owners, and incident contacts.
+- Before a production deploy: select the cloud provider, managed MySQL
+  offering, off-host backup target, and a second incident contact. Satish
+  remains the interim alert owner. See D-027.
 - Before production pilot: approve data classification, retention/deletion,
   attachment, and antivirus policies.
 - After the pilot: separately prioritize and approve Phase 10 modules and
@@ -125,12 +154,99 @@ See D-013.
 
 ## Next three actions
 
-1. Write the fixture equation for each rep report before implementing its query.
-2. Add the rep dashboard for open leads, pipeline, overdue follow-ups, and recent activity.
-3. Reconcile those totals to the fixture and confirm they stay inside viewer scope.
+1. Name the cloud provider, managed MySQL offering, and off-host backup target.
+2. Name a second incident contact. Satish owns the alert list until then.
+3. Run the 50-user scenario against representative data before a pilot.
 
 ## Latest evidence
 
+- 2026-10-16: Sorting deals by confidence lists High, then Medium, then Low.
+  The MVP percentage is unchanged.
+- 2026-10-16: The delete reason uses the full line. Confirmed to delete sits on
+  the same line as the delete button. The MVP percentage is unchanged.
+- 2026-10-16: An activity’s “with whom” is an existing contact or lead. Create
+  that person first if the name is not listed. See D-049. The MVP
+  percentage is unchanged.
+- 2026-10-16: Edit deal can change the POC or trial start date. The MVP
+  percentage is unchanged.
+- 2026-10-16: The Tasks list shows the title in bold. Hold, cancel, and delete
+  stay on that screen. A deal does not show task notes. Delete sits next
+  to Edit on an activity. See D-048. The MVP percentage is unchanged.
+- 2026-10-16: A logged activity is a call, email, or meeting, and records who
+  it was with, when it happened, and notes. A task can be edited and can
+  store notes. See D-047. The MVP percentage is unchanged.
+- 2026-10-16: The team page lists only the active members of that team.
+  The MVP percentage is unchanged.
+- 2026-10-16: A user's team checkboxes can be changed, so a person can move
+  from one team to another. The MVP percentage is unchanged.
+- 2026-10-14: A lead and a contact require an email address. See D-046.
+  The MVP percentage is unchanged.
+- 2026-10-14: Phone numbers on leads, accounts, contacts, and users are stored
+  and shown as (XXX) XXX-XXXX. See D-045. The MVP percentage is unchanged.
+- 2026-10-14: A lead, an account, and a contact can store an optional address:
+  street, city, state, postal code, and country. Import templates and Help
+  include those fields. See D-044. The MVP percentage is unchanged.
+- 2026-10-12: A won deal stores an actual close date. Quarter and year wins
+  use that date, not the day the stage changed to Closed Won. See D-043.
+  The MVP percentage is unchanged.
+- 2026-10-12: Adding a deal from the Deals page asks whether it is linked to a
+  lead or an account, then lists leads or that account’s contacts.
+  The MVP percentage is unchanged.
+- 2026-10-12: The Reports dashboard is three rows: open leads, open deal count,
+  and pipeline value; wins this quarter and this year against the prior
+  period; then overdue tasks and stale leads. The MVP percentage is unchanged.
+- 2026-10-12: A contact stores a work phone and a mobile phone. Conversion,
+  including a closed deal, copies those numbers from the lead. See D-042.
+  The MVP percentage is unchanged.
+- 2026-10-12: A deal can be added from an account and must name a contact on
+  that account. Stage, amount, and probability behavior match a lead deal.
+  See D-041. The MVP percentage is unchanged.
+- 2026-10-12: The deal stage Technical Evaluation is labeled POC/Tech
+  Evaluation. The stored key is unchanged. See D-040. The MVP percentage is
+  unchanged.
+- 2026-10-12: The lead stage Demo/POC Scheduled is labeled Demo. The stored
+  key is unchanged. See D-039. The MVP percentage is unchanged.
+- 2026-10-12: Deal stages are New, Discovery, Qualified, Technical Evaluation,
+  Proposal, Negotiation, Closing, Closed Won, Closed Lost, and Closed Hold.
+  The old Contacted stage is Discovery. The old Discovery stage is Technical
+  Evaluation. See D-038. The MVP percentage is unchanged.
+- 2026-10-12: Lead stages are New, Contacted, MQL, Demo/POC Scheduled, SQL,
+  Nurturing, Unqualified, and Archived. SQL Ready is SQL. SQL Reactivation
+  is Nurturing with reason Reactivation. See D-037. The MVP percentage is
+  unchanged.
+- 2026-10-12: Delete for a lead, deal, account, contact, activity, or task is at
+  the bottom of the page. A reason and one confirmation checkbox are required.
+  See D-036. The MVP percentage is unchanged.
+- 2026-10-12: Accounts and contacts can be deleted from their pages. A reason is
+  required, and an account or contact that other records still depend on stays
+  in place. See D-035. The MVP percentage is unchanged.
+- 2026-10-12: Client and Customer are one account type, Customer. Existing
+  Client accounts were rewritten to Customer. See D-034. The MVP percentage
+  is unchanged.
+- 2026-10-12: Record owners are shown by name. Lead, account, and contact
+  import and export match the owner column to that name, not the login
+  username. See D-033. The MVP percentage is unchanged.
+- 2026-10-12: Account types include Client. Industries add Insurance, Automotive,
+  Hospitality & Travel, and Technology & SaaS. Retail is labeled
+  Retail & E-Commerce. See D-032. The MVP percentage is unchanged.
+- 2026-10-12: Accounts and contacts can be edited. Required fields are marked.
+  The application id stays off the screen and is included in the lead,
+  account, and contact exports. See D-031. The MVP percentage is unchanged.
+- 2026-10-12: Deal confidence is set from win probability. High is 80% or more,
+  Medium is 40% up to 80%, and Low is under 40%. The Deals page groups
+  deals by stage and confidence, by age and quarter, and by sales owner.
+  See D-030. The MVP percentage is unchanged.
+- 2026-10-12: 500,000 synthetic leads were loaded into `glidecrm_perf`, not the
+  application database. Before the list change, the open list took 25.808
+  seconds and the New-stage list took 8.363 seconds. After paging by primary
+  key and adding the open-list indexes, the same lists took 0.400 seconds and
+  0.180 seconds. Hardware was this machine's Docker MySQL 8.4. See D-028.
+  `glidecrm_perf` was dropped after that measurement.
+- 2026-10-12: Release profile passed `check --deploy`. An encrypted database and
+  upload backup restored 47 migration rows into the empty database
+  `glidecrm_restore_drill` from 19:17:36Z to 19:17:46Z. The drill database and
+  archive were then removed. The application database was not replaced, and
+  `/ready/` stayed 200. See D-027.
 - 2026-10-11: Architecture specification reviewed against the phased plan.
 - 2026-10-11: Business, access, tooling, deployment, and post-MVP decisions
   captured in the decision/deviation register.
@@ -168,7 +284,7 @@ See D-013.
   setup rerun, active and disabled login, single-use expiring reset tokens,
   redacted reset paths, standard-user denial, Pacific time rendering, login
   and reset throttles, and secure cookies.
-- 2026-10-11: Recreated the local `fluxcrm` database and applied the identity
+- 2026-10-11: Recreated the local `glidecrm` database and applied the identity
   user migration. Live setup stored Infoshare Systems and the first
   administrator; repeating setup redirected to login. Home rendered
   `2026-10-11 17:31 America/Los_Angeles`. A standard user received 403 on
@@ -218,7 +334,7 @@ See D-013.
   and `/deals/board/` redirected to login.
 - 2026-10-11: Audited Phases 1–3 against the architecture, delivery plan,
   decision register, implementation, and gates. Removed the documented local
-  credential, separated FluxCRM Admin from Django superuser/staff, removed the
+  credential, separated GlideCRM Admin from Django superuser/staff, removed the
   Django admin route, made setup races safe, added audited invitation and
   reset actions, and validated logo signatures. Twelve identity tests passed.
 - 2026-10-11: Phase 2 hardening added complete Deal UI coverage, negative
@@ -280,6 +396,22 @@ See D-013.
   Help sits next to Log out. See D-021.
 - 2026-10-11: Shown amounts are whole dollars with the symbol first, such as
   $ 12,500. Stored amounts keep cents. See D-022.
+- 2026-10-11: Phase 7 reports passed. A parent account with $50 and a child
+  with $100 roll up to $150 once, and the company total stays $150. A lead
+  created at 2026-01-01 07:30 UTC falls on 2025-12-31 in Los Angeles. Prior
+  quarter wins compare with the current quarter, and a zero prior period
+  shows N/A. A standard user does not see another owner's pipeline. Detail
+  pages paginate. The dashboard used 15 queries and rendered in 12 ms, inside
+  the 30-query budget. Export audit stores the actor, filters, fields, and
+  row count. 79 MySQL tests passed. See D-023.
+- 2026-10-11: Phase 8 CSV import passed. Lead, account, and contact templates
+  mark required and optional columns and the format for each one. Preview
+  writes no business records. Invalid rows are explained. Skip, Update, and
+  Create stay deterministic. A retry key and a failed later group do not
+  duplicate rows already saved. Rollback keeps the original audit and leaves
+  a later edit in place. Formula-like cells are rejected, and export prefixes
+  a leading `=`. A 50,000-row preview finished in about 1 second. Commits
+  save 200 rows at a time. 89 MySQL tests passed. See D-024.
 
 ## Recent decision/change log
 
@@ -295,7 +427,7 @@ See D-013.
 - **2026-10-11 — Scope:** Cloud provider selection is deferred to Phase 9;
   Phase 10 modules require separate post-pilot approval.
 - **2026-10-11 — Package identity:** Renamed the Python distribution from
-  `agents` to `fluxcrm` with user approval; all existing dependencies remain.
+  `agents` to `glidecrm` with user approval; all existing dependencies remain.
 - **2026-10-11 — Identity app:** Custom users live in `identity` so the
   swappable user is created in that app's first migration. `accounts` stays
   reserved for CRM customer records. See D-009 and D-010.
@@ -306,7 +438,7 @@ See D-013.
 - **2026-10-11 — Protected stages:** Lead and deal graphs are system-protected.
   Activity, task, and primary-contact gates stay in Phases 4 and 5. Admin is
   the correction and probability-override role until Phase 6. See D-012.
-- **2026-10-11 — Identity administration:** FluxCRM Admin is an audited
+- **2026-10-11 — Identity administration:** GlideCRM Admin is an audited
   application role, not Django staff/superuser access. Invitations and
   administrator-requested resets use the configured email backend. See D-009
   and D-010.
@@ -321,6 +453,12 @@ See D-013.
 - **2026-10-11 — Phase 6 access:** The architecture matrix is enforced in
   server-side grants. Standard User remains an own-records role. Sales
   Director sees the whole reporting line. See D-018.
+- **2026-10-11 — Reports:** Totals use the same record scope as the lists.
+  Fiscal quarters start in January. A parent rollup counts each descendant
+  deal once. See D-023.
+- **2026-10-11 — CSV import:** Lead, account, and contact templates state
+  which columns are required and how values are written. Preview does not
+  save those records. See D-024.
 
 ## How to maintain this file
 

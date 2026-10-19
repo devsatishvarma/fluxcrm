@@ -14,7 +14,7 @@ from django.urls import reverse
 from audit.models import AuditEvent
 from core.forms import SetupForm
 from core.services import SetupAlreadyCompleted, ensure_roles, setup_first_administrator
-from identity.models import CompanySettings, User
+from identity.models import CompanySettings, Role, Team, User
 
 pytestmark = pytest.mark.django_db
 
@@ -297,6 +297,7 @@ def test_admin_can_invite_disable_and_reset_user(client):
     assert user.is_active
     assert user.is_staff is False
     assert len(mail.outbox) == 1
+    assert mail.outbox[0].to == ["riley@example.test"]
     assert "/password-reset/" in mail.outbox[0].body
     assert AuditEvent.objects.filter(
         action="user.invited", object_id=str(user.pk)
@@ -411,3 +412,142 @@ def test_django_admin_is_not_exposed(client):
         {"username": "satish", "password": ADMIN_PASSWORD},
     )
     assert client.get("/admin/").status_code == 404
+
+
+def test_team_edit_lists_only_active_members(client):
+    complete_setup(client)
+    client.post(
+        reverse("core:login"),
+        {"username": "satish", "password": ADMIN_PASSWORD},
+    )
+    _, standard = ensure_roles()
+    member = User.objects.create_user(
+        username="ada",
+        email="ada.team@example.test",
+        password=ADMIN_PASSWORD,
+        display_name="Ada Member",
+        role=standard,
+    )
+    quiet = User.objects.create_user(
+        username="ida",
+        email="ida.team@example.test",
+        password=ADMIN_PASSWORD,
+        display_name="Ida Quiet",
+        role=standard,
+        is_active=False,
+    )
+    User.objects.create_user(
+        username="owen",
+        email="owen.team@example.test",
+        password=ADMIN_PASSWORD,
+        display_name="Owen Other",
+        role=standard,
+    )
+    team = Team.objects.create(name="West")
+    team.members.add(member, quiet)
+    page = client.get(reverse("core:team_edit", args=[team.pk]))
+    listed = page.content.split(b"<legend>Members</legend>", 1)[1].split(
+        b'name="active"', 1
+    )[0]
+    assert b"Ada Member" in listed
+    assert b"Ida Quiet" not in listed
+    assert b"Owen Other" not in listed
+    saved = client.post(
+        reverse("core:team_edit", args=[team.pk]),
+        {"name": "West", "members": [member.pk], "active": "1"},
+    )
+    assert saved.status_code == 302
+    assert set(team.members.values_list("username", flat=True)) == {"ada", "ida"}
+    removed = client.post(
+        reverse("core:team_edit", args=[team.pk]),
+        {"name": "West", "active": "1"},
+    )
+    assert removed.status_code == 302
+    assert list(team.members.values_list("username", flat=True)) == ["ida"]
+
+
+def test_admin_can_edit_a_user_name_role_manager_and_teams(client):
+    complete_setup(client)
+    client.post(
+        reverse("core:login"),
+        {"username": "satish", "password": ADMIN_PASSWORD},
+    )
+    _, standard = ensure_roles()
+    director = Role.objects.get(key="SALES_DIRECTOR")
+    created = client.post(
+        reverse("core:user_create"),
+        {
+            "username": "riley",
+            "email": "riley@example.test",
+            "phone": "949-555-0100",
+            "display_name": "Riley",
+            "timezone": "America/Los_Angeles",
+            "role": standard.pk,
+            "password": "temporary-strong-pass",
+            "password_confirmation": "temporary-strong-pass",
+        },
+    )
+    assert created.status_code == 302
+    person = User.objects.get(username="riley")
+    assert person.phone == "(949) 555-0100"
+    team = Team.objects.create(name="West")
+    other = Team.objects.create(name="East")
+    page = client.get(reverse("core:user_edit", args=[person.pk]))
+    assert b'class="choice-line"' in page.content
+    assert b'for="id_teams_' not in page.content
+    assert page.status_code == 200
+    assert b"Name" in page.content
+    assert b"Email" in page.content
+    assert b"Phone" in page.content
+    assert b"Password reset instructions are sent to this address." in page.content
+    assert b"Edit Riley" in page.content
+    saved = client.post(
+        reverse("core:user_edit", args=[person.pk]),
+        {
+            "display_name": "Riley Chen",
+            "email": "riley.chen@example.test",
+            "phone": "949-555-0199",
+            "role": director.pk,
+            "manager": User.objects.get(username="satish").pk,
+            "teams": [team.pk],
+        },
+    )
+    assert saved.status_code == 302
+    person.refresh_from_db()
+    assert person.display_name == "Riley Chen"
+    assert person.email == "riley.chen@example.test"
+    assert person.phone == "(949) 555-0199"
+    assert person.role_id == director.pk
+    assert person.manager.username == "satish"
+    assert list(person.teams.values_list("name", flat=True)) == ["West"]
+    moved = client.post(
+        reverse("core:user_edit", args=[person.pk]),
+        {
+            "display_name": "Riley Chen",
+            "email": "riley.chen@example.test",
+            "phone": "949-555-0199",
+            "role": director.pk,
+            "manager": User.objects.get(username="satish").pk,
+            "teams": [other.pk],
+        },
+    )
+    assert moved.status_code == 302
+    assert list(person.teams.values_list("name", flat=True)) == ["East"]
+    assert AuditEvent.objects.filter(
+        action="user.updated", object_id=str(person.pk)
+    ).exists()
+    listing = client.get(reverse("core:user_list"))
+    assert b"Edit" in listing.content
+    assert b"East" in listing.content
+    assert b"riley.chen@example.test" in listing.content
+    assert b"(949) 555-0199" in listing.content
+    kept = client.post(
+        reverse("core:user_edit", args=[User.objects.get(username="satish").pk]),
+        {
+            "display_name": "Satish",
+            "email": "satish@example.test",
+            "role": standard.pk,
+        },
+    )
+    assert kept.status_code == 200
+    assert User.objects.get(username="satish").role.key == "ADMIN"

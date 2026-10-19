@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 {% load crm %}
-{% block title %}{{ lead.first_name }} {{ lead.last_name }} · FluxCRM{% endblock %}
+{% block title %}{{ lead.first_name }} {{ lead.last_name }} · GlideCRM{% endblock %}
 {% block content %}
   <h1>{{ lead.first_name }} {{ lead.last_name }}</h1>
-  <p>
+  <p class="record-actions">
     <a href="{% url 'leads:edit' lead.pk %}">Edit</a>
     {% if lead.converted_at %}
       <a href="{% url 'accounts:detail' lead.converted_account_id %}">Converted account</a>
@@ -24,11 +24,14 @@
       </div>
     {% endif %}
     <div><dt>Email</dt><dd>{{ lead.email|default:"—" }}</dd></div>
+    <div><dt>Work phone</dt><dd>{{ lead.work_phone|phone }}</dd></div>
+    <div><dt>Mobile phone</dt><dd>{{ lead.mobile_phone|phone }}</dd></div>
+    <div><dt>Address</dt><dd>{{ lead.address|address }}</dd></div>
     <div><dt>Source</dt><dd>{{ lead.source }}</dd></div>
     <div><dt>Lead rating</dt><dd>{{ lead.rating|choice_label }}</dd></div>
     <div><dt>Created</dt><dd>{{ lead.created_at|date:"m-d-Y, h:i A" }}</dd></div>
     <div><dt>Lead Age</dt><dd>{{ lead.created_at|elapsed }}</dd></div>
-    <div><dt>Lead stage</dt><dd>{{ lead.stage }}</dd></div>
+    <div><dt>Lead stage</dt><dd>{{ lead.stage|stage_label }}</dd></div>
     <div><dt>Stage-Age</dt><dd>{{ lead.stage_entered_at|elapsed }}</dd></div>
     <div><dt>Owner</dt><dd>{{ lead.owner.display_name }}</dd></div>
     <div><dt>External ID</dt><dd>{{ lead.external_id }}</dd></div>
@@ -47,88 +50,171 @@
   {% endif %}
   <p><a href="{% url 'sales:create' %}?lead={{ lead.pk }}">Add deal</a></p>
   <h2>Move lead stage</h2>
-  <form method="post" action="{% url 'leads:transition' lead.pk %}">
-    {% csrf_token %}
-    <input type="hidden" name="version" value="{{ lead.version }}">
-    <div class="row g-2">
-      <div class="col-md-6">
-        <label class="form-label" for="lead-next-stage">Next stage</label>
-        <select class="form-select" id="lead-next-stage" name="to_stage">
-          {% for stage in allowed_stages %}
-            <option value="{{ stage }}">{{ stage }}</option>
-          {% endfor %}
-        </select>
+  {% include "crm/_stage_path.html" with stage_order=stage_order current_stage=lead.stage %}
+  {% if allowed_stages %}
+    <p>Choose the next stage. Only the fields that stage needs are shown, and <abbr class="req" title="Required">*</abbr> marks the ones you must fill. Moving a lead does not move a deal or create an account.</p>
+    <form method="post" action="{% url 'leads:transition' lead.pk %}">
+      {% csrf_token %}
+      <input type="hidden" name="version" value="{{ lead.version }}">
+      <div class="aligned-fields">
+        <div class="col-md-6">
+          <label class="form-label" for="lead-next-stage">Next stage<abbr class="req" title="Required">*</abbr></label>
+          <select class="form-select" id="lead-next-stage" name="to_stage" required>
+            {% for stage in allowed_stages %}
+              <option value="{{ stage }}">{{ stage_labels|lookup:stage|default:stage }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-6" data-stage-owner="lead-next-stage" data-stages="CONTACTED">
+          <label class="form-label" for="lead-substatus">Contact substatus<abbr class="req" title="Required">*</abbr></label>
+          <select class="form-select" id="lead-substatus" name="contact_substatus">
+            {% for key, label in contact_substatus_choices %}
+              {% if key %}<option value="{{ key }}"{% if lead.contact_substatus == key %} selected{% endif %}>{{ label }}</option>{% endif %}
+            {% endfor %}
+          </select>
+          <p class="form-text mb-0">Attempted or In Contact needs an email or phone already on this lead. No contact details needs the note below.</p>
+        </div>
+        <div class="col-md-6" data-stage-owner="lead-next-stage" data-stages="CONTACTED" data-substatus="NO_CONTACT_DETAILS" data-substatus-source="lead-substatus">
+          <label class="form-label" for="lead-no-contact-reason">No-contact note<abbr class="req" title="Required">*</abbr></label>
+          <input class="form-control" id="lead-no-contact-reason" name="reason">
+        </div>
+        <div class="col-md-6" data-stage-owner="lead-next-stage" data-stages="MQL">
+          <label class="form-label" for="lead-mql-note">Qualification note<abbr class="req" title="Required">*</abbr></label>
+          <input class="form-control" id="lead-mql-note" name="reason">
+          <p class="form-text mb-0">Company size, tools, budget, and timeline are optional.</p>
+        </div>
+        <div class="col-md-6" data-stage-owner="lead-next-stage" data-stages="MQL">
+          <label class="form-label" for="lead-company-size">Company size</label>
+          <select class="form-select" id="lead-company-size" name="company_size_band">
+            {% for key, label in company_size_choices %}
+              <option value="{{ key }}"{% if lead.company_size_band == key %} selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-6" data-stage-owner="lead-next-stage" data-stages="MQL">
+          <label class="form-label" for="lead-current-tools">Current tools</label>
+          <select class="form-select" id="lead-current-tools" name="current_tools">
+            {% for key, label in current_tools_choices %}
+              <option value="{{ key }}"{% if lead.current_tools == key %} selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-6" data-stage-owner="lead-next-stage" data-stages="MQL">
+          <label class="form-label" for="lead-budget-range">Budget range</label>
+          <select class="form-select" id="lead-budget-range" name="budget_range">
+            {% for key, label in budget_range_choices %}
+              <option value="{{ key }}"{% if lead.budget_range == key %} selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-6" data-stage-owner="lead-next-stage" data-stages="MQL">
+          <label class="form-label" for="lead-buying-timeline">Timeline</label>
+          <select class="form-select" id="lead-buying-timeline" name="buying_timeline">
+            {% for key, label in buying_timeline_choices %}
+              <option value="{{ key }}"{% if lead.buying_timeline == key %} selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-6" data-stage-owner="lead-next-stage" data-stages="DEMO_POC">
+          <label class="form-label" for="lead-demo-date">Demo date<abbr class="req" title="Required">*</abbr></label>
+          <input class="form-control" id="lead-demo-date" name="demo_scheduled_on" type="date"{% if lead.demo_scheduled_on %} value="{{ lead.demo_scheduled_on|date:'Y-m-d' }}"{% endif %}>
+        </div>
+        <div class="col-md-6" data-stage-owner="lead-next-stage" data-stages="DEMO_POC">
+          <label class="form-label" for="lead-technical-contact">Technical contact<abbr class="req" title="Required">*</abbr></label>
+          <input class="form-control" id="lead-technical-contact" name="technical_contact_name" value="{{ lead.technical_contact_name }}">
+        </div>
+        <div class="col-md-6" data-stage-owner="lead-next-stage" data-stages="SQL">
+          <label class="form-label" for="lead-sql-note">Note<abbr class="req" title="Required">*</abbr></label>
+          <input class="form-control" id="lead-sql-note" name="reason">
+        </div>
+        <div class="col-md-6" data-stage-owner="lead-next-stage" data-stages="ARCHIVED">
+          <label class="form-label" for="lead-archive-reason">No-response reason<abbr class="req" title="Required">*</abbr></label>
+          <input class="form-control" id="lead-archive-reason" name="reason">
+          <p class="form-text mb-0">Use Archived when the lead went silent. Use Unqualified when they are not a fit.</p>
+        </div>
+        <div class="col-md-6" data-stage-owner="lead-next-stage" data-stages="NEW">
+          <label class="form-label" for="lead-reopen-reason">Reopen reason<abbr class="req" title="Required">*</abbr></label>
+          <input class="form-control" id="lead-reopen-reason" name="reason">
+        </div>
+        <div class="col-md-6" data-stage-owner="lead-next-stage" data-stages="NURTURING">
+          <label class="form-label" for="lead-nurture-reason">Nurture reason<abbr class="req" title="Required">*</abbr></label>
+          <select class="form-select" id="lead-nurture-reason" name="nurture_reason">
+            {% for key, label in nurture_reason_choices %}
+              {% if key %}<option value="{{ key }}">{{ label }}</option>{% endif %}
+            {% endfor %}
+          </select>
+          <p class="form-text mb-0">Choose Reactivation when this lead is being picked up again.</p>
+        </div>
+        <div class="col-md-6" data-stage-owner="lead-next-stage" data-stages="UNQUALIFIED">
+          <label class="form-label" for="lead-disqualification-reason">Disqualification reason<abbr class="req" title="Required">*</abbr></label>
+          <select class="form-select" id="lead-disqualification-reason" name="disqualification_reason">
+            {% for key, label in disqualification_reason_choices %}
+              {% if key %}<option value="{{ key }}">{{ label }}</option>{% endif %}
+            {% endfor %}
+          </select>
+          <p class="form-text mb-0">Use Unqualified when the lead is not a fit. Archived is for a lead that went silent.</p>
+        </div>
+        <div class="col-md-6" data-stage-owner="lead-next-stage" data-stages="SQL,NURTURING">
+          <label class="form-label" for="lead-next-follow-up">Next follow-up<abbr class="req" title="Required">*</abbr></label>
+          <input class="form-control" id="lead-next-follow-up" name="next_follow_up_at" type="datetime-local">
+        </div>
       </div>
-      <div class="col-md-6">
-        <label class="form-label" for="lead-move-reason">Reason</label>
-        <input class="form-control" id="lead-move-reason" name="reason">
-      </div>
-      <div class="col-md-6">
-        <label class="form-label" for="lead-substatus">Contact substatus</label>
-        <select class="form-select" id="lead-substatus" name="contact_substatus">
-          {% for key, label in contact_substatus_choices %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
-        </select>
-      </div>
-      <div class="col-md-6">
-        <label class="form-label" for="lead-nurture-reason">Nurture reason</label>
-        <select class="form-select" id="lead-nurture-reason" name="nurture_reason">
-          {% for key, label in nurture_reason_choices %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
-        </select>
-      </div>
-      <div class="col-md-6">
-        <label class="form-label" for="lead-disqualification-reason">Disqualification reason</label>
-        <select class="form-select" id="lead-disqualification-reason" name="disqualification_reason">
-          {% for key, label in disqualification_reason_choices %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
-        </select>
-      </div>
-      <div class="col-md-6">
-        <label class="form-label" for="lead-next-follow-up">Next follow-up</label>
-        <input class="form-control" id="lead-next-follow-up" name="next_follow_up_at" type="datetime-local">
-      </div>
-    </div>
-    <button class="btn btn-primary mt-2" type="submit">Move stage</button>
-  </form>
+      <button class="btn btn-primary mt-2" type="submit">Move stage</button>
+    </form>
+  {% else %}
+    <p>This lead stage has no further move.</p>
+  {% endif %}
+  {% include "activities/_timeline.html" with kind="lead" object_id=lead.pk %}
+  {% include "crm/_stage_fields.html" %}
+  <details class="stage-history">
+    <summary>Stage history</summary>
+    {% if history %}
+      <ul>
+        {% for row in history %}
+          <li>
+            {% if row.from_stage %}
+              Moved from {{ row.from_stage|stage_label }} to {{ row.to_stage|stage_label }}
+              on {{ row.changed_at|date:"m-d-Y, h:i A" }}.
+              Spent {{ row.duration_seconds|duration }} in {{ row.from_stage|stage_label }}.
+            {% else %}
+              Started in {{ row.to_stage|stage_label }}
+              on {{ row.changed_at|date:"m-d-Y, h:i A" }}.
+            {% endif %}
+            {% if row.changed_by %}Recorded by {{ row.changed_by.display_name }}.{% endif %}
+            {% if row.reason and row.reason != "Phase 3 baseline" %}{{ row.reason }}{% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>No stage changes yet.</p>
+    {% endif %}
+  </details>
   {% if correction_stages %}
-    <h3>Administrator correction</h3>
+    <h3>Fix a wrong stage</h3>
+    <p>This records a correction. It is not an approval step for a normal move.</p>
     <form method="post" action="{% url 'leads:transition' lead.pk %}">
       {% csrf_token %}
       <input type="hidden" name="version" value="{{ lead.version }}">
       <input type="hidden" name="correction" value="1">
-      <label for="lead-correction-stage">Correct stage to</label>
-      <select id="lead-correction-stage" name="to_stage">
-        {% for stage in correction_stages %}<option value="{{ stage }}">{{ stage }}</option>{% endfor %}
-      </select>
-      <label for="lead-correction-reason">Correction reason</label>
-      <input id="lead-correction-reason" name="reason" required>
+      <div class="form-grid">
+        <div class="field-line">
+          <label class="form-label" for="lead-correction-stage">Correct stage to</label>
+          <div class="field-control">
+            <select class="form-select" id="lead-correction-stage" name="to_stage">
+              {% for stage in correction_stages %}<option value="{{ stage }}">{{ stage|stage_label }}</option>{% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="field-line">
+          <label class="form-label" for="lead-correction-reason">Correction reason<abbr class="req" title="Required">*</abbr></label>
+          <div class="field-control">
+            <input class="form-control" id="lead-correction-reason" name="reason" required>
+          </div>
+        </div>
+      </div>
       <button class="btn btn-outline-warning" type="submit">Record correction</button>
     </form>
   {% endif %}
-  <h2>Stage history</h2>
-  {% if history %}
-    <ul>
-      {% for row in history %}
-        <li>
-          {% if row.from_stage %}
-            Moved from {{ row.from_stage }} to {{ row.to_stage }}
-            on {{ row.changed_at|date:"m-d-Y, h:i A" }}.
-            Spent {{ row.duration_seconds|duration }} in {{ row.from_stage }}.
-          {% else %}
-            Started in {{ row.to_stage }}
-            on {{ row.changed_at|date:"m-d-Y, h:i A" }}.
-          {% endif %}
-          {% if row.changed_by %}Recorded by {{ row.changed_by.display_name }}.{% endif %}
-          {% if row.reason and row.reason != "Phase 3 baseline" %}{{ row.reason }}{% endif %}
-        </li>
-      {% endfor %}
-    </ul>
-  {% else %}
-    <p>No stage changes yet.</p>
-  {% endif %}
-  {% include "activities/_timeline.html" with kind="lead" object_id=lead.pk %}
-  <h2>Delete lead</h2>
-  <form method="post" action="{% url 'leads:delete' lead.pk %}">
-    {% csrf_token %}
-    {{ delete_form.as_p }}
-    <button class="btn btn-outline-danger" type="submit">Delete lead</button>
-  </form>
+  {% url 'leads:delete' lead.pk as delete_url %}
+  {% include "crm/_delete_form.html" with object_key="lead" record_label="lead" delete_url=delete_url version=lead.version field_id=lead.pk %}
 {% endblock %}

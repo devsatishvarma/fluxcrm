@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% load crm %}
+{% block title %}Reports · GlideCRM{% endblock %}
+{% block content %}
+  <h1>{{ summary.preset }} dashboard</h1>
+  <p>
+    Wins compare this fiscal quarter, {{ summary.start|date:"m-d-Y" }}
+    through {{ summary.end|date:"m-d-Y" }}, with the previous quarter,
+    and this fiscal year, {{ summary.year_start|date:"m-d-Y" }}
+    through {{ summary.year_end|date:"m-d-Y" }}, with the previous year.
+    Open leads, the open deal count, pipeline value, overdue tasks,
+    and stale leads are current.
+  </p>
+  <div class="metric-grid cols-3 mb-3">
+    <article class="metric">
+      <h2><i class="bi bi-person-lines-fill" aria-hidden="true"></i>Open Leads</h2>
+      <p class="metric-value">{{ summary.open_leads }}</p>
+    </article>
+    <article class="metric">
+      <h2><i class="bi bi-kanban" aria-hidden="true"></i>Deals Pipeline</h2>
+      <p class="metric-value">{{ summary.open_deals }}</p>
+    </article>
+    <article class="metric">
+      <h2><i class="bi bi-briefcase" aria-hidden="true"></i>Pipeline Value</h2>
+      <p class="metric-value">{{ summary.open_pipeline|money }}</p>
+    </article>
+  </div>
+  <div class="metric-grid cols-4 mb-3">
+    <article class="metric is-good">
+      <h2><i class="bi bi-trophy" aria-hidden="true"></i>Won this Quarter</h2>
+      <p class="metric-value">{{ summary.period_wins|money }}</p>
+    </article>
+    <article class="metric{% if summary.prior_change != None and summary.prior_change > 0 %} is-good{% endif %}">
+      <h2><i class="bi bi-arrow-left-right" aria-hidden="true"></i>Versus prior quarter</h2>
+      <p class="metric-value">
+        {{ summary.prior_wins|money }}
+        {% if summary.prior_change == None %}
+          (N/A)
+        {% else %}
+          <span{% if summary.prior_change > 0 %} class="is-good"{% endif %}>({{ summary.prior_change }}%)</span>
+        {% endif %}
+      </p>
+    </article>
+    <article class="metric is-good">
+      <h2><i class="bi bi-calendar-check" aria-hidden="true"></i>Won this year</h2>
+      <p class="metric-value">{{ summary.year_wins|money }}</p>
+    </article>
+    <article class="metric{% if summary.year_change != None and summary.year_change > 0 %} is-good{% endif %}">
+      <h2><i class="bi bi-calendar2-range" aria-hidden="true"></i>Versus prior year</h2>
+      <p class="metric-value">
+        {{ summary.prior_year_wins|money }}
+        {% if summary.year_change == None %}
+          (N/A)
+        {% else %}
+          <span{% if summary.year_change > 0 %} class="is-good"{% endif %}>({{ summary.year_change }}%)</span>
+        {% endif %}
+      </p>
+    </article>
+  </div>
+  <div class="metric-grid cols-2 mb-4">
+    <article class="metric">
+      <h2><i class="bi bi-exclamation-circle" aria-hidden="true"></i>Overdue tasks</h2>
+      <p class="metric-value">{{ summary.overdue_tasks }}</p>
+    </article>
+    <article class="metric">
+      <h2><i class="bi bi-hourglass-split" aria-hidden="true"></i>Stale Leads</h2>
+      <p class="metric-value">{{ summary.stale_leads }}</p>
+    </article>
+  </div>
+  <h2>Reports</h2>
+  {% for group in summary.report_groups %}
+    <h2>{{ group.title }}</h2>
+    <div class="menu-grid">
+      {% for key, label in group.reports %}
+        <a class="menu-card" href="{% url 'reporting:detail' key %}">
+          <h2><i class="bi bi-file-earmark-bar-graph" aria-hidden="true"></i>{{ label }}</h2>
+          <p>Open this report.</p>
+        </a>
+      {% endfor %}
+    </div>
+  {% endfor %}
+{% endblock %}

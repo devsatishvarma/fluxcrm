@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 class Command(BaseCommand):
-    help = "Run due FluxCRM jobs once using a database-backed idempotency key."
+    help = "Run due GlideCRM jobs once using a database-backed idempotency key."
 
     def handle(self, *args, **options):
         minute = timezone.now().replace(second=0, microsecond=0)

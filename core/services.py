@@ -12,6 +12,7 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from audit.models import AuditEvent
+from core.validation import clean_email, clean_phone
 from identity.models import AuthThrottle, CompanySettings, Role, User
 
 LOGIN_LIMIT = 5
@@ -54,6 +55,55 @@ def ensure_roles():
     )
 
 
+def _flatten_audit(value, prefix=""):
+    if isinstance(value, dict):
+        flat = {}
+        for key, item in value.items():
+            path = f"{prefix}.{key}" if prefix else str(key)
+            flat.update(_flatten_audit(item, path))
+        return flat
+    if prefix:
+        return {prefix: value}
+    return {}
+
+
+def _audit_text(value):
+    if value is None or value == "":
+        return "—"
+    if isinstance(value, bool):
+        return "Yes" if value else "No"
+    if isinstance(value, (list, tuple)):
+        if not value:
+            return "—"
+        return ", ".join(_audit_text(item) for item in value)
+    return str(value)
+
+
+def changed_fields(before, after):
+    """Fields whose stored values differ. Unchanged fields are omitted."""
+    after_flat = _flatten_audit(after) if isinstance(after, dict) else {}
+    before_flat = _flatten_audit(before) if isinstance(before, dict) else {}
+    rows = []
+    for path in sorted(set(before_flat) | set(after_flat)):
+        old = before_flat.get(path)
+        new = after_flat.get(path)
+        if path in before_flat and path in after_flat and old == new:
+            continue
+        before_text = _audit_text(old) if path in before_flat else "—"
+        after_text = _audit_text(new) if path in after_flat else "—"
+        if before_text == after_text:
+            continue
+        label = path.replace("_", " ").replace(".", " ")
+        rows.append(
+            {
+                "label": label[:1].upper() + label[1:] if label else path,
+                "before": before_text,
+                "after": after_text,
+            }
+        )
+    return rows
+
+
 def record_audit(*, actor, action, instance, before, after, request_id=""):
     AuditEvent.objects.create(
         actor=actor,
@@ -87,11 +137,13 @@ def user_snapshot(user: User) -> dict:
     return {
         "username": user.username,
         "email": user.email,
+        "phone": user.phone,
         "display_name": user.display_name,
         "timezone": user.timezone,
         "is_active": user.is_active,
         "role": user.role.key,
         "manager_id": user.manager_id,
+        "team_ids": sorted(user.teams.values_list("pk", flat=True)),
     }
 
 
@@ -181,6 +233,7 @@ def create_standard_user(
     user = User(
         username=user_data["username"],
         email=user_data["email"],
+        phone=clean_phone(user_data.get("phone")),
         display_name=user_data["display_name"],
         timezone=user_data["timezone"],
         role=role,
@@ -323,6 +376,60 @@ def update_role_grants(*, actor, role, permissions, request_id=""):
     return role
 
 
+@transaction.atomic
+def update_user(
+    *,
+    actor,
+    user,
+    display_name,
+    email,
+    phone,
+    role,
+    manager,
+    teams,
+    request_id="",
+):
+    from core.policy import require_action
+
+    require_action(actor, "user", "A")
+    name = str(display_name or "").strip()
+    if not name:
+        raise ValidationError({"display_name": "Enter a name."})
+    address, _domain = clean_email(email)
+    if not address:
+        raise ValidationError({"email": "Enter an email address."})
+    number = clean_phone(phone)
+    if (
+        user.is_active
+        and user.role.key == "ADMIN"
+        and role.key != "ADMIN"
+        and not User.objects.filter(role__key="ADMIN", is_active=True)
+        .exclude(pk=user.pk)
+        .exists()
+    ):
+        raise ValidationError(
+            {"role": "The last active administrator must keep that role."}
+        )
+    before = user_snapshot(user)
+    user.display_name = name
+    user.email = address
+    user.phone = number
+    user.role = role
+    user.manager = manager
+    user.full_clean()
+    user.save(update_fields=("display_name", "email", "phone", "role", "manager"))
+    user.teams.set(teams)
+    record_audit(
+        actor=actor,
+        action="user.updated",
+        instance=user,
+        before=before,
+        after=user_snapshot(user),
+        request_id=request_id,
+    )
+    return user
+
+
 def set_user_manager(*, actor, user, manager, request_id=""):
     from core.policy import require_action
 
@@ -363,7 +470,9 @@ def save_team(*, actor, team, name, manager, member_ids, active, request_id=""):
     team.active = active
     team.full_clean()
     team.save()
-    members = User.objects.filter(pk__in=member_ids)
+    members = User.objects.filter(pk__in=member_ids, is_active=True)
+    if not creating:
+        members = members | team.members.filter(is_active=False)
     team.members.set(members)
     record_audit(
         actor=actor,

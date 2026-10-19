@@ -1,0 +1,47 @@
+{% load crm %}
+{% for group in report_groups %}
+  <section class="deal-reports" aria-label="{{ group.title }}">
+    <h2>{{ group.title }}</h2>
+    <div class="report-grid">
+      {% for report in group.reports %}
+        <article class="report-card">
+          <h3>
+            <a href="{% url 'reporting:detail' report.key %}">{{ report.title }}</a>
+          </h3>
+          {% if report.note %}<p>{{ report.note }}</p>{% endif %}
+          <table class="table">
+            <caption>{{ report.title }}</caption>
+            <thead>
+              <tr>
+                {% for label, key in report.columns %}
+                  {% if key != "companies" %}<th scope="col">{{ label }}</th>{% endif %}
+                {% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in report.rows %}
+                <tr>
+                  {% for label, key in report.columns %}
+                    {% if key != "companies" %}
+                      <td>
+                        {% if key in report.money_fields %}
+                          {{ row|lookup:key|money }}
+                        {% else %}
+                          {{ row|lookup:key }}
+                        {% endif %}
+                      </td>
+                    {% endif %}
+                  {% endfor %}
+                </tr>
+              {% empty %}
+                <tr>
+                  <td colspan="{{ report.columns|length }}">No deals in this report.</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </article>
+      {% endfor %}
+    </div>
+  </section>
+{% endfor %}

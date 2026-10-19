@@ -1,4 +1,4 @@
-# fluxcrm
+# glidecrm
 
 A self-hosted CRM for Infoshare Systems, designed for up to 50 users and
 approximately 500,000 records without a platform rewrite.

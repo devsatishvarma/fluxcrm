@@ -9,35 +9,19 @@ from core.taxonomy import DEAL_STAGE_PROBABILITY, active_keys
 LEAD_GRAPH = {
     "NEW": {"CONTACTED", "NURTURING", "UNQUALIFIED", "ARCHIVED"},
     "CONTACTED": {"MQL", "NURTURING", "UNQUALIFIED", "ARCHIVED"},
-    "MQL": {"SQL_READY", "NURTURING", "UNQUALIFIED", "ARCHIVED"},
-    "SQL_READY": {
-        "NURTURING",
-        "UNQUALIFIED",
-        "SQL_REACTIVATION",
-        "ARCHIVED",
-    },
-    "NURTURING": {
-        "MQL",
-        "SQL_READY",
-        "SQL_REACTIVATION",
-        "UNQUALIFIED",
-        "ARCHIVED",
-    },
-    "SQL_REACTIVATION": {
-        "SQL_READY",
-        "NURTURING",
-        "UNQUALIFIED",
-        "ARCHIVED",
-    },
+    "MQL": {"DEMO_POC", "SQL", "NURTURING", "UNQUALIFIED", "ARCHIVED"},
+    "DEMO_POC": {"SQL", "NURTURING", "UNQUALIFIED", "ARCHIVED"},
+    "SQL": {"NURTURING", "UNQUALIFIED", "ARCHIVED"},
+    "NURTURING": {"MQL", "DEMO_POC", "SQL", "UNQUALIFIED", "ARCHIVED"},
     "ARCHIVED": {"NEW"},
     "UNQUALIFIED": {"NEW"},
 }
 
 DEAL_GRAPH = {
-    "NEW": {"CONTACTED", "CLOSED_LOST", "CLOSED_HOLD"},
-    "CONTACTED": {"QUALIFIED", "CLOSED_LOST", "CLOSED_HOLD"},
-    "QUALIFIED": {"DISCOVERY", "CLOSED_LOST", "CLOSED_HOLD"},
-    "DISCOVERY": {"PROPOSAL", "CLOSED_LOST", "CLOSED_HOLD"},
+    "NEW": {"DISCOVERY", "CLOSED_LOST", "CLOSED_HOLD"},
+    "DISCOVERY": {"QUALIFIED", "CLOSED_LOST", "CLOSED_HOLD"},
+    "QUALIFIED": {"TECHNICAL_EVALUATION", "CLOSED_LOST", "CLOSED_HOLD"},
+    "TECHNICAL_EVALUATION": {"PROPOSAL", "CLOSED_LOST", "CLOSED_HOLD"},
     "PROPOSAL": {"NEGOTIATION", "CLOSED_LOST", "CLOSED_HOLD"},
     "NEGOTIATION": {"CLOSING", "CLOSED_LOST", "CLOSED_HOLD"},
     "CLOSING": {"CLOSED_WON", "CLOSED_LOST", "CLOSED_HOLD"},
@@ -54,16 +38,28 @@ LEAD_BOARD_STAGES = [
     "NEW",
     "CONTACTED",
     "MQL",
-    "SQL_READY",
+    "DEMO_POC",
+    "SQL",
     "NURTURING",
-    "SQL_REACTIVATION",
     "UNQUALIFIED",
     "ARCHIVED",
 ]
 
 
 def allowed_targets(graph, stage):
-    return tuple(sorted(graph.get(stage, ())))
+    """Allowed moves, with the next stage in the cycle first."""
+    targets = graph.get(stage, ())
+    order = (
+        tuple(DEAL_STAGE_PROBABILITY)
+        if graph is DEAL_GRAPH
+        else tuple(LEAD_BOARD_STAGES)
+    )
+    position = {key: index for index, key in enumerate(order)}
+    current = position.get(stage, -1)
+    later = [key for key in order if key in targets and position[key] > current]
+    earlier = [key for key in order if key in targets and key not in later]
+    unknown = sorted(key for key in targets if key not in position)
+    return tuple(later + earlier + unknown)
 
 
 def stage_is_active(list_key, stage):
@@ -85,8 +81,12 @@ def lead_gate_gaps(lead, to_stage, reason):
             gaps.append("email: add an email or phone, or mark no contact details")
     if to_stage == "MQL" and not (lead.source and lead.company_name and reason):
         gaps.append("reason: add the qualification note")
-    if to_stage == "SQL_READY" and (not reason or lead.next_follow_up_at is None):
-        gaps.append("reason: document need, fit, and the next follow-up")
+    if to_stage == "DEMO_POC" and (
+        lead.demo_scheduled_on is None or not lead.technical_contact_name
+    ):
+        gaps.append("demo_scheduled_on: enter the demo date and technical contact")
+    if to_stage == "SQL" and (not reason or lead.next_follow_up_at is None):
+        gaps.append("reason: add a note and the next follow-up")
     if to_stage == "NURTURING" and (
         not lead.nurture_reason or lead.next_follow_up_at is None
     ):
@@ -94,11 +94,7 @@ def lead_gate_gaps(lead, to_stage, reason):
     if to_stage == "UNQUALIFIED" and not lead.disqualification_reason:
         gaps.append("disqualification_reason: choose a disqualification reason")
     if to_stage == "ARCHIVED" and not reason:
-        gaps.append("reason: add the no-interest reason")
-    if to_stage == "SQL_REACTIVATION" and (
-        not reason or lead.next_follow_up_at is None
-    ):
-        gaps.append("reason: add the re-engagement reason and the next follow-up")
+        gaps.append("reason: add why the lead went silent")
     if to_stage == "NEW" and lead.stage in {"ARCHIVED", "UNQUALIFIED"} and not reason:
         gaps.append("reason: add the reopen reason")
     return gaps
@@ -107,28 +103,21 @@ def lead_gate_gaps(lead, to_stage, reason):
 def deal_gate_gaps(deal, to_stage, reason):
     """Return human-readable gaps that block this deal transition."""
     gaps = []
-    bant = (
-        deal.bant_budget_status,
-        deal.bant_authority_status,
-        deal.bant_need_status,
-        deal.bant_timeline_status,
-    )
-    if to_stage == "CONTACTED" and not reason:
-        gaps.append("reason: describe the contact attempt")
+    if to_stage == "DISCOVERY" and not reason:
+        gaps.append("reason: add what you learned about their requirements")
     if to_stage == "QUALIFIED":
         if deal.amount is None:
             gaps.append("amount: enter an amount")
         if deal.expected_close_date is None:
             gaps.append("expected_close_date: enter an expected close date")
-        if deal.bant_need_status == "UNKNOWN":
-            gaps.append("bant_need_status: Need cannot stay Unknown")
-        if deal.bant_authority_status not in {"PARTIAL", "CONFIRMED"}:
-            gaps.append("bant_authority_status: Authority must be Partial or Confirmed")
-    if to_stage == "DISCOVERY":
+    if to_stage == "TECHNICAL_EVALUATION":
+        if deal.evaluation_started_on is None or not deal.technical_stakeholder_name:
+            gaps.append(
+                "evaluation_started_on: enter the POC or trial start date "
+                "and the technical stakeholder"
+            )
         if not reason:
-            gaps.append("reason: describe the discovery review")
-        if any(status == "UNKNOWN" for status in bant):
-            gaps.append("bant: review budget, authority, need, and timeline")
+            gaps.append("reason: add the success criteria")
     if to_stage == "PROPOSAL":
         if deal.amount is None:
             gaps.append("amount: enter the proposal amount")
@@ -136,15 +125,20 @@ def deal_gate_gaps(deal, to_stage, reason):
             gaps.append("expected_close_date: enter an expected close date")
         if not reason:
             gaps.append("reason: record that the proposal was sent")
-    if to_stage in {"NEGOTIATION", "CLOSING"} and not reason:
-        gaps.append("reason: record the decision step")
+    if to_stage == "NEGOTIATION":
+        if not reason:
+            gaps.append("reason: add the terms or redlines")
+        if deal.expected_close_date is None:
+            gaps.append("expected_close_date: enter an expected close date")
+    if to_stage == "CLOSING" and not reason:
+        gaps.append("reason: add the sign-off note")
     if to_stage == "CLOSING" and deal.expected_close_date is None:
         gaps.append("expected_close_date: confirm the target close date")
     if to_stage == "CLOSED_WON":
         if deal.amount is None:
             gaps.append("amount: a won deal needs a final amount")
-        if deal.expected_close_date is None:
-            gaps.append("expected_close_date: a won deal needs a close date")
+        if deal.actual_close_date is None:
+            gaps.append("actual_close_date: enter the date the deal closed")
     if to_stage == "CLOSED_LOST" and not deal.close_reason:
         gaps.append("close_reason: choose a loss reason")
     if to_stage == "CLOSED_HOLD" and not deal.close_reason:

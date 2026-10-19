@@ -15,7 +15,15 @@ from core.taxonomy import active_keys, known_keys
 from identity.models import User
 
 EXTERNAL_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+PHONE_MESSAGE = "Use (XXX) XXX-XXXX."
 MONEY_LIMIT = Decimal("9999999999999999.99")
+ADDRESS_LIMITS = {
+    "street": 200,
+    "city": 100,
+    "region": 100,
+    "postal_code": 20,
+    "country": 100,
+}
 
 
 def new_external_id():
@@ -33,6 +41,49 @@ def clean_external_id(value, *, current=None):
             {"external_id": "Use letters, numbers, hyphens, or underscores."}
         )
     return external_id
+
+
+def clean_phone(value, field="phone"):
+    """Store a blank phone or a 10-digit number as (XXX) XXX-XXXX."""
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    digits = re.sub(r"\D", "", text)
+    if len(digits) == 11 and digits.startswith("1"):
+        digits = digits[1:]
+    if len(digits) != 10:
+        raise ValidationError({field: PHONE_MESSAGE})
+    return f"({digits[:3]}) {digits[3:6]}-{digits[6:]}"
+
+
+def clean_address(value):
+    """Keep street, city, state, postal code, and country. Every part is optional."""
+    if value in (None, ""):
+        return {}
+    if not isinstance(value, dict):
+        raise ValidationError({"address": "Address must be an object."})
+    cleaned = {}
+    for key, limit in ADDRESS_LIMITS.items():
+        text = str(value.get(key) or "").strip()
+        if len(text) > limit:
+            raise ValidationError({key: f"Use {limit} characters or fewer."})
+        if text:
+            cleaned[key] = text
+    return cleaned
+
+
+def address_from_mapping(data, *, current=None):
+    """Read an address object, or street, city, state, postal code, and country."""
+    if isinstance(data, dict) and isinstance(data.get("address"), dict):
+        return clean_address(data["address"])
+    present = [key for key in ADDRESS_LIMITS if key in data]
+    if not present:
+        return clean_address({} if current is None else current)
+    stored = current if isinstance(current, dict) else {}
+    parts = {}
+    for key in ADDRESS_LIMITS:
+        parts[key] = data.get(key) if key in data else stored.get(key, "")
+    return clean_address(parts)
 
 
 def clean_optional_key(list_key, value, field):
@@ -162,6 +213,14 @@ def require_version(value):
         return int(value)
     except (TypeError, ValueError) as exc:
         raise ValidationError({"version": "Provide the record version."}) from exc
+
+
+def require_delete_confirmation(data):
+    """A delete from a page needs the confirmation checkbox."""
+    if str(data.get("confirm_delete") or "") != "yes":
+        raise ValidationError(
+            {"detail": "Check the confirmation before this record can be deleted."}
+        )
 
 
 def clean_delete_reason(value):

@@ -1,0 +1,36 @@
+<details class="inline-edit">
+  <summary class="btn btn-sm btn-outline-secondary">Edit</summary>
+  <form class="inline-edit-form" method="post" action="{% url 'activities:task_update' task.pk %}">
+    {% csrf_token %}
+    <input type="hidden" name="version" value="{{ task.version }}">
+    <input type="hidden" name="kind" value="{{ kind }}">
+    <input type="hidden" name="object_id" value="{{ object_id }}">
+    <div class="row g-2">
+      <div class="col-md-8">
+        <label class="form-label" for="task-title-{{ task.pk }}">Task<abbr class="req" title="Required">*</abbr></label>
+        <input class="form-control" id="task-title-{{ task.pk }}" name="title" value="{{ task.title }}" required>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="task-due-{{ task.pk }}">Due<abbr class="req" title="Required">*</abbr></label>
+        <input class="form-control" id="task-due-{{ task.pk }}" name="due_at" type="datetime-local" required value="{{ task.due_at|date:'Y-m-d' }}T{{ task.due_at|date:'H:i' }}">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="task-priority-{{ task.pk }}">Priority</label>
+        <select class="form-select" id="task-priority-{{ task.pk }}" name="priority">
+          <option value="LOW" {% if task.priority == "LOW" %}selected{% endif %}>Low</option>
+          <option value="NORMAL" {% if task.priority == "NORMAL" %}selected{% endif %}>Normal</option>
+          <option value="HIGH" {% if task.priority == "HIGH" %}selected{% endif %}>High</option>
+        </select>
+      </div>
+      {% if kind != "deal" %}
+      <div class="col-12">
+        <label class="form-label" for="task-notes-{{ task.pk }}">Notes</label>
+        <textarea class="form-control" id="task-notes-{{ task.pk }}" name="description" rows="2">{{ task.description }}</textarea>
+      </div>
+      {% endif %}
+      <div class="col-12">
+        <button class="btn btn-sm btn-primary" type="submit">Save task</button>
+      </div>
+    </div>
+  </form>
+</details>

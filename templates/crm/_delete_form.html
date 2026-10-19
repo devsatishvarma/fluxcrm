@@ -1,0 +1,27 @@
+{% load crm %}
+{% can object_key "D" as can_delete %}
+{% if can_delete %}
+  <section class="record-delete mt-3 mb-4" id="delete-{{ object_key }}">
+    <h2>Delete {{ record_label }}</h2>
+    <p>Enter a reason and check the confirmation. The {{ record_label }} is removed only after that.</p>
+    <form class="delete-form" method="post" action="{{ delete_url }}">
+      {% csrf_token %}
+      <input type="hidden" name="version" value="{{ version }}">
+      <label class="form-label" for="delete-reason-{{ field_id }}">
+        Reason for deletion<abbr class="req" title="Required">*</abbr>
+      </label>
+      <input
+        class="form-control"
+        id="delete-reason-{{ field_id }}"
+        name="delete_reason"
+        required
+        minlength="3"
+        maxlength="200"
+      >
+      <div class="delete-line">
+        {% include "crm/_delete_confirm.html" %}
+        <button class="btn btn-outline-danger" type="submit">Delete {{ record_label }}</button>
+      </div>
+    </form>
+  </section>
+{% endif %}

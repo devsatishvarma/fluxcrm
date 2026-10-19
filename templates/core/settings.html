@@ -1,39 +1,43 @@
 {% extends "base.html" %}
-{% block title %}Settings · FluxCRM{% endblock %}
+{% load crm %}
+{% block title %}Settings · GlideCRM{% endblock %}
 {% block content %}
   <h1>Settings</h1>
   {% include "core/_settings_nav.html" %}
-  <div class="row g-3">
+  <div class="menu-grid">
     {% if user.is_company_admin %}
-      <div class="col-md-6">
-        <h2 class="h5">Company</h2>
+      <a class="menu-card" href="{% url 'core:company_settings' %}">
+        <h2><i class="bi bi-building" aria-hidden="true"></i>Company</h2>
         <p>Company name, address, currency, fiscal year, time zone, and stale-record thresholds.</p>
-        <a href="{% url 'core:company_settings' %}">Open company settings</a>
-      </div>
+      </a>
     {% endif %}
     {% if user.is_company_admin or user.role.key == "SALES_DIRECTOR" %}
-      <div class="col-md-6">
-        <h2 class="h5">Teams</h2>
+      <a class="menu-card" href="{% url 'core:teams' %}">
+        <h2><i class="bi bi-diagram-3" aria-hidden="true"></i>Teams</h2>
         <p>Groups of people who share records. A person can belong to more than one team.</p>
-        <a href="{% url 'core:teams' %}">Open teams</a>
-      </div>
-      <div class="col-md-6">
-        <h2 class="h5">Users</h2>
+      </a>
+      <a class="menu-card" href="{% url 'core:user_list' %}">
+        <h2><i class="bi bi-person-badge" aria-hidden="true"></i>Users</h2>
         <p>People who can sign in, their manager, and whether the account is active.</p>
-        <a href="{% url 'core:user_list' %}">Open users</a>
-      </div>
+      </a>
     {% endif %}
     {% if user.is_company_admin %}
-      <div class="col-md-6">
-        <h2 class="h5">Roles</h2>
+      <a class="menu-card" href="{% url 'core:roles' %}">
+        <h2><i class="bi bi-shield-check" aria-hidden="true"></i>Roles</h2>
         <p>What each role can create, read, update, delete, export, or administer.</p>
-        <a href="{% url 'core:roles' %}">Open roles</a>
-      </div>
+      </a>
     {% endif %}
-    <div class="col-md-6">
-      <h2 class="h5">Audit</h2>
+    {% can "import" "C" as can_import_rows %}
+    {% can "import" "A" as can_admin_import %}
+    {% if can_import_rows or can_admin_import %}
+      <a class="menu-card" href="{% url 'imports:home' %}">
+        <h2><i class="bi bi-upload" aria-hidden="true"></i>Import</h2>
+        <p>Download a CSV template for leads, accounts, or contacts, then preview the file before anything is saved.</p>
+      </a>
+    {% endif %}
+    <a class="menu-card" href="{% url 'core:audit' %}">
+      <h2><i class="bi bi-journal-text" aria-hidden="true"></i>Audit</h2>
       <p>History of changes you are allowed to see. Audit rows cannot be edited.</p>
-      <a href="{% url 'core:audit' %}">Open audit</a>
-    </div>
+    </a>
   </div>
 {% endblock %}

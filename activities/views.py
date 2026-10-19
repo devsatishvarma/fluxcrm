@@ -20,9 +20,13 @@ from activities.services import (
     filter_task_bucket,
     snooze_task,
     update_activity,
+    update_task,
 )
 from core.access import activate_viewer_timezone, scoped
 from core.exceptions import VersionConflict
+from core.notices import fail_with, failed, succeeded, validation_text
+from core.policy import require_action
+from core.validation import require_delete_confirmation
 from leads.models import Lead
 from sales.models import Deal
 
@@ -44,6 +48,7 @@ def _request_id(request):
 
 @login_required
 def task_list(request):
+    activate_viewer_timezone(request.user)
     bucket = request.GET.get("bucket") or "open"
     if bucket not in TASK_BUCKET_KEYS:
         bucket = "open"
@@ -76,13 +81,23 @@ def task_list(request):
 @login_required
 @require_POST
 def activity_create(request):
-    return _create(request, create_activity)
+    return _create(
+        request,
+        create_activity,
+        success="Activity {name} added.",
+        failure="Could not add the activity.",
+    )
 
 
 @login_required
 @require_POST
 def task_create(request):
-    return _create(request, create_task)
+    return _create(
+        request,
+        create_task,
+        success="Task {name} added.",
+        failure="Could not add the task.",
+    )
 
 
 def _posted_links(post):
@@ -105,12 +120,12 @@ def _posted_links(post):
     return links
 
 
-def _create(request, operation):
+def _create(request, operation, *, success, failure):
     activate_viewer_timezone(request.user)
     kind = request.POST.get("kind")
     object_id = request.POST.get("object_id")
     try:
-        operation(
+        record = operation(
             actor=request.user,
             data=request.POST,
             links=_posted_links(request.POST),
@@ -124,12 +139,15 @@ def _create(request, operation):
             if hasattr(exc, "message_dict")
             else {"detail": exc.messages}
         )
+        fail_with(request, failure, validation_text(exc))
         return render(
             request,
             "activities/quick_error.html",
             {"errors": detail, "kind": kind, "object_id": object_id},
             status=422,
         )
+    name = getattr(record, "subject", None) or getattr(record, "title", "")
+    succeeded(request, success.format(name=name))
     if kind == "deal":
         return redirect("sales:detail", object_id)
     if kind == "lead":
@@ -160,43 +178,123 @@ def _back(request):
 @login_required
 @require_POST
 def task_complete(request, task_id):
-    return _mutate(request, complete_task, task_id)
+    return _mutate(
+        request,
+        complete_task,
+        task_id,
+        success="Task {name} completed.",
+        failure="Could not complete the task.",
+    )
 
 
 @login_required
 @require_POST
 def task_cancel(request, task_id):
-    return _mutate(request, change_task_status, task_id, status=Task.Status.CANCELLED)
+    return _mutate(
+        request,
+        change_task_status,
+        task_id,
+        success="Task {name} cancelled.",
+        failure="Could not cancel the task.",
+        status=Task.Status.CANCELLED,
+    )
 
 
 @login_required
 @require_POST
 def task_hold(request, task_id):
-    return _mutate(request, change_task_status, task_id, status=Task.Status.HOLD)
+    return _mutate(
+        request,
+        change_task_status,
+        task_id,
+        success="Task {name} put on hold.",
+        failure="Could not hold the task.",
+        status=Task.Status.HOLD,
+    )
 
 
 @login_required
 @require_POST
 def task_resume(request, task_id):
-    return _mutate(request, change_task_status, task_id, status=Task.Status.OPEN)
+    return _mutate(
+        request,
+        change_task_status,
+        task_id,
+        success="Task {name} resumed.",
+        failure="Could not resume the task.",
+        status=Task.Status.OPEN,
+    )
 
 
 @login_required
 @require_POST
 def task_delete(request, task_id):
+    try:
+        require_action(request.user, "task", "D", object_id=task_id)
+        require_delete_confirmation(request.POST)
+    except PermissionDenied:
+        return render(request, "crm/forbidden.html", status=403)
+    except ValidationError as exc:
+        fail_with(request, "Could not delete the task.", validation_text(exc))
+        return render(
+            request,
+            "activities/quick_error.html",
+            {"errors": {"detail": exc.messages}},
+            status=422,
+        )
     return _mutate(
         request,
         delete_task,
         task_id,
+        success="Task {name} deleted.",
+        failure="Could not delete the task.",
         delete_reason=request.POST.get("delete_reason"),
     )
 
 
 @login_required
 @require_POST
+def task_update(request, task_id):
+    try:
+        task = update_task(
+            actor=request.user,
+            task_id=task_id,
+            version=request.POST.get("version"),
+            data=request.POST,
+            request_id=_request_id(request),
+        )
+    except PermissionDenied:
+        return render(request, "crm/forbidden.html", status=403)
+    except VersionConflict:
+        failed(
+            request,
+            "Could not save the task. This record changed. Reload and try again.",
+        )
+        return render(
+            request,
+            "activities/quick_error.html",
+            {"errors": {"version": ["This record changed. Reload and try again."]}},
+            status=409,
+        )
+    except ValidationError as exc:
+        detail = (
+            exc.message_dict
+            if hasattr(exc, "message_dict")
+            else {"detail": exc.messages}
+        )
+        fail_with(request, "Could not save the task.", validation_text(exc))
+        return render(
+            request, "activities/quick_error.html", {"errors": detail}, status=422
+        )
+    succeeded(request, f"Task {task.title} saved.")
+    return _back(request)
+
+
+@login_required
+@require_POST
 def activity_update(request, activity_id):
     try:
-        update_activity(
+        activity = update_activity(
             actor=request.user,
             activity_id=activity_id,
             version=request.POST.get("version"),
@@ -206,6 +304,10 @@ def activity_update(request, activity_id):
     except PermissionDenied:
         return render(request, "crm/forbidden.html", status=403)
     except VersionConflict:
+        failed(
+            request,
+            "Could not save the activity. This record changed. Reload and try again.",
+        )
         return render(
             request,
             "activities/quick_error.html",
@@ -218,9 +320,11 @@ def activity_update(request, activity_id):
             if hasattr(exc, "message_dict")
             else {"detail": exc.messages}
         )
+        fail_with(request, "Could not save the activity.", validation_text(exc))
         return render(
             request, "activities/quick_error.html", {"errors": detail}, status=422
         )
+    succeeded(request, f"Activity {activity.subject} saved.")
     return _back(request)
 
 
@@ -228,7 +332,9 @@ def activity_update(request, activity_id):
 @require_POST
 def activity_delete(request, activity_id):
     try:
-        delete_activity(
+        require_action(request.user, "activity", "D", object_id=activity_id)
+        require_delete_confirmation(request.POST)
+        activity = delete_activity(
             actor=request.user,
             activity_id=activity_id,
             version=request.POST.get("version"),
@@ -238,6 +344,10 @@ def activity_delete(request, activity_id):
     except PermissionDenied:
         return render(request, "crm/forbidden.html", status=403)
     except VersionConflict:
+        failed(
+            request,
+            "Could not delete the activity. This record changed. Reload and try again.",
+        )
         return render(
             request,
             "activities/quick_error.html",
@@ -250,9 +360,11 @@ def activity_delete(request, activity_id):
             if hasattr(exc, "message_dict")
             else {"detail": exc.messages}
         )
+        fail_with(request, "Could not delete the activity.", validation_text(exc))
         return render(
             request, "activities/quick_error.html", {"errors": detail}, status=422
         )
+    succeeded(request, f"Activity {activity.subject} deleted.")
     return _back(request)
 
 
@@ -260,13 +372,18 @@ def activity_delete(request, activity_id):
 @require_POST
 def task_snooze(request, task_id):
     return _mutate(
-        request, snooze_task, task_id, until=request.POST.get("snooze_until")
+        request,
+        snooze_task,
+        task_id,
+        success="Task {name} snoozed.",
+        failure="Could not snooze the task.",
+        until=request.POST.get("snooze_until"),
     )
 
 
-def _mutate(request, operation, task_id, **extra):
+def _mutate(request, operation, task_id, *, success, failure, **extra):
     try:
-        operation(
+        task = operation(
             actor=request.user,
             task_id=task_id,
             version=request.POST.get("version"),
@@ -276,6 +393,7 @@ def _mutate(request, operation, task_id, **extra):
     except PermissionDenied:
         return render(request, "crm/forbidden.html", status=403)
     except VersionConflict:
+        failed(request, f"{failure} This record changed. Reload and try again.")
         return render(
             request,
             "activities/quick_error.html",
@@ -288,7 +406,9 @@ def _mutate(request, operation, task_id, **extra):
             if hasattr(exc, "message_dict")
             else {"detail": exc.messages}
         )
+        fail_with(request, failure, validation_text(exc))
         return render(
             request, "activities/quick_error.html", {"errors": detail}, status=422
         )
+    succeeded(request, success.format(name=task.title))
     return _back(request)
