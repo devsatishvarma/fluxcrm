@@ -10,8 +10,8 @@
 - **Phase status:** Started. The release gate is in place and the 500,000-lead list was measured on this machine. The cloud host is not selected.
 - **Phase completion:** 17% (1 of 6 gate items verified)
 - **Planning baseline:** Complete
-- **Code baseline:** Tag `pre-phase-7`. Later phases and the release-gate work are not yet committed.
-- **Last updated:** 2026-10-12
+- **Code baseline:** Tag `phase-9-baseline` and branch `baseline/phase-9`, at the GlideCRM sales-workflow commit. Phase 9 remains in progress from this point.
+- **Last updated:** 2026-10-19
 - **Last verified result:** On this machine's Docker MySQL 8.4, the open lead list at 500,000 rows returned in 0.400 seconds and the New-stage list in 0.180 seconds. Both are inside the 2 second target. See D-028.
 
 ## Current phase gate — Phase 9
@@ -160,6 +160,8 @@ is a later decision. See D-013.
 
 ## Latest evidence
 
+- 2026-10-19: The stable return point is tag `phase-9-baseline` and branch
+  `baseline/phase-9`. The MVP percentage is unchanged.
 - 2026-10-16: Sorting deals by confidence lists High, then Medium, then Low.
   The MVP percentage is unchanged.
 - 2026-10-16: The delete reason uses the full line. Confirmed to delete sits on
