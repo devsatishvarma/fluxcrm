@@ -5,7 +5,9 @@
   <form method="post">
     {% csrf_token %}
     {% include "crm/_form_fields.html" %}
-    <button class="btn btn-primary" type="submit">Save lead</button>
-    {% if lead %}<a href="{% url 'leads:detail' lead.pk %}">Cancel</a>{% endif %}
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit">Save lead</button>
+      {% if lead %}<a href="{% url 'leads:detail' lead.pk %}">Cancel</a>{% endif %}
+    </div>
   </form>
 {% endblock %}

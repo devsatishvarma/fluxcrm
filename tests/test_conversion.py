@@ -1188,6 +1188,8 @@ def test_address_is_optional_and_conversion_copies_it(client):
     lead_page = client.get(reverse("leads:create"))
     assert b'name="street"' in lead_page.content
     assert b"Street" in lead_page.content
+    assert b'name="employee_count"' not in lead_page.content
+    assert b'name="company_size_band"' in lead_page.content
     account_page = client.get(reverse("accounts:create"))
     assert b'name="postal_code"' in account_page.content
     created = client.post(

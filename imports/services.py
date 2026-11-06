@@ -279,16 +279,6 @@ def _clean_lead(actor, cells, cache):
     for key in ("work_phone", "mobile_phone"):
         if cells.get(key, "") != "":
             data[key] = clean_phone(cells[key], field=key)
-    if cells.get("employee_count", "") != "":
-        try:
-            count = int(cells["employee_count"])
-        except ValueError as exc:
-            raise ValidationError({"employee_count": "Enter a whole number."}) from exc
-        if count < 0:
-            raise ValidationError(
-                {"employee_count": "Enter zero or a positive number."}
-            )
-        data["employee_count"] = count
     if cells.get("annual_revenue", "") != "":
         data["annual_revenue"] = clean_money(cells["annual_revenue"], "annual_revenue")
     address = _address_from_cells(cells)
@@ -806,7 +796,6 @@ def _lead_snapshot(lead):
         "industry": lead.industry,
         "products_services": lead.products_services,
         "company_size_band": lead.company_size_band,
-        "employee_count": lead.employee_count,
         "annual_revenue": revenue,
         "rating": lead.rating,
         "owner": lead.owner_id,

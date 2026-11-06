@@ -63,7 +63,6 @@ UPDATABLE = (
     "industry",
     "products_services",
     "company_size_band",
-    "employee_count",
     "annual_revenue",
     "source",
     "stage",
@@ -240,24 +239,6 @@ def normalize_lead(actor, data, *, current=None):
             data.get("owner", None if current is None else current.owner_id),
             object_key="lead",
         )
-    if not partial or "employee_count" in data:
-        raw_count = _value(
-            data, "employee_count", getattr(current, "employee_count", None), None
-        )
-        if raw_count in (None, ""):
-            normalized["employee_count"] = None
-        else:
-            try:
-                count = int(raw_count)
-            except (TypeError, ValueError) as exc:
-                raise ValidationError(
-                    {"employee_count": "Enter a whole number."}
-                ) from exc
-            if count < 0:
-                raise ValidationError(
-                    {"employee_count": "Enter zero or a positive number."}
-                )
-            normalized["employee_count"] = count
     if not partial or "annual_revenue" in data:
         normalized["annual_revenue"] = clean_money(
             _value(
@@ -463,7 +444,7 @@ def update_lead(*, actor, lead_id, version, data, request_id=""):
     before = lead_snapshot(lead)
     if "stage" in normalized and normalized["stage"] != lead.stage:
         raise ValidationError(
-            {"stage": "Change stage from the board or the transition action."}
+            {"stage": "Change the stage on the lead page."}
         )
     for field, value in normalized.items():
         setattr(lead, field, value)
@@ -541,7 +522,6 @@ def lead_payload(lead: Lead) -> dict:
         "current_tools": lead.current_tools,
         "budget_range": lead.budget_range,
         "buying_timeline": lead.buying_timeline,
-        "employee_count": lead.employee_count,
         "annual_revenue": (
             None if lead.annual_revenue is None else str(lead.annual_revenue)
         ),

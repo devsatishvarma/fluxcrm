@@ -291,13 +291,12 @@ def lead_delete(request, lead_id):
 
 
 def lead_board(request):
-    from core.workflow import LEAD_BOARD_STAGES, LEAD_GRAPH, allowed_targets
+    from core.workflow import LEAD_BOARD_STAGES
 
     activate_viewer_timezone(request.user)
     leads = list(filter_leads(request.user, request.GET))
     columns = {stage: [] for stage in LEAD_BOARD_STAGES}
     for lead in leads:
-        lead.allowed_stage_targets = allowed_targets(LEAD_GRAPH, lead.stage)
         columns.setdefault(lead.stage, []).append(lead)
     return render(
         request,

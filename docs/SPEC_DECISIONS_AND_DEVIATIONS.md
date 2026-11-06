@@ -465,8 +465,9 @@ here before implementing it.
   requires a note. Closed Won requires
   a final amount and close date. Closed Lost and Closed Hold require a
   reason from the matching list. There is no separate approval before a
-  stage change or a close. The board does not collect those fields; the
-  record page does. Manual conversion requires an account name and type
+  stage change or a close. The lead board and the deal board do not change
+  the stage. Update stage opens the record page, and that page collects
+  the fields. Manual conversion requires an account name and type
   when creating an account. A confirmation is asked only when an account
   or contact already matches.
 - **Affected phases:** 3 and 5
@@ -924,6 +925,44 @@ here before implementing it.
 - **Approval source:** User request to add notes back to activities.
 - **Migration/rollback impact:** No data change. Note was already stored
   for older rows.
+
+### D-051 — Lead company size replaces employee count
+
+- **Date/status:** 2026-10-21 — Confirmed
+- **Decision:** A lead does not store a separate employee count. Company
+  size is the band that records how large the company is.
+- **Rationale:** Company size already captures the same information.
+- **Affected phases:** 2
+- **Specification impact:** Lead profile drops `employee_count`.
+- **Approval source:** User request to remove employee count from leads.
+- **Migration/rollback impact:** The lead column is dropped. Stored counts
+  are not kept. The reverse adds an empty column.
+
+### D-052 — Open deals, sorted by confidence
+
+- **Date/status:** 2026-10-21 — Confirmed
+- **Decision:** The Deals page lists open deals only. The default order is
+  confidence: High, then Medium, then Low. Closed Won, Closed Lost, and
+  Closed Hold stay on the deal reports.
+- **Rationale:** The working list is the open pipeline. Closed deals are
+  already on the reports.
+- **Affected phases:** 3 and 7
+- **Specification impact:** Deals page scope and default sort.
+- **Approval source:** User request to sort the deals list by confidence
+  and leave closed deals off that page.
+- **Migration/rollback impact:** No data change.
+
+### D-053 — Completing a task asks for notes
+
+- **Date/status:** 2026-10-21 — Confirmed
+- **Decision:** Complete asks for notes. Notes entered there are added to
+  the task. Leaving the field blank keeps the notes already saved.
+- **Rationale:** The outcome of the task is recorded when the work is
+  finished.
+- **Affected phases:** 4
+- **Specification impact:** Task complete action.
+- **Approval source:** User request to ask for notes when completing a task.
+- **Migration/rollback impact:** No data change.
 
 ## Starter taxonomy — version 1
 

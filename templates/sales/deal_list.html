@@ -67,12 +67,12 @@
     <div class="col-md-3">
       <label class="form-label" for="deal-sort">Sort</label>
       <select class="form-select" id="deal-sort" name="ordering">
-        <option value="-created_at"{% if query.ordering == "-created_at" or not query.ordering %} selected{% endif %}>Age, newest</option>
+        <option value="confidence"{% if query.ordering == "confidence" or not query.ordering %} selected{% endif %}>Confidence, high to low</option>
+        <option value="-created_at"{% if query.ordering == "-created_at" %} selected{% endif %}>Age, newest</option>
         <option value="created_at"{% if query.ordering == "created_at" %} selected{% endif %}>Age, oldest</option>
         <option value="-amount"{% if query.ordering == "-amount" %} selected{% endif %}>Amount, high to low</option>
         <option value="amount"{% if query.ordering == "amount" %} selected{% endif %}>Amount, low to high</option>
         <option value="stage"{% if query.ordering == "stage" %} selected{% endif %}>Stage</option>
-        <option value="confidence"{% if query.ordering == "confidence" %} selected{% endif %}>Confidence, high to low</option>
         <option value="expected_close_date"{% if query.ordering == "expected_close_date" %} selected{% endif %}>Expected close</option>
         <option value="owner"{% if query.ordering == "owner" %} selected{% endif %}>Owner</option>
       </select>

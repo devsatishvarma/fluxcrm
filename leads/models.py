@@ -27,7 +27,6 @@ class Lead(AuditedRecord):
     current_tools = models.CharField(max_length=64, blank=True)
     budget_range = models.CharField(max_length=64, blank=True)
     buying_timeline = models.CharField(max_length=64, blank=True)
-    employee_count = models.PositiveIntegerField(null=True, blank=True)
     annual_revenue = models.DecimalField(
         max_digits=18,
         decimal_places=2,

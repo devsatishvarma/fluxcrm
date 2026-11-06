@@ -11,7 +11,7 @@
 - **Phase completion:** 17% (1 of 6 gate items verified)
 - **Planning baseline:** Complete
 - **Code baseline:** Tag `phase-9-baseline` and branch `baseline/phase-9`, at the GlideCRM sales-workflow commit. Phase 9 remains in progress from this point.
-- **Last updated:** 2026-10-19
+- **Last updated:** 2026-10-21
 - **Last verified result:** On this machine's Docker MySQL 8.4, the open lead list at 500,000 rows returned in 0.400 seconds and the New-stage list in 0.180 seconds. Both are inside the 2 second target. See D-028.
 
 ## Current phase gate — Phase 9
@@ -160,8 +160,21 @@ is a later decision. See D-013.
 
 ## Latest evidence
 
-- 2026-10-19: The stable return point is tag `phase-9-baseline` and branch
-  `baseline/phase-9`. The MVP percentage is unchanged.
+- 2026-10-21: Completing a task asks for notes. Notes entered there are
+  added to the task. See D-053. The MVP percentage is unchanged.
+- 2026-10-21: The Deals page lists open deals, High confidence first,
+  then Medium, then Low. Closed deals stay on the reports. See D-052.
+  The MVP percentage is unchanged.
+- 2026-10-21: A lead uses company size and does not collect a separate
+  employee count. See D-051. The MVP percentage is unchanged.
+- 2026-10-20: On an account, Contacts stays closed until you open it.
+  The MVP percentage is unchanged.
+- 2026-10-20: Cancel sits on the same line as the save button and lines up
+  with it. The MVP percentage is unchanged.
+- 2026-10-20: The lead board and the deal board no longer change the stage.
+  Update stage opens the record form. The MVP percentage is unchanged.
+- 2026-10-19: Report lists use the names of what they show. A deals list
+  uses Deal title and Deal stage. The MVP percentage is unchanged.
 - 2026-10-16: Sorting deals by confidence lists High, then Medium, then Low.
   The MVP percentage is unchanged.
 - 2026-10-16: The delete reason uses the full line. Confirmed to delete sits on

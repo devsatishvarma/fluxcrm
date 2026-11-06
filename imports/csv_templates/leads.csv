@@ -26,10 +26,9 @@
 # industry: optional. One key: INFORMATION_TECHNOLOGY (Information Technology), TECHNOLOGY_SAAS (Technology & SaaS), PROFESSIONAL_SERVICES (Professional Services), HEALTHCARE (Healthcare), FINANCIAL_SERVICES (Financial Services), INSURANCE (Insurance), MANUFACTURING (Manufacturing), AUTOMOTIVE (Automotive), RETAIL (Retail & E-Commerce), HOSPITALITY_TRAVEL (Hospitality & Travel), EDUCATION (Education), GOVERNMENT (Government), NONPROFIT (Nonprofit), OTHER (Other). Use the key, not the label.
 # products_services: optional. Text, up to 255 characters.
 # company_size_band: optional. One key: 1_10, 11_50, 51_200, 201_500, 501_1000, 1001_5000, 5001_PLUS, UNKNOWN.
-# employee_count: optional. A whole number, zero or greater.
 # annual_revenue: optional. USD amount with at most two decimal places, such as 12500.50.
 # rating: optional. One key: HOT, WARM, COLD. Blank means WARM.
 # owner: optional. The person's name as shown in GlideCRM, not the login username. Blank means you.
 # notes: optional. Text, up to 4000 characters.
-row_action,external_id,first_name,last_name,company_name,source,title,email,work_phone,mobile_phone,street,city,region,postal_code,country,website_url,industry,products_services,company_size_band,employee_count,annual_revenue,rating,owner,notes
-example,,Ada,Lovelace,Analytical Engines,WEB,Engineer,ada.lovelace@example.com,(949) 555-0100,,26040 Acero,Mission Viejo,CA,92691,US,https://example.com,INFORMATION_TECHNOLOGY,IT consulting,51_200,120,12500.50,WARM,,Sample row. It is not imported while row_action is example.
+row_action,external_id,first_name,last_name,company_name,source,title,email,work_phone,mobile_phone,street,city,region,postal_code,country,website_url,industry,products_services,company_size_band,annual_revenue,rating,owner,notes
+example,,Ada,Lovelace,Analytical Engines,WEB,Engineer,ada.lovelace@example.com,(949) 555-0100,,26040 Acero,Mission Viejo,CA,92691,US,https://example.com,INFORMATION_TECHNOLOGY,IT consulting,51_200,12500.50,WARM,,Sample row. It is not imported while row_action is example.

@@ -1,16 +1,40 @@
 {% extends "base.html" %}
+{% load crm %}
 {% block title %}Help · GlideCRM{% endblock %}
 {% block content %}
   <h1>Help</h1>
   <p>GlideCRM keeps leads, accounts, contacts, deals, and follow-up in one place. Dates and times are shown as mm-dd-yyyy, hh:mm AM/PM in your time zone. Amounts are shown as whole dollars, such as $ 12,500. Win probability is a whole percent, such as 30%.</p>
   <p>A red asterisk (<abbr class="req" title="Required">*</abbr>) marks a field you must fill on that page. Other fields can be left blank.</p>
 
+  <h2>How the pieces fit</h2>
+  <p>A lead is one person at a company you have not converted yet. Move that lead from the lead page. Update stage on the board opens the same form. The form shows only the fields that next stage needs. Changing a lead stage does not create an account, a contact, or a deal, and it does not move a deal.</p>
+  <p>Convert a lead when you want an account and a contact before a deal closes. Convert does not change the lead’s stage. The lead leaves the open lead list. Reports still include the history you are allowed to see. If an account or contact already matches, confirm whether to use it or create a new one.</p>
+  <p>A deal is the opportunity. Add it from a lead, or from an account and one contact already on that account. The Deals page lists open deals only, with High confidence first, then Medium, then Low. Closed Won, Closed Lost, and Closed Hold are not on that list. Open Reports and use Won and lost, or Deals by stage, to see them. Closing a deal that is still on a lead as Won or Lost converts that lead in the same step. Closed Hold pauses the deal and does not convert the lead.</p>
+
   <h2>Leads</h2>
   <p>A lead is a person and company you have not yet converted. The list can be searched, filtered, and sorted by age, stage, rating, follow-up, owner, or company. Rating is Hot, Warm, or Cold. Lead Age is days since the lead was created. Stage-Age is days in the current stage.</p>
-  <p>Adding a lead requires first name, last name, company, email, and source. Title, phone, address, website, and notes are optional. A phone number uses (XXX) XXX-XXXX, such as (949) 555-0100. Address is street, city, state, postal code, and country. Leave any part blank.</p>
+  <p>Adding a lead requires first name, last name, company, email, and source. Title, phone, address, website, and notes are optional. Company size is how large the company is. A separate employee count is not collected. A phone number uses (XXX) XXX-XXXX, such as (949) 555-0100. Address is street, city, state, postal code, and country. Leave any part blank.</p>
 
   <h2>Changing a lead stage</h2>
-  <p>Open the lead and choose the next stage. The form shows only the fields that stage needs. Changing a lead stage does not move a deal, create an account, or convert the lead. The board can move a lead when no extra field is required. If the move needs a reason or a date, open the lead.</p>
+  <p>The usual path runs left to right. Open the lead and choose the next stage. The form shows only the fields that stage needs.</p>
+  <ol class="stage-path" aria-label="Lead stages in the usual order">
+    <li class="stage-step">{{ "NEW"|stage_label }}</li>
+    <li class="stage-arrow" aria-hidden="true">→</li>
+    <li class="stage-step">{{ "CONTACTED"|stage_label }}</li>
+    <li class="stage-arrow" aria-hidden="true">→</li>
+    <li class="stage-step">{{ "MQL"|stage_label }}</li>
+    <li class="stage-arrow" aria-hidden="true">→</li>
+    <li class="stage-step">{{ "DEMO_POC"|stage_label }}</li>
+    <li class="stage-arrow" aria-hidden="true">→</li>
+    <li class="stage-step">{{ "SQL"|stage_label }}</li>
+  </ol>
+  <p>From an active stage, a lead can also move to one of these. They are not the next step after SQL.</p>
+  <ol class="stage-path" aria-label="Other lead stages">
+    <li class="stage-step">{{ "NURTURING"|stage_label }}</li>
+    <li class="stage-step">{{ "UNQUALIFIED"|stage_label }}</li>
+    <li class="stage-step">{{ "ARCHIVED"|stage_label }}</li>
+  </ol>
+  <p>Changing a lead stage does not move a deal, create an account, or convert the lead. The lead board lists each lead in its stage. Update stage opens that lead on this form.</p>
   <ul>
     <li>New: the starting stage for a new lead.</li>
     <li>Contacted: contact status. Attempted or In Contact also needs an email or phone already on the lead. No contact details needs a short note.</li>
@@ -24,11 +48,11 @@
   <p>Fix a wrong stage is only for correcting a stage that was recorded incorrectly. It is not a step you complete before a normal move.</p>
 
   <h2>Converting a lead</h2>
-  <p>Use Convert on the lead when you want an account and contact before a deal closes. Account name and account type are required if you create an account. The contact is created from the lead’s name, so you do not enter the name again. Convert does not change the lead stage.</p>
+  <p>Use Convert on the lead when you want an account and contact before a deal closes. Account name and account type are required if you create an account. The contact is created from the lead’s name, so you do not enter the name again. Convert does not change the lead stage. You can also wait: closing that lead’s deal as Won or Lost creates the account and contact in the same step. Closed Hold does not.</p>
   <p>If an account already has the same website or the same company name, pick that account or say why this one is new. If a contact on that account already matches, confirm a new contact or use the existing one. When nothing matches, there is no extra confirmation. You can move the lead’s open deals onto the account, leave them on the lead, or create one new deal.</p>
 
   <h2>Accounts and contacts</h2>
-  <p>An account requires a name and a type. Website, phone, address, industry, parent account, and notes are optional. A contact requires a first name, a last name, and an email. On an existing contact, the account is required too. Title, work phone, mobile phone, address, and who they report to are optional. Phone numbers on a lead, account, contact, and user use (XXX) XXX-XXXX. Address is street, city, state, postal code, and country. Leave any part blank. Converting a lead, including when a deal closes, copies the person’s title, email, work phone, mobile phone, and address onto the new contact, and copies the address onto a new account. An existing account or contact keeps an address it already has. A blank phone or address is filled from the lead. An account has at most one primary contact. Open the account or the contact and choose Edit to change them.</p>
+  <p>An account requires a name and a type. Website, phone, address, industry, parent account, and notes are optional. A contact requires a first name, a last name, and an email. On an existing contact, the account is required too. Title, work phone, mobile phone, address, and who they report to are optional. Phone numbers on a lead, account, contact, and user use (XXX) XXX-XXXX. Address is street, city, state, postal code, and country. Leave any part blank. Converting a lead, including when a deal closes, copies the person’s title, email, work phone, mobile phone, and address onto the new contact, and copies the address onto a new account. An existing account or contact keeps an address it already has. A blank phone or address is filled from the lead. An account has at most one primary contact. On the account page, Contacts stays closed until you open it. Open the account or the contact and choose Edit to change them.</p>
   <p>Delete an account at the bottom of the account page, or a contact at the bottom of the contact page. Enter a reason and check the confirmation. Delete the account’s contacts, deals, and child accounts first. A contact who is still on a deal, or who other people report to, stays until that link is removed.</p>
   <p>GlideCRM assigns the account id and the contact id. Those ids are not shown on the screen and are not typed in. They stay on the record so an export can identify it. Contacts has its own page. Search by name, email, phone, title, or account, and the results stay grouped under each account.</p>
 
@@ -54,7 +78,30 @@
   <p>An administrator or sales director can keep a different number, but only with a reason. Deal confidence is then set from that percent: High at 80% or more, Medium from 40% up to 80%, and Low under 40%.</p>
 
   <h2>Changing a deal stage</h2>
-  <p>Open the deal and choose the next stage. Only that stage’s fields are shown. There is no separate approval before the stage changes or the deal closes. When the deal is still on a lead, closing as Won or Lost converts that lead in the same step: the company becomes an account, or matches an existing one by website or exact company name, and the person becomes a contact. The lead stage itself does not change. Closed Hold pauses the deal and leaves the lead where it is. Other deals on that lead stay where they are. A deal added from an account keeps that account and its contact through every stage, including Won and Lost.</p>
+  <p>The usual path runs left to right. Open the deal and choose the next stage. Only that stage’s fields are shown.</p>
+  <ol class="stage-path" aria-label="Deal stages in the usual order">
+    <li class="stage-step">{{ "NEW"|stage_label }}</li>
+    <li class="stage-arrow" aria-hidden="true">→</li>
+    <li class="stage-step">{{ "DISCOVERY"|stage_label }}</li>
+    <li class="stage-arrow" aria-hidden="true">→</li>
+    <li class="stage-step">{{ "QUALIFIED"|stage_label }}</li>
+    <li class="stage-arrow" aria-hidden="true">→</li>
+    <li class="stage-step">{{ "TECHNICAL_EVALUATION"|stage_label }}</li>
+    <li class="stage-arrow" aria-hidden="true">→</li>
+    <li class="stage-step">{{ "PROPOSAL"|stage_label }}</li>
+    <li class="stage-arrow" aria-hidden="true">→</li>
+    <li class="stage-step">{{ "NEGOTIATION"|stage_label }}</li>
+    <li class="stage-arrow" aria-hidden="true">→</li>
+    <li class="stage-step">{{ "CLOSING"|stage_label }}</li>
+    <li class="stage-arrow" aria-hidden="true">→</li>
+    <li class="stage-step">{{ "CLOSED_WON"|stage_label }}</li>
+  </ol>
+  <p>From an open stage, a deal can also end as one of these. They are not the next step after Closing.</p>
+  <ol class="stage-path" aria-label="Other deal endings">
+    <li class="stage-step">{{ "CLOSED_LOST"|stage_label }}</li>
+    <li class="stage-step">{{ "CLOSED_HOLD"|stage_label }}</li>
+  </ol>
+  <p>The deal board lists each open deal in its stage. Update stage opens that deal on this form. There is no separate approval before the stage changes or the deal closes. When the deal is still on a lead, closing as Won or Lost converts that lead in the same step: the company becomes an account, or matches an existing one by website or exact company name, and the person becomes a contact. The lead stage itself does not change. Closed Hold pauses the deal and leaves the lead where it is. Other deals on that lead stay where they are. A deal added from an account keeps that account and its contact through every stage, including Won and Lost.</p>
   <ul>
     <li>Discovery: a note on the requirements you gathered. This is where the deal starts, and it is separate from a lead’s Contacted stage.</li>
     <li>Qualified: amount and expected close date.</li>
@@ -70,7 +117,7 @@
 
   <h2>Tasks</h2>
   <p>Tasks opens on every open task. Overdue means the due time has already passed. Due today means it is still due later today. Upcoming means it is due after today. On hold, completed, and cancelled tasks are separate lists.</p>
-  <p>A task requires a title and a due time. Notes are optional and show on the Tasks screen. The title is shown in bold. Each task shows the lead, contact, and deal it is linked to. On a lead, account, or deal, you can complete or edit the task. Hold, resume, snooze, cancel, and delete stay on the Tasks screen so the record page stays short. Edit is next to Complete and changes the title, due time, priority, and notes. Snooze requires the new time. Delete asks for a reason on its own line. Confirmed to delete sits on the same line as the delete button. Hold pauses reminders until you resume the task.</p>
+  <p>A task requires a title and a due time. Notes are optional and show on the Tasks screen. The title is shown in bold. Each task shows the lead, contact, and deal it is linked to. On a lead, account, or deal, you can complete or edit the task. Complete asks for notes. Leave that blank if there is nothing to add. Notes you enter are added to the task. Hold, resume, snooze, cancel, and delete stay on the Tasks screen so the record page stays short. Edit is next to Complete and changes the title, due time, priority, and notes. Snooze requires the new time. Delete asks for a reason on its own line. Confirmed to delete sits on the same line as the delete button. Hold pauses reminders until you resume the task.</p>
 
   <h2>Activities</h2>
   <p>An activity is a call, an email, a meeting, or a note. It requires a type, a subject, who it was with, and when it happened. Who it was with is a contact or a lead, shown by name. Open With whom to search that list. The list scrolls. Create that person first if the name is not in the list. Notes are optional. On a record page, press <kbd>A</kbd> when you are not typing in a field to jump to the activity subject. Edit changes those details. Delete is next to Edit and asks for a reason and one confirmation.</p>
@@ -90,5 +137,5 @@
   <h2>Reports</h2>
   <p>Reports shows the records you are allowed to see. The dashboard is three rows: open leads, the number of open deals, and pipeline value; then wins this quarter and this year against the prior period, using each deal’s actual close date; then overdue tasks and stale leads. A prior period with no wins shows N/A. A rep sees their own work, a manager sees their reporting line, and an executive view covers the company. Reports are grouped by purpose: Leads, Deals, Accounts, and Activity. Each total names the companies or accounts behind it. A parent account total includes each descendant deal once. Leave the report dates blank to include every record. Forecast groups open deals by the quarter they are expected to close, and deals with no expected close date stay on the report as Unscheduled.</p>
   <p>The Deals page shows the deal reports in three sections. Pipeline has deals by stage and by confidence. Timing has deals by age and by quarter. Ownership has deals by sales owner. Age is days since the deal was added. Quarter uses the fiscal quarter of the expected close date.</p>
-  <p>Contacts lists each account and its people, including the primary contact. Every report has Download CSV. The file contains the summary table and the records behind it. The download is recorded as who exported the report, which columns, and how many rows. It does not store the cell values in the audit.</p>
+  <p>Contacts lists each account and its people, including the primary contact. Every report has Download CSV. The file contains the summary table and the list of leads, deals, activities, or contacts behind it. Those columns use the name of what they show, such as Deal title and Deal stage. The download is recorded as who exported the report, which columns, and how many rows. It does not store the cell values in the audit.</p>
 {% endblock %}

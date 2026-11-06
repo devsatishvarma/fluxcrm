@@ -23,7 +23,6 @@ LEADS = (
         "stage": "MQL",
         "industry": "HEALTHCARE",
         "company_size_band": "201_500",
-        "employee_count": 320,
         "owner_slot": "sdr",
     },
     {

@@ -16,12 +16,18 @@ approximately 500,000 records without a platform rewrite.
   change from the baseline.
 - [Development guide](docs/DEVELOPMENT.md) — local startup, checks, browser
   smoke tests, and migrations.
+- [Team setup (clone & run locally)](docs/TEAM_SETUP.md) — onboarding for
+  teammates using Docker Compose or a pre-built image.
 - [Operations guide](docs/OPERATIONS.md) — topology, health semantics,
   scheduler behavior, backup, and restore drills.
 
 ## Start locally
 
+Create Docker volumes once (see [Team setup](docs/TEAM_SETUP.md) for full onboarding):
+
 ```bash
+docker volume create fluxcrm_mysql_data
+docker volume create fluxcrm_uploads
 cp .env.example .env && docker compose up --build
 ```
 

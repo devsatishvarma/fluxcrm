@@ -60,7 +60,6 @@ class LeadForm(forms.Form):
     current_tools = forms.ChoiceField(label="Current tools", required=False)
     budget_range = forms.ChoiceField(label="Budget range", required=False)
     buying_timeline = forms.ChoiceField(label="Timeline", required=False)
-    employee_count = forms.IntegerField(min_value=0, required=False)
     annual_revenue = WholeNumberField(label="Annual revenue", required=False)
     source = forms.ChoiceField()
     rating = forms.ChoiceField(label="Lead rating", required=False)

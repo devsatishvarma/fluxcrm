@@ -453,7 +453,7 @@ def test_invalid_lead_owner_and_short_delete_reason_are_rejected():
     assert Lead.objects.filter(pk=created.json()["id"]).exists()
 
 
-def test_closed_deals_follow_open_deals(client):
+def test_closed_deals_are_not_on_the_deals_page(client):
     ensure_picklists()
     admin = make_user("sorter", admin=True)
     moment = timezone.now()
@@ -503,11 +503,13 @@ def test_closed_deals_follow_open_deals(client):
     )
     client.force_login(admin)
     listed = client.get(reverse("sales:list"))
-    assert listed.content.find(b"Open first") < listed.content.find(b"Closed later")
+    assert b"Open first" in listed.content
+    assert b"Closed later" not in listed.content
+    assert b'value="CLOSED_WON"' not in listed.content
+    assert b'value="confidence" selected' in listed.content
     by_amount = client.get(reverse("sales:list"), {"ordering": "-amount"})
-    assert by_amount.content.find(b"Open first") < by_amount.content.find(
-        b"Closed later"
-    )
+    assert b"Open first" in by_amount.content
+    assert b"Closed later" not in by_amount.content
 
 
 def test_confidence_sort_is_high_then_medium_then_low(client):
@@ -564,8 +566,12 @@ def test_confidence_sort_is_high_then_medium_then_low(client):
         updated_by=admin,
     )
     client.force_login(admin)
-    page = client.get(reverse("sales:list"), {"ordering": "confidence"})
+    page = client.get(reverse("sales:list"))
     body = page.content
-    assert body.find(b"Open high deal") < body.find(b"Closed high deal")
-    assert body.find(b"Closed high deal") < body.find(b"Open medium deal")
+    assert b"Closed high deal" not in body
+    assert body.find(b"Open high deal") < body.find(b"Open medium deal")
     assert body.find(b"Open medium deal") < body.find(b"Open low deal")
+    explicit = client.get(reverse("sales:list"), {"ordering": "confidence"})
+    ordered = explicit.content
+    assert ordered.find(b"Open high deal") < ordered.find(b"Open medium deal")
+    assert ordered.find(b"Open medium deal") < ordered.find(b"Open low deal")

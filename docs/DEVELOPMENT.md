@@ -10,9 +10,12 @@
 
 ## One-command clean start
 
-From a clean checkout:
+From a clean checkout, create the external named volumes once (see
+[Team setup](TEAM_SETUP.md)), then:
 
 ```bash
+docker volume create fluxcrm_mysql_data
+docker volume create fluxcrm_uploads
 cp .env.example .env && docker compose up --build
 ```
 

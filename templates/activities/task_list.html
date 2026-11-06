@@ -136,6 +136,8 @@
                     <form method="post" action="{% url 'activities:complete' task.pk %}">
                       {% csrf_token %}
                       <input type="hidden" name="version" value="{{ task.version }}">
+                      <label class="visually-hidden" for="complete-notes-{{ task.pk }}">Notes</label>
+                      <input id="complete-notes-{{ task.pk }}" name="completion_notes" placeholder="Add notes" maxlength="4000">
                       <button class="btn btn-sm btn-primary" type="submit">Complete</button>
                     </form>
                     {% include "activities/_task_edit.html" %}
@@ -169,6 +171,8 @@
                     <form method="post" action="{% url 'activities:complete' task.pk %}">
                       {% csrf_token %}
                       <input type="hidden" name="version" value="{{ task.version }}">
+                      <label class="visually-hidden" for="complete-held-notes-{{ task.pk }}">Notes</label>
+                      <input id="complete-held-notes-{{ task.pk }}" name="completion_notes" placeholder="Add notes" maxlength="4000">
                       <button class="btn btn-sm btn-primary" type="submit">Complete</button>
                     </form>
                     {% include "activities/_task_edit.html" %}

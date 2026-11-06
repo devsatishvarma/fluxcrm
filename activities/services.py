@@ -488,11 +488,23 @@ def _locked_task(actor, task_id, version):
 
 
 @transaction.atomic
-def complete_task(*, actor, task_id, version, request_id=""):
+def complete_task(*, actor, task_id, version, request_id="", completion_notes=""):
     task = _locked_task(actor, task_id, version)
     if task.status not in {Task.Status.OPEN, Task.Status.HOLD}:
-        raise ValidationError({"status": "Only an open or held task can be completed."})
+        raise ValidationError(
+            {"status": "Only an open or held task can be completed."}
+        )
+    added = _notes(completion_notes, "description")
     before = _snapshot(task)
+    if added:
+        combined = added
+        if task.description:
+            combined = f"{task.description}\n{added}"
+        if len(combined) > NOTE_LIMIT:
+            raise ValidationError(
+                {"description": "Notes must be 4000 characters or fewer."}
+            )
+        task.description = combined
     task.status = Task.Status.DONE
     task.completed_at = timezone.now()
     task.updated_by = actor

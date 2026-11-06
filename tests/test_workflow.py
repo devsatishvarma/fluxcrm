@@ -141,10 +141,10 @@ def test_lead_moves_share_one_service_across_ui_and_api(client):
 
     board = client.get(reverse("leads:board"))
     assert b"Lovelace" in board.content
-    assert b"Move" in board.content
-    assert b"board-error" in board.content
-    assert b'name="contact_substatus"' not in board.content
-    assert b"X-Requested-With" in board.content
+    assert b"Update stage" in board.content
+    assert b"#move-lead-stage" in board.content
+    assert b'name="to_stage"' not in board.content
+    assert b"draggable" not in board.content
     detail = client.get(reverse("leads:detail", args=[lead.pk]))
     assert b"called the office" in detail.content
     path = detail.content.split(b'class="stage-path"', 1)[1].split(b"</ol>", 1)[0]
@@ -288,6 +288,10 @@ def test_deal_close_rules_history_and_open_pipeline(client):
     assert b"Lost work" not in board.content
     assert b"Held work" not in board.content
     assert b"Won work" not in board.content
+    assert b"Update stage" in board.content
+    assert b"#move-deal-stage" in board.content
+    assert b'name="to_stage"' not in board.content
+    assert b"draggable" not in board.content
     detail = client.get(reverse("sales:detail", args=[lost_id]))
     assert b"they declined" in detail.content
     assert b"0%" in detail.content

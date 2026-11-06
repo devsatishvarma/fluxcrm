@@ -91,8 +91,10 @@
         applySource();
       </script>
     {% endif %}
-    <button class="btn btn-primary" type="submit">Save deal</button>
-    {% if deal %}<a href="{% url 'sales:detail' deal.pk %}">Cancel</a>{% endif %}
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit">Save deal</button>
+      {% if deal %}<a href="{% url 'sales:detail' deal.pk %}">Cancel</a>{% endif %}
+    </div>
   </form>
   {% if deal %}
     <script>

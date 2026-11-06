@@ -70,6 +70,139 @@ REPORT_GROUPS = (
 )
 REPORTS = tuple(item for _title, items in REPORT_GROUPS for item in items)
 REPORT_KEYS = {key for key, _label in REPORTS}
+RECORD_COLUMNS = {
+    "leads-by-stage": (
+        "Leads",
+        [
+            ("Company", "company"),
+            ("Lead name", "title"),
+            ("Lead stage", "detail"),
+        ],
+    ),
+    "leads-by-source": (
+        "Leads",
+        [
+            ("Company", "company"),
+            ("Lead name", "title"),
+            ("Lead source", "detail"),
+        ],
+    ),
+    "lead-aging": (
+        "Leads",
+        [
+            ("Company", "company"),
+            ("Lead name", "title"),
+            ("Age and stage", "detail"),
+        ],
+    ),
+    "conversion": (
+        "Leads",
+        [
+            ("Company", "company"),
+            ("Lead name", "title"),
+            ("Result", "detail"),
+        ],
+    ),
+    "deals-by-stage": (
+        "Deals",
+        [
+            ("Company", "company"),
+            ("Deal title", "title"),
+            ("Deal stage", "detail"),
+            ("Amount", "amount"),
+        ],
+    ),
+    "deals-by-confidence": (
+        "Deals",
+        [
+            ("Company", "company"),
+            ("Deal title", "title"),
+            ("Deal confidence", "detail"),
+            ("Amount", "amount"),
+        ],
+    ),
+    "deals-by-age": (
+        "Deals",
+        [
+            ("Company", "company"),
+            ("Deal title", "title"),
+            ("Deal age", "detail"),
+            ("Amount", "amount"),
+        ],
+    ),
+    "deals-by-quarter": (
+        "Deals",
+        [
+            ("Company", "company"),
+            ("Deal title", "title"),
+            ("Expected close quarter", "detail"),
+            ("Amount", "amount"),
+        ],
+    ),
+    "deals-by-owner": (
+        "Deals",
+        [
+            ("Company", "company"),
+            ("Deal title", "title"),
+            ("Sales owner", "detail"),
+            ("Amount", "amount"),
+        ],
+    ),
+    "deal-pipeline": (
+        "Deals",
+        [
+            ("Company", "company"),
+            ("Deal title", "title"),
+            ("Deal stage", "detail"),
+            ("Amount", "amount"),
+        ],
+    ),
+    "account-pipeline": (
+        "Deals",
+        [
+            ("Company", "company"),
+            ("Deal title", "title"),
+            ("Deal stage", "detail"),
+            ("Amount", "amount"),
+        ],
+    ),
+    "forecast": (
+        "Deals",
+        [
+            ("Company", "company"),
+            ("Deal title", "title"),
+            ("Quarter and stage", "detail"),
+            ("Amount", "amount"),
+        ],
+    ),
+    "won-lost": (
+        "Deals",
+        [
+            ("Company", "company"),
+            ("Deal title", "title"),
+            ("Outcome and close date", "detail"),
+            ("Amount", "amount"),
+        ],
+    ),
+    "activities": (
+        "Activities",
+        [
+            ("Company", "company"),
+            ("Subject", "title"),
+            ("Owner and type", "detail"),
+        ],
+    ),
+    "contacts": (
+        "Contacts",
+        [
+            ("Account", "company"),
+            ("Contact name", "title"),
+            ("Title", "detail"),
+        ],
+    ),
+}
+
+
 DEAL_PAGE_GROUPS = (
     ("Pipeline", ("deals-by-stage", "deals-by-confidence")),
     ("Timing", ("deals-by-age", "deals-by-quarter")),
@@ -431,10 +564,13 @@ def build_report(user, key, params=None):
         "contacts": _contacts,
     }[key]
     report = builder(user, start, end)
+    heading, record_columns = RECORD_COLUMNS[key]
     report["key"] = key
     report["start"] = start
     report["end"] = end
     report["preset"] = report_preset(user)
+    report["record_heading"] = heading
+    report["record_columns"] = record_columns
     return report
 
 
@@ -469,7 +605,7 @@ def _leads_by_stage(user, start, end):
     return {
         "title": "Leads by stage",
         "columns": [
-            ("Stage", "label"),
+            ("Lead stage", "label"),
             ("Companies", "companies"),
             ("Leads", "count"),
             ("Share", "share"),
@@ -505,7 +641,7 @@ def _leads_by_source(user, start, end):
     return {
         "title": "Leads by source",
         "columns": [
-            ("Source", "label"),
+            ("Lead source", "label"),
             ("Companies", "companies"),
             ("Leads", "count"),
             ("Share", "share"),
@@ -546,7 +682,11 @@ def _lead_aging(user, start, end):
         )
     return {
         "title": "Lead aging",
-        "columns": [("Age", "label"), ("Companies", "companies"), ("Leads", "count")],
+        "columns": [
+            ("Lead age", "label"),
+            ("Companies", "companies"),
+            ("Leads", "count"),
+        ],
         "money_fields": [],
         "chart_field": "count",
         "rows": [
@@ -619,7 +759,7 @@ def _deals_by_stage(user, start, end):
         "title": "Deals by stage",
         "note": "Every deal you can see, including closed deals.",
         "columns": [
-            ("Stage", "label"),
+            ("Deal stage", "label"),
             ("Companies", "companies"),
             ("Deals", "count"),
             ("Amount", "amount"),
@@ -662,7 +802,7 @@ def _deals_by_confidence(user, start, end):
             "Low is under 40%. Confidence follows the probability; it is not edited."
         ),
         "columns": [
-            ("Confidence", "label"),
+            ("Deal confidence", "label"),
             ("Companies", "companies"),
             ("Deals", "count"),
             ("Amount", "amount"),
@@ -705,7 +845,7 @@ def _deals_by_age(user, start, end):
         "title": "Deals by age",
         "note": "Age is the number of days since the deal was added.",
         "columns": [
-            ("Age", "label"),
+            ("Deal age", "label"),
             ("Companies", "companies"),
             ("Deals", "count"),
             ("Amount", "amount"),
@@ -772,7 +912,7 @@ def _deals_by_quarter(user, start, end):
             "Deals with no expected close date are Unscheduled."
         ),
         "columns": [
-            ("Quarter", "label"),
+            ("Expected close quarter", "label"),
             ("Companies", "companies"),
             ("Deals", "count"),
             ("Amount", "amount"),
@@ -866,7 +1006,7 @@ def _deal_pipeline(user, start, end):
     return {
         "title": "Deal pipeline",
         "columns": [
-            ("Stage", "label"),
+            ("Deal stage", "label"),
             ("Companies", "companies"),
             ("Deals", "count"),
             ("Amount", "amount"),
@@ -1009,7 +1149,7 @@ def _forecast(user, start, end):
             "Commit is the Closing stage."
         ),
         "columns": [
-            ("Quarter", "label"),
+            ("Expected close quarter", "label"),
             ("Companies", "companies"),
             ("Commit", "commit"),
             ("Weighted", "weighted"),
@@ -1074,7 +1214,7 @@ def _won_lost(user, start, end):
     return {
         "title": "Won, lost, and hold",
         "columns": [
-            ("Outcome", "label"),
+            ("Deal outcome", "label"),
             ("Companies", "companies"),
             ("Deals", "count"),
             ("Amount", "amount"),
@@ -1257,8 +1397,8 @@ def _activities(user, start, end):
     return {
         "title": "Activity per rep",
         "columns": [
-            ("Rep", "label"),
-            ("Type", "activity_type"),
+            ("Owner", "label"),
+            ("Activity type", "activity_type"),
             ("Companies", "companies"),
             ("Activities", "count"),
         ],
@@ -1309,7 +1449,7 @@ def _contacts(user, start, end):
     return {
         "title": "Contacts",
         "note": (
-            "Each row is an account. The record list names the people "
+            "Each row is an account. The list below names the people "
             "at those accounts."
         ),
         "columns": [
@@ -1348,19 +1488,18 @@ def report_csv(report):
             cells.append(_csv_cell(value))
         writer.writerow(cells)
     records = report.get("records") or []
-    if records:
+    record_columns = report.get("record_columns") or []
+    if records and record_columns:
         writer.writerow([])
-        writer.writerow(["Company", "Record", "Detail", "Amount"])
+        writer.writerow([label for label, _key in record_columns])
         for item in records:
-            amount = item.get("amount")
-            writer.writerow(
-                [
-                    _csv_cell(item.get("company")),
-                    _csv_cell(item.get("title")),
-                    _csv_cell(item.get("detail")),
-                    "" if amount is None else _csv_cell(format_money(amount)),
-                ]
-            )
+            cells = []
+            for _label, key in record_columns:
+                value = item.get(key)
+                if key == "amount":
+                    value = "" if value is None else format_money(value)
+                cells.append(_csv_cell(value))
+            writer.writerow(cells)
     return buffer.getvalue()
 
 

@@ -84,6 +84,10 @@ def test_delete_requires_a_reason_and_clears_dependents_first(client):
     )
     page = client.get(reverse("accounts:detail", args=[account.pk]))
     assert page.content.index(b"Delete account") > page.content.index(b"Contacts")
+    assert b'<details class="fold">' in page.content
+    assert b"<summary>Contacts</summary>" in page.content
+    assert b'class="fold" open' not in page.content
+    assert page.content.index(b"Drew Singh") > page.content.index(b"<summary>Contacts</summary>")
     assert b"Confirmed to delete" in page.content
     assert b"confirm_delete_again" not in page.content
     blocked = client.post(

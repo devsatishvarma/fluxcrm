@@ -400,7 +400,7 @@ def filter_deals(user, params):
                 params.get("close_before"), "close_before"
             )
         )
-    ordering = params.get("ordering") or "-created_at"
+    ordering = params.get("ordering") or "confidence"
     if ordering not in DEAL_ORDERING:
         raise ValidationError({"ordering": "Sorting is limited to indexed fields."})
     from core.workflow import CLOSED_DEAL_STAGES
@@ -466,7 +466,7 @@ def update_deal(*, actor, deal_id, version, data, request_id=""):
     before = deal_snapshot(deal)
     if "stage" in normalized and normalized["stage"] != deal.stage:
         raise ValidationError(
-            {"stage": "Change stage from the board or the transition action."}
+            {"stage": "Change the stage on the deal page."}
         )
     probability_changed = "probability" in normalized and not _same_probability(
         normalized["probability"], deal.probability

@@ -127,10 +127,31 @@ def test_complete_and_snooze_stay_consistent_with_audit(client):
     assert task.status == Task.Status.DONE
     assert task.completed_at is not None
     assert task.version == 2
+    assert task.description == "private task notes"
     completed_event = AuditEvent.objects.get(action="task.completed")
     assert completed_event.before_json["status"] == "OPEN"
     assert completed_event.after_json["status"] == "DONE"
     assert "private task notes" not in json.dumps(completed_event.after_json)
+    noted = create_task(
+        actor=admin,
+        data={
+            "title": "Send the follow-up",
+            "description": "Started the call",
+            "due_at": timezone.now() - timedelta(hours=1),
+        },
+        links=[{"kind": "lead", "id": lead.pk}],
+        request_id="test",
+    )
+    listed = client.get(reverse("activities:tasks"))
+    assert b'name="completion_notes"' in listed.content
+    assert b'placeholder="Add notes"' in listed.content
+    finished = client.post(
+        reverse("activities:complete", args=[noted.pk]),
+        {"version": noted.version, "completion_notes": "They asked for a quote"},
+    )
+    assert finished.status_code == 302
+    noted.refresh_from_db()
+    assert noted.description == "Started the call\nThey asked for a quote"
 
     open_task = create_task(
         actor=admin,

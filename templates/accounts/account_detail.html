@@ -42,19 +42,21 @@
   {% else %}
     <p>No child accounts.</p>
   {% endif %}
-  <h2>Contacts</h2>
-  <p><a href="{% url 'accounts:contact_create' account.pk %}">Add contact</a></p>
-  {% if contacts %}
-    <ul class="name-columns">
-      {% for contact in contacts %}
-        <li>
-          <a href="{% url 'accounts:contact_edit' contact.pk %}">{{ contact.first_name }} {{ contact.last_name }}</a>
-        </li>
-      {% endfor %}
-    </ul>
-  {% else %}
-    <p>No contacts yet.</p>
-  {% endif %}
+  <details class="fold">
+    <summary>Contacts</summary>
+    <p><a href="{% url 'accounts:contact_create' account.pk %}">Add contact</a></p>
+    {% if contacts %}
+      <ul class="name-columns">
+        {% for contact in contacts %}
+          <li>
+            <a href="{% url 'accounts:contact_edit' contact.pk %}">{{ contact.first_name }} {{ contact.last_name }}</a>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>No contacts yet.</p>
+    {% endif %}
+  </details>
   <h2>Deals</h2>
   <p><a href="{% url 'sales:create' %}?account={{ account.pk }}">Add deal</a></p>
   {% if deals %}

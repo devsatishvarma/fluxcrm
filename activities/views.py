@@ -184,6 +184,7 @@ def task_complete(request, task_id):
         task_id,
         success="Task {name} completed.",
         failure="Could not complete the task.",
+        completion_notes=request.POST.get("completion_notes", ""),
     )
 
 

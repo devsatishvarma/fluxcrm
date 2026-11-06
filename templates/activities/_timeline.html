@@ -225,6 +225,8 @@
                     <input type="hidden" name="version" value="{{ task.version }}">
                     <input type="hidden" name="kind" value="{{ kind }}">
                     <input type="hidden" name="object_id" value="{{ object_id }}">
+                    <label class="visually-hidden" for="complete-notes-{{ task.pk }}">Notes</label>
+                    <input id="complete-notes-{{ task.pk }}" name="completion_notes" placeholder="Add notes" maxlength="4000">
                     <button class="btn btn-sm btn-outline-primary" type="submit">Complete</button>
                   </form>
                 {% endif %}

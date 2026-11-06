@@ -293,14 +293,16 @@
         background: var(--brand-navy);
         font-weight: 700;
       }
-      .stage-history {
+      .stage-history,
+      .fold {
         margin-top: 1.5rem;
         background: var(--brand-paper);
         border: 1px solid #e1e8ee;
         border-radius: 0.75rem;
         padding: 0.15rem 1rem;
       }
-      .stage-history summary {
+      .stage-history summary,
+      .fold summary {
         cursor: pointer;
         list-style: none;
         display: flex;
@@ -311,8 +313,10 @@
         font-size: 1rem;
         font-weight: 500;
       }
-      .stage-history summary::-webkit-details-marker { display: none; }
-      .stage-history summary::before {
+      .stage-history summary::-webkit-details-marker,
+      .fold summary::-webkit-details-marker { display: none; }
+      .stage-history summary::before,
+      .fold summary::before {
         content: "";
         width: 0;
         height: 0;
@@ -320,8 +324,11 @@
         border-bottom: 0.35rem solid transparent;
         border-left: 0.5rem solid var(--brand-navy);
       }
-      .stage-history[open] summary::before { transform: rotate(90deg); }
-      .stage-history summary:focus-visible {
+      .stage-history[open] summary::before,
+      .fold[open] summary::before { transform: rotate(90deg); }
+      .fold[open] { padding-bottom: 0.85rem; }
+      .stage-history summary:focus-visible,
+      .fold summary:focus-visible {
         outline: 2px solid var(--brand-orange);
         outline-offset: 2px;
       }
@@ -442,7 +449,8 @@
         white-space: nowrap;
       }
       .task-actions input[type="datetime-local"],
-      .task-actions input[name="delete_reason"] {
+      .task-actions input[name="delete_reason"],
+      input[name="completion_notes"] {
         height: 2rem;
         margin: 0;
         padding: 0 0.5rem;
@@ -450,6 +458,7 @@
         font-size: 0.875rem;
         font-weight: 400;
       }
+      input[name="completion_notes"] { width: 16rem; max-width: 100%; }
       .task-actions form.delete-form input[name="delete_reason"] {
         width: 100%;
       }
@@ -588,6 +597,11 @@
       .audit-label { color: var(--brand-gray); margin-right: 0.35rem; }
       .form-grid,
       .aligned-fields { display: flex; flex-direction: column; gap: 0.85rem; margin-bottom: 1rem; }
+      .form-actions {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+      }
       .aligned-fields > [class*="col-"] {
         width: 100%;
         max-width: 52rem;

@@ -36,10 +36,14 @@ def _request_id(request):
 
 
 def deal_list(request):
+    from core.workflow import CLOSED_DEAL_STAGES
+
     activate_viewer_timezone(request.user)
     status = 200
     try:
-        queryset = filter_deals(request.user, request.GET)
+        queryset = filter_deals(request.user, request.GET).exclude(
+            stage__in=CLOSED_DEAL_STAGES
+        )
         errors = None
     except ValidationError as exc:
         queryset = Deal.objects.none()
@@ -65,7 +69,11 @@ def deal_list(request):
         "filter_query": filters.urlencode(),
         "open_total": open_pipeline_total(request.user),
         "owner_totals": owner_amount_totals(queryset),
-        "stage_choices": choice_pairs("DEAL_STAGE"),
+        "stage_choices": [
+            (key, label)
+            for key, label in choice_pairs("DEAL_STAGE")
+            if key not in CLOSED_DEAL_STAGES
+        ],
         "type_choices": choice_pairs("DEAL_TYPE"),
         "confidence_choices": choice_pairs("DEAL_CONFIDENCE"),
         "owner_choices": (
@@ -292,13 +300,12 @@ def deal_delete(request, deal_id):
 
 
 def deal_board(request):
-    from core.workflow import DEAL_GRAPH, OPEN_DEAL_STAGES, allowed_targets
+    from core.workflow import OPEN_DEAL_STAGES
 
     activate_viewer_timezone(request.user)
     deals = list(filter_deals(request.user, {}).filter(stage__in=OPEN_DEAL_STAGES))
     columns = {stage: [] for stage in OPEN_DEAL_STAGES}
     for deal in deals:
-        deal.allowed_stage_targets = allowed_targets(DEAL_GRAPH, deal.stage)
         columns[deal.stage].append(deal)
     from sales.services import open_pipeline_total
 

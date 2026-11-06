@@ -112,6 +112,9 @@ class TaskCompleteView(APIView):
             actor=request.user,
             task_id=task_id,
             version=request.data.get("version"),
+            completion_notes=request.data.get(
+                "completion_notes", request.data.get("description", "")
+            ),
             request_id=getattr(request, "request_id", ""),
         )
         return Response(task_payload(task))

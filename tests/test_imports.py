@@ -529,6 +529,7 @@ def test_address_columns_are_optional_and_round_trip():
         assert "street: optional" in guide
         assert "region: optional" in guide
         assert "postal_code: optional" in guide
+    assert "employee_count" not in template_csv("lead")
     admin = make_user("jordan", admin=True)
     batch = preview_import(
         actor=admin,

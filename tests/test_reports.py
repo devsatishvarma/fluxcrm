@@ -304,7 +304,7 @@ def test_report_export_records_actor_filters_fields_and_row_count(client):
     assert exported.status_code == 200
     assert exported["Content-Type"].startswith("text/csv")
     assert "leads-by-stage.csv" in exported["Content-Disposition"]
-    assert b"Stage,Companies,Leads,Share" in exported.content
+    assert b"Lead stage,Companies,Leads,Share" in exported.content
     event = AuditEvent.objects.get(action="report.exported")
     assert event.actor_id == director.pk
     assert event.after_json["filters"] == {
@@ -393,6 +393,13 @@ def test_confidence_follows_probability_and_deal_reports_are_grouped(client):
     stage = build_report(admin, "deals-by-stage")
     assert stage["rows"][0]["label"] == "New"
     assert stage["rows"][0]["count"] == 2
+    assert [label for label, _key in stage["record_columns"]] == [
+        "Company",
+        "Deal title",
+        "Deal stage",
+        "Amount",
+    ]
+    assert [label for label, _key in stage["columns"]][0] == "Deal stage"
     quarter = build_report(admin, "deals-by-quarter")
     assert {row["label"] for row in quarter["rows"]} == {"FY2026 Q4", "Unscheduled"}
     owners = build_report(admin, "deals-by-owner")

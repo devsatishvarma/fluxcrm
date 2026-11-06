@@ -71,7 +71,7 @@
     <div><dt>Timeline</dt><dd>{{ bant_labels|lookup:deal.bant_timeline_status|default:"Unknown" }}</dd></div>
   </dl>
   {% if deal.notes %}<h2>Notes</h2><p>{{ deal.notes }}</p>{% endif %}
-  <h2>Move deal stage</h2>
+  <h2 id="move-deal-stage">Move deal stage</h2>
   {% include "crm/_stage_path.html" with stage_order=stage_order current_stage=deal.stage %}
   {% if allowed_stages %}
     <p>Choose the next stage. Only the fields that stage needs are shown, and <abbr class="req" title="Required">*</abbr> marks the ones you must fill. {% if deal.lead %}Closing as Won or Lost converts the lead. {% endif %}There is no separate approval.</p>

@@ -9,37 +9,21 @@
       <a href="{% url 'sales:list' %}">List</a>
     </p>
   </div>
-  <p>Each stage is one row. Open the deal when a move needs an amount, a date, a name, or a note. Those fields are marked on the deal page.</p>
-  <p id="board-error" role="alert"></p>
+  <p>Each stage is one row. Update stage opens the deal and the fields that next stage needs.</p>
   <div class="board">
     {% for stage, cards in columns %}
-      <section class="board-lane" data-stage="{{ stage }}">
+      <section class="board-lane">
         <header>
           <h2>{{ stage|stage_label }}</h2>
           <span class="board-count">{{ cards|length }}</span>
         </header>
         <div class="board-lane-cards">
           {% for deal in cards %}
-            <article
-              class="board-card"
-              draggable="true"
-              data-version="{{ deal.version }}"
-              data-url="{% url 'sales:transition' deal.pk %}"
-            >
+            <article class="board-card">
               <a href="{% url 'sales:detail' deal.pk %}">{{ deal.title }}</a>
               <p class="mb-1">{{ deal.amount|money }} · {{ deal.confidence|choice_label }}</p>
               <p class="mb-1">Deal Age {{ deal.created_at|elapsed }} · Stage-Age {{ deal.stage_entered_at|elapsed }}</p>
-              <form method="post" action="{% url 'sales:transition' deal.pk %}">
-                {% csrf_token %}
-                <input type="hidden" name="version" value="{{ deal.version }}">
-                <label class="visually-hidden" for="move-deal-{{ deal.pk }}">Move {{ deal.title }}</label>
-                <select class="form-select form-select-sm mb-1" id="move-deal-{{ deal.pk }}" name="to_stage">
-                  {% for target in deal.allowed_stage_targets %}
-                    <option value="{{ target }}">{{ target|stage_label }}</option>
-                  {% endfor %}
-                </select>
-                <button class="btn btn-sm btn-outline-primary" type="submit">Move</button>
-              </form>
+              <a class="btn btn-sm btn-outline-primary" href="{% url 'sales:detail' deal.pk %}#move-deal-stage">Update stage</a>
             </article>
           {% empty %}
             <p class="board-empty">No open deals in this stage.</p>
@@ -48,5 +32,4 @@
       </section>
     {% endfor %}
   </div>
-  {% include "crm/board_script.html" %}
 {% endblock %}

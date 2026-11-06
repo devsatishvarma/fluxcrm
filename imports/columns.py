@@ -168,12 +168,6 @@ def _lead_columns():
             instructions=f"One key: {_keys('COMPANY_SIZE')}.",
         ),
         Column(
-            "employee_count",
-            "Employees",
-            required=False,
-            instructions="A whole number, zero or greater.",
-        ),
-        Column(
             "annual_revenue",
             "Annual revenue",
             required=False,
@@ -412,7 +406,6 @@ EXAMPLES = {
         "industry": "INFORMATION_TECHNOLOGY",
         "products_services": "IT consulting",
         "company_size_band": "51_200",
-        "employee_count": "120",
         "annual_revenue": "12500.50",
         "rating": "WARM",
         "owner": "",

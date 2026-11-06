@@ -123,8 +123,10 @@
         </div>
       </div>
     </div>
-    <button class="btn btn-primary mt-3" type="submit">Save contact</button>
-    <a href="{% url 'accounts:detail' account.pk %}">Cancel</a>
+    <div class="form-actions mt-3">
+      <button class="btn btn-primary" type="submit">Save contact</button>
+      <a href="{% url 'accounts:detail' account.pk %}">Cancel</a>
+    </div>
   </form>
   {% if contact %}
     {% url 'accounts:contact_delete' contact.pk as delete_url %}

@@ -49,7 +49,7 @@
     <p>No deals are linked to this lead.</p>
   {% endif %}
   <p><a href="{% url 'sales:create' %}?lead={{ lead.pk }}">Add deal</a></p>
-  <h2>Move lead stage</h2>
+  <h2 id="move-lead-stage">Move lead stage</h2>
   {% include "crm/_stage_path.html" with stage_order=stage_order current_stage=lead.stage %}
   {% if allowed_stages %}
     <p>Choose the next stage. Only the fields that stage needs are shown, and <abbr class="req" title="Required">*</abbr> marks the ones you must fill. Moving a lead does not move a deal or create an account.</p>
