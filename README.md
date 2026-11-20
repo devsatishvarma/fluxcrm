@@ -1,6 +1,6 @@
 # glidecrm
 
-A self-hosted CRM for Infoshare Systems, designed for up to 50 users and
+Version 2.0. A self-hosted CRM for Infoshare Systems, designed for up to 50 users and
 approximately 500,000 records without a platform rewrite.
 
 ## Project documents
@@ -18,6 +18,8 @@ approximately 500,000 records without a platform rewrite.
   smoke tests, and migrations.
 - [Team setup (clone & run locally)](docs/TEAM_SETUP.md) — onboarding for
   teammates using Docker Compose or a pre-built image.
+- [Deployment](docs/DEPLOYMENT.md) — one virtual machine, HTTPS on the
+  public IP, backups, and the host checklist.
 - [Operations guide](docs/OPERATIONS.md) — topology, health semantics,
   scheduler behavior, backup, and restore drills.
 

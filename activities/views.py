@@ -57,7 +57,10 @@ def task_list(request):
     ordering = request.GET.get("ordering") or "due"
     if ordering not in TASK_ORDERING:
         ordering = "due"
-    tasks = attach_related(queryset.order_by(TASK_ORDERING[ordering], "pk"))
+    tasks = attach_related(
+        queryset.order_by(TASK_ORDERING[ordering], "pk"),
+        request.user,
+    )
     return render(
         request,
         "activities/task_list.html",

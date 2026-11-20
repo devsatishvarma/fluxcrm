@@ -9,6 +9,7 @@ from django.contrib.auth.forms import PasswordResetForm
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from audit.models import AuditEvent
@@ -42,7 +43,7 @@ def ensure_roles():
         if created:
             continue
         stored = role.permissions or {}
-        if stored.get("version") != 1:
+        if stored.get("version") != 2:
             role.name = spec["name"]
             role.description = spec["description"]
             role.permissions = spec["permissions"]
@@ -143,7 +144,7 @@ def user_snapshot(user: User) -> dict:
         "is_active": user.is_active,
         "role": user.role.key,
         "manager_id": user.manager_id,
-        "team_ids": sorted(user.teams.values_list("pk", flat=True)),
+        "team_id": user.team_id,
     }
 
 
@@ -153,7 +154,8 @@ def setup_first_administrator(*, profile, admin_user, password, request_id=""):
             if User.objects.exists() or CompanySettings.objects.exists():
                 raise SetupAlreadyCompleted
             validate_password(password)
-            admin_role, _ = ensure_roles()
+            ensure_roles()
+            admin_role = Role.objects.get(key="SUPER_ADMIN")
             company = CompanySettings.objects.create(**profile)
             user = User(
                 username=admin_user["username"],
@@ -221,9 +223,15 @@ def create_standard_user(
     request=None,
     request_id="",
 ):
-    from core.policy import require_action
+    from core.policy import deny
 
-    require_action(actor, "user", "A")
+    if not getattr(actor, "is_super_admin", False):
+        deny(actor, "user", "C")
+    if invite and not settings.PASSWORD_RESET_ENABLED:
+        raise ValidationError(
+            "Password reset email is off until an email provider is connected. "
+            "Set a temporary password instead."
+        )
     if invite and request is None:
         raise ValidationError("An invitation requires an HTTP request.")
     if not invite:
@@ -271,9 +279,14 @@ def send_user_password_reset(
     action="user.password_reset_requested",
     request_id="",
 ):
-    from core.policy import require_action
+    from core.policy import deny
 
-    require_action(actor, "user", "A")
+    if not getattr(actor, "is_super_admin", False):
+        deny(actor, "user", "A")
+    if not settings.PASSWORD_RESET_ENABLED:
+        raise ValidationError(
+            "Password reset email is off until an email provider is connected."
+        )
     if not user.is_active:
         raise ValidationError("Enable this user before sending a password reset.")
     form = PasswordResetForm({"email": user.email})
@@ -297,29 +310,83 @@ def send_user_password_reset(
 
 
 @transaction.atomic
-def set_user_active(*, actor, user, active, request_id=""):
+def set_user_password(*, actor, user, password, request_id=""):
+    from core.policy import deny
+
+    if not getattr(actor, "is_super_admin", False):
+        deny(actor, "user", "A")
+    validate_password(password, user=user)
+    user.set_password(password)
+    user.save(update_fields=("password", "team"))
+    record_audit(
+        actor=actor,
+        action="user.password_set",
+        instance=user,
+        before=None,
+        after={"password": "set"},
+        request_id=request_id,
+    )
+
+
+def _owned_records(user):
+    from accounts.models import Account, Contact
+    from activities.models import Activity, Task
+    from leads.models import Lead
+    from sales.models import Deal
+
+    return [
+        model.objects.filter(owner=user)
+        for model in (Lead, Account, Contact, Deal, Activity, Task)
+    ]
+
+
+@transaction.atomic
+def set_user_active(*, actor, user, active, reassign_to=None, request_id=""):
     from core.policy import require_action
 
     require_action(actor, "user", "A")
+    if user.role_id and user.role.key == "SUPER_ADMIN" and not actor.is_super_admin:
+        raise ValidationError("Only a Super Admin can change a Super Admin.")
     if user.pk == actor.pk and not active:
         raise ValidationError("You cannot disable your own account.")
     if (
         not active
-        and user.is_company_admin
-        and not User.objects.filter(role__key="ADMIN", is_active=True)
+        and user.role_id
+        and user.role.key == "SUPER_ADMIN"
+        and not User.objects.filter(role__key="SUPER_ADMIN", is_active=True)
         .exclude(pk=user.pk)
         .exists()
     ):
-        raise ValidationError("The last active administrator cannot be disabled.")
+        raise ValidationError("The last Super Admin cannot be disabled.")
+    moved = 0
+    if not active:
+        owned = _owned_records(user)
+        count = sum(queryset.count() for queryset in owned)
+        if count:
+            if (
+                reassign_to is None
+                or not reassign_to.is_active
+                or reassign_to.pk == user.pk
+            ):
+                raise ValidationError(
+                    "Choose an active person to receive this user's records."
+                )
+            for queryset in owned:
+                moved += queryset.update(owner=reassign_to)
     before = user_snapshot(user)
     user.is_active = active
-    user.save(update_fields=("is_active",))
+    user.save(update_fields=("is_active", "team"))
+    after = user_snapshot(user)
+    if not active:
+        after["reassigned_count"] = moved
+        if reassign_to is not None and moved:
+            after["reassign_to_id"] = reassign_to.pk
     record_audit(
         actor=actor,
         action="user.activated" if active else "user.disabled",
         instance=user,
         before=before,
-        after=user_snapshot(user),
+        after=after,
         request_id=request_id,
     )
     return user
@@ -386,12 +453,20 @@ def update_user(
     phone,
     role,
     manager,
-    teams,
+    team,
     request_id="",
 ):
     from core.policy import require_action
 
     require_action(actor, "user", "A")
+    if user.role_id and user.role.key == "SUPER_ADMIN" and not actor.is_super_admin:
+        raise ValidationError("Only a Super Admin can change a Super Admin.")
+    if role.key == "SUPER_ADMIN" and not actor.is_super_admin:
+        raise ValidationError(
+            {"role": "Only a Super Admin can assign the Super Admin role."}
+        )
+    if actor.pk == user.pk and role.key != user.role.key:
+        raise ValidationError({"role": "You cannot change your own role."})
     name = str(display_name or "").strip()
     if not name:
         raise ValidationError({"display_name": "Enter a name."})
@@ -401,24 +476,32 @@ def update_user(
     number = clean_phone(phone)
     if (
         user.is_active
-        and user.role.key == "ADMIN"
-        and role.key != "ADMIN"
-        and not User.objects.filter(role__key="ADMIN", is_active=True)
+        and user.role.key == "SUPER_ADMIN"
+        and role.key != "SUPER_ADMIN"
+        and not User.objects.filter(role__key="SUPER_ADMIN", is_active=True)
         .exclude(pk=user.pk)
         .exists()
     ):
-        raise ValidationError(
-            {"role": "The last active administrator must keep that role."}
-        )
+        raise ValidationError({"role": "The last Super Admin must keep that role."})
+    if role.key in {"ADMIN", "SUPER_ADMIN"}:
+        team = None
+    elif team is None:
+        raise ValidationError({"team": "Choose a team."})
     before = user_snapshot(user)
     user.display_name = name
     user.email = address
     user.phone = number
     user.role = role
     user.manager = manager
+    user.team = team
     user.full_clean()
-    user.save(update_fields=("display_name", "email", "phone", "role", "manager"))
-    user.teams.set(teams)
+    user.save(
+        update_fields=("display_name", "email", "phone", "role", "manager", "team")
+    )
+    if team is None:
+        user.teams.clear()
+    else:
+        user.teams.set([team])
     record_audit(
         actor=actor,
         action="user.updated",
@@ -434,6 +517,8 @@ def set_user_manager(*, actor, user, manager, request_id=""):
     from core.policy import require_action
 
     require_action(actor, "user", "A")
+    if user.role_id and user.role.key == "SUPER_ADMIN" and not actor.is_super_admin:
+        raise ValidationError("Only a Super Admin can change a Super Admin.")
     before = user_snapshot(user)
     user.manager = manager
     user.full_clean()
@@ -474,6 +559,30 @@ def save_team(*, actor, team, name, manager, member_ids, active, request_id=""):
     if not creating:
         members = members | team.members.filter(is_active=False)
     team.members.set(members)
+    for member in members:
+        if member.role_id and member.role.key in {"ADMIN", "SUPER_ADMIN"}:
+            continue
+        member.team = team
+        member.save(update_fields=("team",))
+        member.teams.set([team])
+    removed = list(
+        User.objects.filter(team=team)
+        .exclude(pk__in=members.values("pk"))
+        .select_related("role")
+    )
+    blocked = [
+        person.display_name
+        for person in removed
+        if not (person.role_id and person.role.key in {"ADMIN", "SUPER_ADMIN"})
+    ]
+    if blocked:
+        names = ", ".join(blocked)
+        raise ValidationError(
+            f"Move these people to another team before removing them: {names}."
+        )
+    for member in removed:
+        member.team = None
+        member.save(update_fields=("team",))
     record_audit(
         actor=actor,
         action="team.created" if creating else "team.updated",
@@ -483,6 +592,39 @@ def save_team(*, actor, team, name, manager, member_ids, active, request_id=""):
         request_id=request_id,
     )
     return team
+
+
+def team_people(team):
+    """Users assigned to this team, including inactive people."""
+    if team.pk is None:
+        return User.objects.none()
+    return (
+        User.objects.filter(Q(team=team) | Q(teams=team))
+        .distinct()
+        .order_by("display_name")
+    )
+
+
+@transaction.atomic
+def delete_team(*, actor, team, request_id=""):
+    """Delete a team only after every member has moved to another team."""
+    from core.policy import require_action
+
+    require_action(actor, "user", "A")
+    if team_people(team).exists():
+        raise ValidationError(
+            "Move every member to another team before deleting this team."
+        )
+    before = _team_snapshot(team)
+    record_audit(
+        actor=actor,
+        action="team.deleted",
+        instance=team,
+        before=before,
+        after=None,
+        request_id=request_id,
+    )
+    team.delete()
 
 
 def review_administrators(*, actor, request_id=""):
@@ -508,31 +650,15 @@ def review_administrators(*, actor, request_id=""):
 
 
 def visible_audit_events(user):
-    from django.db.models import Q
-
-    from core.access import scoped
-    from core.policy import allows, grant_for, model_for, owner_ids_for
+    """Admin and Super Admin see every action. Everyone else sees their own."""
+    from core.policy import allows
 
     if not allows(user, "audit", "R"):
         return AuditEvent.objects.none()
     queryset = AuditEvent.objects.select_related("actor")
-    grant = grant_for(user, "audit")
-    if grant.scope == "ALL":
+    if getattr(user, "is_company_admin", False):
         return queryset
-    allowed = owner_ids_for(user, grant.scope) or set()
-    query = Q(actor_id__in=allowed) | Q(
-        object_type="identity.user",
-        object_id__in=[str(pk) for pk in allowed],
-    )
-    for key in ("lead", "account", "contact", "deal", "activity", "task"):
-        model = model_for(key)
-        visible = [
-            str(pk)
-            for pk in scoped(model.objects.all(), user).values_list("pk", flat=True)
-        ]
-        if visible:
-            query |= Q(object_type=model._meta.label_lower, object_id__in=visible)
-    return queryset.filter(query).distinct()
+    return queryset.filter(actor=user)
 
 
 def request_export(*, actor, object_key, query="", request_id=""):
@@ -574,9 +700,10 @@ def request_export(*, actor, object_key, query="", request_id=""):
 
 
 def authorize_import(*, actor, object_key, request_id=""):
-    from core.policy import require_action
+    from core.policy import allows, require_action
 
-    require_action(actor, "import", "C")
+    if not (allows(actor, "import", "C") or allows(actor, "import", "A")):
+        require_action(actor, "import", "C")
     if object_key not in {"lead", "account", "contact", "deal"}:
         raise ValidationError({"object": "Choose a record type."})
     AuditEvent.objects.create(

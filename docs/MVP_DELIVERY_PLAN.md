@@ -268,6 +268,10 @@ and can be safely changed.
 **Goal:** prove the complete role/scope model before broader reporting or data
 movement.
 
+Version 2.0 replaces this phase's matrix. The approved rules are D-054 and
+`architecture-MVP-spec.md` section 6A, and the screens enforce them. The
+checks below remain the version 1 record.
+
 ### Design
 
 - Translate the architecture matrix into versioned object/action/scope rules.

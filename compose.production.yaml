@@ -1,0 +1,91 @@
+# One virtual machine. MySQL has no published port. Caddy is the only
+# public listener. Start with:
+#   docker compose -f compose.production.yaml up -d --build
+name: glidecrm
+
+x-app: &app
+  build:
+    context: .
+  env_file:
+    - path: .env
+      required: true
+  environment:
+    MYSQL_HOST: database
+    MYSQL_PORT: "3306"
+  restart: unless-stopped
+
+services:
+  database:
+    image: mysql:8.4
+    env_file:
+      - path: .env
+        required: true
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./docker/mysql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - MYSQL_PWD="$$MYSQL_ROOT_PASSWORD" mysqladmin ping -h 127.0.0.1 -uroot --silent
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    restart: unless-stopped
+
+  web:
+    <<: *app
+    command:
+      - sh
+      - -c
+      - python manage.py migrate --noinput && gunicorn glidecrm.wsgi:application --bind 0.0.0.0:8000 --workers 2 --access-logfile - --error-logfile -
+    depends_on:
+      database:
+        condition: service_healthy
+    volumes:
+      - uploads:/app/uploads
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl --fail --silent http://127.0.0.1:8000/ready/ >/dev/null
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  scheduler:
+    <<: *app
+    command:
+      - sh
+      - -c
+      - while true; do python manage.py run_due_jobs; sleep 60; done
+    depends_on:
+      web:
+        condition: service_healthy
+    volumes:
+      - uploads:/app/uploads
+
+  caddy:
+    image: caddy:2
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?Set SITE_ADDRESS in .env to the public IP or hostname}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      web:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  mysql_data:
+  uploads:
+  caddy_data:
+  caddy_config:

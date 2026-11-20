@@ -94,7 +94,9 @@ class DealForm(forms.Form):
             self.fields["lead"].required = False
             self.fields["lead"].empty_label = "Select a lead"
             self.fields["lead"].label = "Lead"
-            self.fields["lead"].help_text = "The person this deal is with."
+            self.fields["lead"].help_text = (
+                "The person this deal is with. The lead must be in the SQL stage."
+            )
             self.fields["lead"].label_from_instance = _lead_label
             self.fields["account"] = forms.ModelChoiceField(
                 label="Account",

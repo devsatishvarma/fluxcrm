@@ -15,7 +15,7 @@ from django.contrib.auth.views import (
     PasswordResetView,
 )
 from django.core.exceptions import ValidationError
-from django.http import FileResponse, HttpRequest, HttpResponse
+from django.http import FileResponse, Http404, HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
 from django.utils import timezone
@@ -37,6 +37,7 @@ from core.services import (
     record_attempt,
     send_user_password_reset,
     set_user_active,
+    set_user_password,
     setup_first_administrator,
     update_company_settings,
     update_user,
@@ -114,6 +115,11 @@ class ThrottledPasswordResetView(PasswordResetView):
     subject_template_name = "registration/password_reset_subject.txt"
     success_url = reverse_lazy("core:password_reset_done")
 
+    def dispatch(self, request, *args, **kwargs):
+        if not settings.PASSWORD_RESET_ENABLED:
+            raise Http404
+        return super().dispatch(request, *args, **kwargs)
+
     def post(self, request, *args, **kwargs):
         email = request.POST.get("email", "")
         if is_throttled("password_reset", email):
@@ -132,14 +138,29 @@ class ThrottledPasswordResetView(PasswordResetView):
 class GlidePasswordResetDoneView(PasswordResetDoneView):
     template_name = "registration/password_reset_done.html"
 
+    def dispatch(self, request, *args, **kwargs):
+        if not settings.PASSWORD_RESET_ENABLED:
+            raise Http404
+        return super().dispatch(request, *args, **kwargs)
+
 
 class GlidePasswordResetConfirmView(PasswordResetConfirmView):
     template_name = "registration/password_reset_confirm.html"
     success_url = reverse_lazy("core:password_reset_complete")
 
+    def dispatch(self, request, *args, **kwargs):
+        if not settings.PASSWORD_RESET_ENABLED:
+            raise Http404
+        return super().dispatch(request, *args, **kwargs)
+
 
 class GlidePasswordResetCompleteView(PasswordResetCompleteView):
     template_name = "registration/password_reset_complete.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        if not settings.PASSWORD_RESET_ENABLED:
+            raise Http404
+        return super().dispatch(request, *args, **kwargs)
 
 
 @login_required
@@ -222,30 +243,30 @@ def user_list(request: HttpRequest) -> HttpResponse:
             require_action(request.user, "user", "R")
         except AccessDenied:
             return HttpResponse(status=403)
-    users = (
-        User.objects.select_related("role", "manager")
-        .prefetch_related("teams")
-        .order_by("display_name")
+    users = User.objects.select_related("role", "manager", "team").order_by(
+        "display_name"
     )
     visible = visible_user_ids(request.user)
     if visible is not None:
         users = users.filter(pk__in=visible)
+    managers = User.objects.filter(is_active=True).order_by("display_name")
+    if visible is not None:
+        managers = managers.filter(pk__in=visible)
     return render(
         request,
         "core/user_list.html",
         {
             "users": users,
             "can_administer": allows(request.user, "user", "A"),
-            "managers": User.objects.filter(is_active=True).order_by("display_name"),
+            "can_create_users": request.user.is_super_admin,
+            "managers": managers,
         },
     )
 
 
 @login_required
 def user_create(request: HttpRequest) -> HttpResponse:
-    try:
-        require_action(request.user, "user", "A")
-    except AccessDenied:
+    if not request.user.is_super_admin:
         return HttpResponse(status=403)
     form = UserCreateForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
@@ -290,10 +311,12 @@ def user_edit(request: HttpRequest, user_id: int) -> HttpResponse:
     except AccessDenied:
         return HttpResponse(status=403)
     account = get_object_or_404(
-        User.objects.select_related("role", "manager"),
+        User.objects.select_related("role", "manager", "team"),
         pk=user_id,
     )
-    form = UserEditForm(request.POST or None, instance=account)
+    if account.role.key == "SUPER_ADMIN" and not request.user.is_super_admin:
+        return HttpResponse(status=403)
+    form = UserEditForm(request.POST or None, instance=account, actor=request.user)
     if request.method == "POST" and form.is_valid():
         try:
             update_user(
@@ -304,9 +327,16 @@ def user_edit(request: HttpRequest, user_id: int) -> HttpResponse:
                 phone=form.cleaned_data["phone"],
                 role=form.cleaned_data["role"],
                 manager=form.cleaned_data["manager"],
-                teams=form.cleaned_data["teams"],
+                team=form.cleaned_data["team"],
                 request_id=getattr(request, "request_id", ""),
             )
+            if form.cleaned_data.get("password"):
+                set_user_password(
+                    actor=request.user,
+                    user=account,
+                    password=form.cleaned_data["password"],
+                    request_id=getattr(request, "request_id", ""),
+                )
         except ValidationError as exc:
             add_form_errors(form, exc)
             fail_with(request, "Could not save the user.", validation_text(exc))
@@ -331,11 +361,16 @@ def user_set_active(request: HttpRequest, user_id: int) -> HttpResponse:
         return HttpResponse(status=403)
     user = get_object_or_404(User, pk=user_id)
     active = request.POST.get("active") == "1"
+    reassign_to = None
+    raw_reassign = request.POST.get("reassign_to")
+    if raw_reassign:
+        reassign_to = User.objects.filter(pk=raw_reassign, is_active=True).first()
     try:
         set_user_active(
             actor=request.user,
             user=user,
             active=active,
+            reassign_to=reassign_to,
             request_id=getattr(request, "request_id", ""),
         )
     except ValidationError as exc:
@@ -360,9 +395,7 @@ def user_set_active(request: HttpRequest, user_id: int) -> HttpResponse:
 @login_required
 @require_POST
 def user_send_password_reset(request: HttpRequest, user_id: int) -> HttpResponse:
-    try:
-        require_action(request.user, "user", "A")
-    except AccessDenied:
+    if not request.user.is_super_admin:
         return HttpResponse(status=403)
     user = get_object_or_404(User, pk=user_id)
     try:

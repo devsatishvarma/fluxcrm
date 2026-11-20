@@ -314,15 +314,18 @@ def account_edit(request, account_id):
 def account_detail(request, account_id):
     activate_viewer_timezone(request.user)
     account = get_scoped(Account, request.user, account_id, related=("owner", "parent"))
-    contacts = Contact.objects.filter(account=account).select_related(
-        "owner", "reports_to", "converted_from_lead"
+    contacts = scoped(
+        Contact.objects.filter(account=account).select_related(
+            "owner", "reports_to", "converted_from_lead"
+        ),
+        request.user,
     )
     children = scoped(Account.objects.filter(parent=account), request.user)
     deals = scoped(
         Deal.objects.filter(account=account).select_related("primary_contact", "owner"),
         request.user,
     )
-    activities, tasks = timeline(account)
+    activities, tasks = timeline(account, request.user)
     return render(
         request,
         "accounts/account_detail.html",
@@ -495,7 +498,9 @@ def lead_convert(request, lead_id):
     errors = None
     choice = None
     status = 200
-    candidates = account_candidates(name=lead.company_name, domain=lead.website_domain)
+    candidates = account_candidates(
+        name=lead.company_name, domain=lead.website_domain, user=request.user
+    )
     if request.method == "POST":
         try:
             result = convert_lead(

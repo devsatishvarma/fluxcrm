@@ -164,7 +164,7 @@ def deal_detail(request, deal_id):
     bant_choices = choice_pairs("BANT_STATUS")
     from activities.services import timeline
 
-    activities, tasks = timeline(deal)
+    activities, tasks = timeline(deal, request.user)
     return render(
         request,
         "sales/deal_detail.html",

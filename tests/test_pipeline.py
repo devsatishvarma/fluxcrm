@@ -30,6 +30,11 @@ def make_user(username, *, admin=False):
     )
 
 
+def as_sql(lead_id):
+    Lead.objects.filter(pk=lead_id).exclude(stage="SQL").update(stage="SQL")
+    return lead_id
+
+
 def lead_form(**overrides):
     payload = {
         "first_name": "Ada",
@@ -98,7 +103,7 @@ def test_ui_and_api_cover_search_filter_pagination_and_delete(client):
         "/api/v1/deals/",
         {
             "title": "Engine rebuild",
-            "lead": str(lead.pk),
+            "lead": str(as_sql(lead.pk)),
             "deal_type": "CONSULTING_SERVICES",
             "amount": "1500.00",
             "currency": "USD",
@@ -150,6 +155,7 @@ def test_invalid_values_and_account_links_are_rejected(client):
         format="json",
     )
     assert orphan.status_code == 422
+    as_sql(lead_id)
     account_link = api.post(
         "/api/v1/deals/",
         {
@@ -235,6 +241,7 @@ def test_stale_versions_conflict_and_owner_scope_holds(client):
     assert Lead.objects.get(pk=lead_id).company_name == "Analytical Engines"
 
     api.force_authenticate(user=admin)
+    as_sql(lead_id)
     deal = api.post(
         "/api/v1/deals/",
         {
@@ -374,6 +381,7 @@ def test_deal_ui_crud_filters_errors_and_lead_delete_guard(client):
     lead_response = client.post(reverse("leads:create"), lead_form())
     lead = Lead.objects.get(email_normalized="ada@example.test")
     assert lead_response.status_code == 302
+    as_sql(lead.pk)
 
     created = client.post(
         reverse("sales:create"),

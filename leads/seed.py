@@ -130,6 +130,16 @@ def seed_phase2(*, actor, sdr, executive):
         if Deal.all_objects.filter(external_id=spec["external_id"]).exists():
             continue
         lead = Lead.objects.get(external_id=spec["lead_external_id"])
+        if lead.stage != "SQL":
+            lead = transition_lead(
+                actor=actor,
+                lead_id=lead.pk,
+                version=lead.version,
+                to_stage="SQL",
+                reason="A deal requires the SQL stage",
+                correction=True,
+                request_id="seed",
+            )
         payload = {
             key: value
             for key, value in spec.items()

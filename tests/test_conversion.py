@@ -25,7 +25,20 @@ from core.taxonomy import ensure_picklists
 from identity.models import User
 from leads.services import create_lead
 from sales.models import Deal
-from sales.services import create_deal, deal_history, transition_deal
+from sales.services import create_deal as _create_deal
+from sales.services import deal_history, transition_deal
+
+
+def create_deal(*args, **kwargs):
+    """Test deals from a lead use the SQL stage the product requires."""
+    data = kwargs.get("data") or {}
+    lead_id = data.get("lead")
+    if lead_id:
+        from leads.models import Lead
+
+        Lead.objects.filter(pk=lead_id).exclude(stage="SQL").update(stage="SQL")
+    return _create_deal(*args, **kwargs)
+
 
 pytestmark = pytest.mark.django_db
 
@@ -276,6 +289,7 @@ def test_reparented_deals_keep_values_and_history():
     )
     history_before = list(deal_history(open_deal).values_list("to_stage", "reason"))
     amount = open_deal.amount
+    lead.refresh_from_db()
     stage_before = lead.stage
     convert_lead(
         actor=user,
@@ -356,6 +370,7 @@ def test_conversion_permissions_links_timeline_and_audit(client):
     assert b"Analytical Engines" not in active.content
     converted = client.get(reverse("leads:list"), {"converted": "1"})
     assert b"Analytical Engines" in converted.content
+    client.force_login(admin)
     detail = client.get(reverse("accounts:detail", args=[partner.pk]))
     assert detail.status_code == 200
     assert b"Lead converted" in detail.content
@@ -476,7 +491,7 @@ def test_lead_and_deal_stages_move_independently(client):
     lead.refresh_from_db()
     deal.refresh_from_db()
     assert deal.stage == "DISCOVERY"
-    assert lead.stage == "NEW"
+    assert lead.stage == "SQL"
     assert lead.converted_at is None
     assert Account.objects.count() == 0
     from leads.services import transition_lead
@@ -485,13 +500,13 @@ def test_lead_and_deal_stages_move_independently(client):
         actor=user,
         lead_id=lead.pk,
         version=lead.version,
-        to_stage="CONTACTED",
-        reason="Reached them",
-        data={"contact_substatus": "ATTEMPTED"},
+        to_stage="UNQUALIFIED",
+        reason="Not a fit",
+        data={"disqualification_reason": "NO_BUDGET"},
     )
     lead.refresh_from_db()
     deal.refresh_from_db()
-    assert lead.stage == "CONTACTED"
+    assert lead.stage == "UNQUALIFIED"
     assert deal.stage == "DISCOVERY"
     assert Account.objects.count() == 0
     client.force_login(user)
@@ -506,23 +521,19 @@ def test_lead_and_deal_stages_move_independently(client):
 def test_closing_a_deal_converts_the_lead_without_changing_its_stage(client):
     user = make_user("close")
     lead = make_lead(user, website_url="https://analytical.example")
-    sibling = create_deal(
-        actor=user,
-        data={
-            "title": "Still open",
-            "lead": lead.pk,
-            "deal_type": "CONSULTING_SERVICES",
-            "amount": "5.00",
-            "currency": "USD",
-            "confidence": "LOW",
-            "stage": "NEW",
-        },
+    held_lead = make_lead(
+        user,
+        first_name="Held",
+        last_name="Person",
+        email="held@example.test",
+        company_name="Held Co",
+        website_url="https://held.example",
     )
     held = create_deal(
         actor=user,
         data={
             "title": "Paused",
-            "lead": lead.pk,
+            "lead": held_lead.pk,
             "deal_type": "CONSULTING_SERVICES",
             "amount": "8.00",
             "currency": "USD",
@@ -539,10 +550,10 @@ def test_closing_a_deal_converts_the_lead_without_changing_its_stage(client):
         data={"close_reason": "CUSTOMER_REQUEST"},
     )
     held.refresh_from_db()
-    lead.refresh_from_db()
+    held_lead.refresh_from_db()
     assert held.stage == "CLOSED_HOLD"
-    assert held.lead_id == lead.pk
-    assert lead.converted_at is None
+    assert held.lead_id == held_lead.pk
+    assert held_lead.converted_at is None
     assert Account.objects.count() == 0
 
     won = create_deal(
@@ -568,8 +579,7 @@ def test_closing_a_deal_converts_the_lead_without_changing_its_stage(client):
     )
     won.refresh_from_db()
     lead.refresh_from_db()
-    sibling.refresh_from_db()
-    assert lead.stage == "NEW"
+    assert lead.stage == "SQL"
     assert won.stage == "CLOSED_LOST"
     assert won.amount == Decimal("48000.00")
     assert won.lead_id is None
@@ -584,8 +594,6 @@ def test_closing_a_deal_converts_the_lead_without_changing_its_stage(client):
     contact = Contact.objects.get(account=account)
     assert contact.email == "ada@example.test"
     assert contact.converted_from_lead_id == lead.pk
-    assert sibling.lead_id == lead.pk
-    assert sibling.stage == "NEW"
     assert Activity.objects.filter(subject="Lead converted").count() == 1
     client.force_login(user)
     account_page = client.get(reverse("accounts:detail", args=[account.pk]))
@@ -633,32 +641,22 @@ def test_closing_a_deal_converts_the_lead_without_changing_its_stage(client):
         data={"actual_close_date": "2026-12-18"},
     )
     won_lead.refresh_from_db()
-    assert won_lead.stage == "NEW"
+    assert won_lead.stage == "SQL"
     assert Account.objects.get(name="Won Co").account_type == "CUSTOMER"
 
-    lost = create_deal(
-        actor=user,
-        data={
-            "title": "Later loss",
-            "lead": lead.pk,
-            "deal_type": "CONSULTING_SERVICES",
-            "amount": "20.00",
-            "currency": "USD",
-            "confidence": "LOW",
-            "stage": "NEW",
-        },
-    )
-    transition_deal(
-        actor=user,
-        deal_id=lost.pk,
-        version=lost.version,
-        to_stage="CLOSED_LOST",
-        reason="Price",
-        data={"close_reason": "PRICE"},
-    )
-    lost.refresh_from_db()
-    assert lost.account_id == account.pk
-    assert lost.lead_id is None
+    with pytest.raises(ValidationError):
+        create_deal(
+            actor=user,
+            data={
+                "title": "Later loss",
+                "lead": lead.pk,
+                "deal_type": "CONSULTING_SERVICES",
+                "amount": "20.00",
+                "currency": "USD",
+                "confidence": "LOW",
+                "stage": "NEW",
+            },
+        )
     assert Account.objects.count() == 2
     assert Contact.objects.filter(account=account).count() == 1
 
@@ -1000,6 +998,8 @@ def test_deals_page_asks_whether_the_deal_is_on_a_lead_or_an_account(client):
         missing.content
     )
 
+    lead.stage = "SQL"
+    lead.save(update_fields=("stage",))
     lead_deal = client.post(
         reverse("sales:create"),
         {

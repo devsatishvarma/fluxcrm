@@ -51,19 +51,20 @@ def test_every_matrix_cell_is_positive_or_negative():
         user = make_user(key.lower(), key)
         objects = spec["permissions"]["objects"]
         for object_key in OBJECTS:
-            granted = set(objects[object_key]["actions"])
+            granted = set(objects[object_key].get("scopes") or {})
             for action in ACTIONS:
                 assert allows(user, object_key, action) is (action in granted)
-    sdr = User.objects.get(username="sdr")
-    assert allows(sdr, "deal", "C", lead=SimpleNamespace(stage="NEW")) is False
-    assert allows(sdr, "deal", "C", lead=SimpleNamespace(stage="SQL")) is True
+    seller = User.objects.get(username="sales_executive")
+    assert allows(seller, "deal", "C", lead=SimpleNamespace(stage="NEW")) is False
+    assert allows(seller, "deal", "C", lead=SimpleNamespace(stage="SQL")) is True
+    assert allows(seller, "deal", "C") is True
 
 
 def test_managers_see_descendants_and_not_the_other_branch(client):
     director = make_user("jordan", "SALES_DIRECTOR")
-    child = make_user("riley", "ACCOUNT_EXECUTIVE", manager=director)
-    grandchild = make_user("morgan", "SDR", manager=child)
-    other = make_user("alex", "ACCOUNT_EXECUTIVE")
+    child = make_user("riley", "SALES_EXECUTIVE", manager=director)
+    grandchild = make_user("morgan", "SALES_EXECUTIVE", manager=child)
+    other = make_user("alex", "SALES_EXECUTIVE")
     child_lead = make_lead(child, company_name="Child Co", email="child@example.test")
     grand_lead = make_lead(
         grandchild, company_name="Grand Co", email="grand@example.test"
@@ -86,18 +87,21 @@ def test_managers_see_descendants_and_not_the_other_branch(client):
 
 
 def test_team_scope_includes_teammates_only(client):
-    west_a = make_user("west-a", "ACCOUNT_EXECUTIVE")
-    west_b = make_user("west-b", "ACCOUNT_EXECUTIVE")
-    east = make_user("east-a", "ACCOUNT_EXECUTIVE")
-    team = Team.objects.create(name="West", manager=west_a, active=True)
-    team.members.add(west_a, west_b)
-    Team.objects.create(name="East", manager=east, active=True).members.add(east)
-    from accounts.services import create_account
-
-    create_account(actor=west_b, data={"name": "West Co", "account_type": "CUSTOMER"})
-    create_account(actor=east, data={"name": "East Co", "account_type": "CUSTOMER"})
+    west_a = make_user("west-a", "MARKETING")
+    west_b = make_user("west-b", "MARKETING")
+    east = make_user("east-a", "MARKETING")
+    west = Team.objects.create(name="West", manager=west_a, active=True)
+    east_team = Team.objects.create(name="East", manager=east, active=True)
+    west_a.team = west
+    west_b.team = west
+    east.team = east_team
+    west_a.save(update_fields=("team",))
+    west_b.save(update_fields=("team",))
+    east.save(update_fields=("team",))
+    make_lead(west_b, company_name="West Co", email="west@example.test")
+    make_lead(east, company_name="East Co", email="east@example.test")
     client.force_login(west_a)
-    page = client.get(reverse("accounts:list"))
+    page = client.get(reverse("leads:list"))
     assert b"West Co" in page.content
     assert b"East Co" not in page.content
 
@@ -165,8 +169,8 @@ def test_read_only_cannot_mutate_by_form_htmx_or_api(client):
 
 def test_export_is_separately_permissioned(client):
     director = make_user("jordan", "SALES_DIRECTOR")
-    child = make_user("riley", "ACCOUNT_EXECUTIVE", manager=director)
-    outsider = make_user("alex", "ACCOUNT_EXECUTIVE")
+    child = make_user("riley", "SALES_EXECUTIVE", manager=director)
+    outsider = make_user("alex", "SALES_EXECUTIVE")
     make_lead(child, company_name="Visible Co", email="visible@example.test")
     make_lead(outsider, company_name="Hidden Co", email="hidden@example.test")
     api = APIClient()
@@ -254,10 +258,27 @@ def test_audit_rows_cannot_be_changed_through_user_paths(client):
     assert listed.status_code == 200
     assert "before" in listed.json()["results"][0]
     reader = make_user("executive", "READ_ONLY")
+    AuditEvent.objects.create(
+        actor=reader,
+        action="reader.viewed",
+        object_type="leads.lead",
+        object_id="1",
+        before_json={"stage": "NEW"},
+        after_json={"stage": "SQL"},
+    )
     api.force_authenticate(user=reader)
-    summary = api.get("/api/v1/audit-events/").json()["results"][0]
-    assert "before" not in summary
-    assert "after" not in summary
+    results = api.get("/api/v1/audit-events/").json()["results"]
+    assert [row["action"] for row in results] == ["reader.viewed"]
+    assert "before" not in results[0]
+    assert "after" not in results[0]
+    client.force_login(reader)
+    page = client.get(reverse("core:audit"))
+    assert b"reader.viewed" in page.content
+    assert b"probe.created" not in page.content
+    client.force_login(admin)
+    admin_page = client.get(reverse("core:audit"))
+    assert b"probe.created" in admin_page.content
+    assert b"reader.viewed" in admin_page.content
 
 
 def test_administrator_review_lists_active_admins(client):
@@ -282,9 +303,9 @@ def test_administrator_review_lists_active_admins(client):
 
 def test_manager_cycles_are_rejected_and_bulk_assign_stays_in_scope():
     director = make_user("jordan", "SALES_DIRECTOR")
-    child = make_user("riley", "ACCOUNT_EXECUTIVE", manager=director)
-    grandchild = make_user("morgan", "SDR", manager=child)
-    outsider = make_user("alex", "ACCOUNT_EXECUTIVE")
+    child = make_user("riley", "SALES_EXECUTIVE", manager=director)
+    grandchild = make_user("morgan", "SALES_EXECUTIVE", manager=child)
+    outsider = make_user("alex", "SALES_EXECUTIVE")
     admin = make_user("ada", "ADMIN")
     with pytest.raises(ValidationError):
         set_user_manager(actor=admin, user=director, manager=grandchild)
@@ -322,7 +343,8 @@ def test_manager_cycles_are_rejected_and_bulk_assign_stays_in_scope():
 def test_import_authorization_does_not_create_records():
     before = Lead.objects.count()
     executive = make_user("executive", "READ_ONLY")
-    seller = make_user("seller", "ACCOUNT_EXECUTIVE")
+    seller = make_user("seller", "SALES_EXECUTIVE")
+    director = make_user("jordan", "SALES_DIRECTOR")
     api = APIClient()
     api.force_authenticate(user=executive)
     assert (
@@ -336,15 +358,22 @@ def test_import_authorization_does_not_create_records():
         api.post(
             "/api/v1/imports/authorize/", {"object": "lead"}, format="json"
         ).status_code
+        == 403
+    )
+    api.force_authenticate(user=director)
+    assert (
+        api.post(
+            "/api/v1/imports/authorize/", {"object": "lead"}, format="json"
+        ).status_code
         == 204
     )
     assert Lead.objects.count() == before
     assert AuditEvent.objects.filter(action="import.authorized").exists()
 
 
-def test_sdr_can_create_a_deal_only_for_sql_ready():
-    sdr = make_user("sdr-deal", "SDR")
-    lead = make_lead(sdr, company_name="SQL Co", email="sql@example.test")
+def test_a_lead_can_source_only_one_deal_and_only_from_sql():
+    seller = make_user("seller-deal", "SALES_EXECUTIVE")
+    lead = make_lead(seller, company_name="SQL Co", email="sql@example.test")
     payload = {
         "title": "SQL deal",
         "lead": str(lead.pk),
@@ -353,12 +382,14 @@ def test_sdr_can_create_a_deal_only_for_sql_ready():
         "confidence": "MEDIUM",
         "stage": "NEW",
     }
-    with pytest.raises(PermissionDenied):
-        create_deal(actor=sdr, data=payload)
+    with pytest.raises(ValidationError, match="SQL"):
+        create_deal(actor=seller, data=payload)
     lead.stage = "SQL"
     lead.save(update_fields=("stage",))
-    deal = create_deal(actor=sdr, data=payload)
+    deal = create_deal(actor=seller, data=payload)
     assert deal.lead_id == lead.pk
+    with pytest.raises(ValidationError):
+        create_deal(actor=seller, data=payload)
 
 
 def test_settings_menu_and_help(client):

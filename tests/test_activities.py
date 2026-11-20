@@ -43,6 +43,9 @@ def make_lead(actor, company="Pinecone Health Group"):
 
 
 def make_deal(actor, lead):
+    if lead.stage != "SQL":
+        lead.stage = "SQL"
+        lead.save(update_fields=("stage",))
     return create_deal(
         actor=actor,
         data={

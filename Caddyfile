@@ -1,0 +1,14 @@
+# Public site. SITE_ADDRESS is the server's public IP, or a hostname after
+# you own a domain. Let's Encrypt IP certificates require the shortlived
+# profile: https://letsencrypt.org/2026/01/15/6day-and-ip-general-availability.html
+# The profile option is marked experimental in Caddy's tls directive:
+# https://caddyserver.com/docs/caddyfile/directives/tls
+# Confirm both pages still match this file before the first public boot.
+{$SITE_ADDRESS} {
+	tls {
+		issuer acme {
+			profile shortlived
+		}
+	}
+	reverse_proxy web:8000
+}

@@ -423,14 +423,26 @@ def filter_deals(user, params):
 
 @transaction.atomic
 def create_deal(*, actor, data, request_id=""):
-    from core.policy import require_action
-    from leads.models import Lead
+    from core.policy import allows, deny
 
     lead = None
     raw_lead = data.get("lead") if hasattr(data, "get") else None
     if raw_lead:
-        lead = Lead.objects.filter(pk=raw_lead).first()
-    require_action(actor, "deal", "C", lead=lead, object_id=raw_lead or "")
+        lead = _visible_lead(actor, raw_lead)
+    if not allows(actor, "deal", "C"):
+        deny(actor, "deal", "C", object_id=raw_lead or "", reason="missing_grant")
+    if lead is not None and lead.stage != "SQL":
+        raise ValidationError(
+            {"lead": "Move this lead to SQL before adding a deal."}
+        )
+    if lead is not None:
+        already = Deal.objects.filter(deleted_at__isnull=True).filter(
+            Q(lead=lead) | Q(converted_from_lead=lead)
+        )
+        if already.exists():
+            raise ValidationError(
+                {"lead": "This lead already has a deal. Choose a different lead."}
+            )
     requested_stage = str(data.get("stage") or "NEW").strip().upper()
     if requested_stage != "NEW":
         raise ValidationError(
@@ -457,7 +469,9 @@ def update_deal(*, actor, deal_id, version, data, request_id=""):
     from core.policy import can_correct, require_action
 
     require_action(actor, "deal", "U", object_id=deal_id)
-    deal = get_scoped(Deal, actor, deal_id, for_update=True, related=DEAL_RELATED)
+    deal = get_scoped(
+        Deal, actor, deal_id, for_update=True, related=DEAL_RELATED, action="U"
+    )
     if require_version(version) != deal.version:
         raise VersionConflict
     normalized = normalize_deal(actor, data, current=deal)
@@ -513,7 +527,9 @@ def delete_deal(*, actor, deal_id, version, delete_reason, request_id=""):
     from core.policy import require_action
 
     require_action(actor, "deal", "D", object_id=deal_id)
-    deal = get_scoped(Deal, actor, deal_id, for_update=True, related=DEAL_RELATED)
+    deal = get_scoped(
+        Deal, actor, deal_id, for_update=True, related=DEAL_RELATED, action="D"
+    )
     if require_version(version) != deal.version:
         raise VersionConflict
     before = deal_snapshot(deal)
@@ -645,7 +661,9 @@ def transition_deal(
     )
 
     require_action(actor, "deal", "U", object_id=deal_id)
-    deal = get_scoped(Deal, actor, deal_id, for_update=True, related=DEAL_RELATED)
+    deal = get_scoped(
+        Deal, actor, deal_id, for_update=True, related=DEAL_RELATED, action="U"
+    )
     if require_version(version) != deal.version:
         raise VersionConflict
     destination = str(to_stage or "").strip()

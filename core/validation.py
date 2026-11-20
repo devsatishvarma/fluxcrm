@@ -180,7 +180,7 @@ def clean_datetime(value, field):
 
 
 def clean_owner(actor, value, object_key="lead"):
-    from core.policy import grant_for, owner_ids_for
+    from core.policy import owner_ids_for, write_scope
 
     if value in (None, ""):
         return actor
@@ -193,7 +193,7 @@ def clean_owner(actor, value, object_key="lead"):
             owner = User.objects.get(pk=int(value), is_active=True)
         except (TypeError, ValueError, User.DoesNotExist) as exc:
             raise ValidationError({"owner": "Select an active user."}) from exc
-    scope = grant_for(actor, object_key).scope
+    scope = write_scope(actor, object_key)
     allowed = owner_ids_for(actor, scope)
     if allowed is not None and owner.pk not in allowed:
         if scope == "OWN":

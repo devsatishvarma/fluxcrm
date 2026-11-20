@@ -131,7 +131,7 @@ def lead_detail(request, lead_id):
     stages = allowed_targets(LEAD_GRAPH, lead.stage)
     from activities.services import timeline
 
-    activities, tasks = timeline(lead)
+    activities, tasks = timeline(lead, request.user)
     return render(
         request,
         "leads/lead_detail.html",

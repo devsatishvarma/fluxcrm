@@ -3,6 +3,9 @@
 {% block content %}
   {% include "core/_settings_nav.html" %}
   <h1>Audit</h1>
+  {% if own_actions_only %}
+    <p>These are the actions you took. Admin and Super Admin can see every action.</p>
+  {% endif %}
   <form class="row g-2 mb-3" method="get">
     <div class="col-md-4">
       <label class="form-label" for="object_type">Object type</label>
@@ -17,7 +20,7 @@
     </div>
   </form>
   <table class="table">
-    <caption>Audit events you can read</caption>
+    <caption>{% if own_actions_only %}Actions you took{% else %}Every action{% endif %}</caption>
     <thead>
       <tr>
         <th scope="col">When</th>

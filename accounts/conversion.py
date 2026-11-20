@@ -215,7 +215,7 @@ def _account(actor, lead, data, request_id):
         raise ValidationError({"account_mode": "Choose create or existing."})
     name = str(data.get("account_name") or lead.company_name).strip()
     domain = lead.website_domain
-    candidates = account_candidates(name=name, domain=domain)
+    candidates = account_candidates(name=name, domain=domain, user=actor)
     if candidates and not _truthy(data.get("confirm_new")):
         raise ConversionChoiceRequired(
             {

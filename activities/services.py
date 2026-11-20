@@ -139,29 +139,37 @@ def attach_freshness(records, kind):
         record.last_activity_at = latest.get(record.pk)
 
 
-def timeline(record):
+def timeline(record, user):
+    from core.access import scoped
+
     content_type = ContentType.objects.get_for_model(record.__class__)
     activities = list(
-        Activity.objects.filter(
-            links__content_type=content_type,
-            links__object_id=record.pk,
+        scoped(
+            Activity.objects.filter(
+                links__content_type=content_type,
+                links__object_id=record.pk,
+            ),
+            user,
         )
         .select_related("owner", "with_contact", "with_contact__account", "with_lead")
         .distinct()
     )
     tasks = list(
-        Task.objects.filter(
-            links__content_type=content_type,
-            links__object_id=record.pk,
+        scoped(
+            Task.objects.filter(
+                links__content_type=content_type,
+                links__object_id=record.pk,
+            ),
+            user,
         )
         .select_related("owner")
         .distinct()
     )
-    attach_related(tasks)
+    attach_related(tasks, user)
     return activities, tasks
 
 
-def attach_related(tasks):
+def attach_related(tasks, user=None):
     """Name the lead, contact, and deal linked to each task."""
     from django.urls import reverse
 
@@ -175,7 +183,12 @@ def attach_related(tasks):
     found = {}
     for content_type_id, object_ids in grouped.items():
         model = ContentType.objects.get_for_id(content_type_id).model_class()
-        for record in model.objects.filter(pk__in=object_ids):
+        records = model.objects.filter(pk__in=object_ids)
+        if user is not None and hasattr(model, "owner"):
+            from core.access import scoped
+
+            records = scoped(records, user)
+        for record in records:
             found[(content_type_id, record.pk)] = record
     by_task = {task.pk: [] for task in task_list}
     for link in links:
@@ -481,7 +494,7 @@ def create_task(*, actor, data, links, request_id=""):
 
 def _locked_task(actor, task_id, version):
     require_action(actor, "task", "U", object_id=task_id)
-    task = get_scoped(Task, actor, task_id, for_update=True)
+    task = get_scoped(Task, actor, task_id, for_update=True, action="U")
     if require_version(version) != task.version:
         raise VersionConflict
     return task
@@ -561,7 +574,7 @@ def change_task_status(*, actor, task_id, version, status, request_id=""):
 @transaction.atomic
 def delete_task(*, actor, task_id, version, delete_reason, request_id=""):
     require_action(actor, "task", "D", object_id=task_id)
-    task = get_scoped(Task, actor, task_id, for_update=True)
+    task = get_scoped(Task, actor, task_id, for_update=True, action="D")
     if require_version(version) != task.version:
         raise VersionConflict
     before = _snapshot(task)
@@ -605,7 +618,7 @@ def update_task(*, actor, task_id, version, data, request_id=""):
 
 def _locked_activity(actor, activity_id, version):
     require_action(actor, "activity", "U", object_id=activity_id)
-    activity = get_scoped(Activity, actor, activity_id, for_update=True)
+    activity = get_scoped(Activity, actor, activity_id, for_update=True, action="U")
     if require_version(version) != activity.version:
         raise VersionConflict
     return activity
@@ -647,7 +660,7 @@ def update_activity(*, actor, activity_id, version, data, request_id=""):
 @transaction.atomic
 def delete_activity(*, actor, activity_id, version, delete_reason, request_id=""):
     require_action(actor, "activity", "D", object_id=activity_id)
-    activity = get_scoped(Activity, actor, activity_id, for_update=True)
+    activity = get_scoped(Activity, actor, activity_id, for_update=True, action="D")
     if require_version(version) != activity.version:
         raise VersionConflict
     before = _snapshot(activity)

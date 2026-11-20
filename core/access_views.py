@@ -9,14 +9,23 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods, require_POST
 
 from core.notices import fail_with, failed, succeeded, validation_text
-from core.policy import ACTIONS, OBJECTS, SCOPES, AccessDenied, allows, require_action
+from core.policy import (
+    ACTIONS,
+    OBJECTS,
+    SCOPE_CHOICES,
+    AccessDenied,
+    allows,
+    require_action,
+)
 from core.services import (
     authorize_import,
     changed_fields,
+    delete_team,
     request_export,
     review_administrators,
     save_team,
     set_user_manager,
+    team_people,
     update_role_grants,
     visible_audit_events,
 )
@@ -39,20 +48,26 @@ def parse_grants(post):
     objects = {}
     for key in OBJECTS:
         selected = set(post.getlist(f"{key}_action"))
-        actions = "".join(letter for letter in ACTIONS if letter in selected)
-        scope = post.get(f"{key}_scope") or "OWN"
-        if scope not in SCOPES:
-            raise ValidationError({key: "Choose a valid scope."})
-        entry = {"actions": actions, "scope": scope}
-        if key == "deal" and post.get("deal_create") == "sql_conversion":
+        scopes = {}
+        for letter in ACTIONS:
+            if letter not in selected:
+                continue
+            scope = post.get(f"{key}_{letter}_scope") or "OWN"
+            if scope == "MANAGER_TREE":
+                scope = "REPORTING_LINE"
+            if scope not in SCOPE_CHOICES:
+                raise ValidationError({key: "Choose a valid scope."})
+            scopes[letter] = scope
+        entry = {"scopes": scopes}
+        if key == "deal" and "C" in scopes:
             entry["create"] = "sql_conversion"
         objects[key] = entry
-    return {"version": 1, "objects": objects}
+    return {"version": 2, "objects": objects}
 
 
 def grant_rows(role):
     stored = role.permissions or {}
-    if stored.get("version") != 1:
+    if stored.get("version") not in {1, 2}:
         from core.policy import ROLE_SPECS
 
         stored = ROLE_SPECS.get(role.key, {}).get("permissions", {})
@@ -60,13 +75,24 @@ def grant_rows(role):
     rows = []
     for key in OBJECTS:
         raw = objects.get(key) or {}
+        if "scopes" in raw:
+            selected = raw.get("scopes") or {}
+        else:
+            scope = raw.get("scope") or "OWN"
+            if scope == "MANAGER_TREE":
+                scope = "REPORTING_LINE"
+            selected = {letter: scope for letter in (raw.get("actions") or "")}
         rows.append(
             {
                 "key": key,
-                "actions": list(ACTIONS),
-                "selected": set(raw.get("actions") or ""),
-                "scope": raw.get("scope") or "OWN",
-                "create": raw.get("create") or "",
+                "letters": [
+                    {
+                        "letter": letter,
+                        "checked": letter in selected,
+                        "scope": selected.get(letter) or "OWN",
+                    }
+                    for letter in ACTIONS
+                ],
             }
         )
     return rows
@@ -77,14 +103,16 @@ def team_list(request: HttpRequest) -> HttpResponse:
     if not (allows(request.user, "user", "R") or allows(request.user, "user", "A")):
         return _guard(request.user, "user", "R")
     if allows(request.user, "user", "A"):
-        teams = Team.objects.select_related("manager").order_by("name")
+        teams = list(Team.objects.select_related("manager").order_by("name"))
     else:
-        teams = (
+        teams = list(
             Team.objects.filter(Q(manager=request.user) | Q(members=request.user))
             .select_related("manager")
             .distinct()
             .order_by("name")
         )
+    for team in teams:
+        team.person_count = team_people(team).count()
     return render(
         request,
         "core/team_list.html",
@@ -133,9 +161,12 @@ def team_edit(request: HttpRequest, team_id=None) -> HttpResponse:
             failed(request, f"Could not save the team. {error}")
     selected = set()
     members = User.objects.none()
+    person_count = 0
     if team.pk:
-        selected = set(team.members.values_list("pk", flat=True))
-        members = team.members.filter(is_active=True).order_by("display_name")
+        people = team_people(team)
+        person_count = people.count()
+        members = people.filter(is_active=True)
+        selected = set(members.values_list("pk", flat=True))
     return render(
         request,
         "core/team_form.html",
@@ -145,8 +176,29 @@ def team_edit(request: HttpRequest, team_id=None) -> HttpResponse:
             "members": members,
             "selected": selected,
             "error": error,
+            "person_count": person_count,
         },
     )
+
+
+@login_required
+@require_POST
+def team_delete(request: HttpRequest, team_id: int) -> HttpResponse:
+    denied = _guard(request.user, "user", "A")
+    if denied:
+        return denied
+    team = get_object_or_404(Team, pk=team_id)
+    try:
+        delete_team(
+            actor=request.user,
+            team=team,
+            request_id=_request_id(request),
+        )
+    except ValidationError as exc:
+        failed(request, validation_text(exc))
+        return redirect("core:team_edit", team_id)
+    succeeded(request, f"Team {team.name} deleted.")
+    return redirect("core:teams")
 
 
 @login_required
@@ -189,7 +241,7 @@ def role_edit(request: HttpRequest, role_id: int) -> HttpResponse:
         {
             "role": role,
             "rows": grant_rows(role),
-            "scopes": SCOPES,
+            "scopes": SCOPE_CHOICES,
             "error": error,
         },
     )
@@ -269,6 +321,7 @@ def audit_list(request: HttpRequest) -> HttpResponse:
             "page_obj": page,
             "query": request.GET,
             "show_snapshots": show_snapshots,
+            "own_actions_only": not request.user.is_company_admin,
         },
     )
 

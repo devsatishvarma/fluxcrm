@@ -435,7 +435,7 @@ def update_lead(*, actor, lead_id, version, data, request_id=""):
     from core.policy import require_action
 
     require_action(actor, "lead", "U", object_id=lead_id)
-    lead = get_scoped(Lead, actor, lead_id, for_update=True)
+    lead = get_scoped(Lead, actor, lead_id, for_update=True, action="U")
     if require_version(version) != lead.version:
         raise VersionConflict
     normalized = normalize_lead(actor, data, current=lead)
@@ -462,7 +462,7 @@ def delete_lead(*, actor, lead_id, version, delete_reason, request_id=""):
     from sales.models import Deal
 
     require_action(actor, "lead", "D", object_id=lead_id)
-    lead = get_scoped(Lead, actor, lead_id, for_update=True)
+    lead = get_scoped(Lead, actor, lead_id, for_update=True, action="D")
     if require_version(version) != lead.version:
         raise VersionConflict
     if Deal.objects.filter(lead=lead).exists():
@@ -591,7 +591,7 @@ def transition_lead(
     from core.workflow import LEAD_GRAPH, lead_gate_gaps, stage_is_active
 
     require_action(actor, "lead", "U", object_id=lead_id)
-    lead = get_scoped(Lead, actor, lead_id, for_update=True)
+    lead = get_scoped(Lead, actor, lead_id, for_update=True, action="U")
     if require_version(version) != lead.version:
         raise VersionConflict
     destination = str(to_stage or "").strip()
@@ -679,7 +679,7 @@ def bulk_assign_leads(*, actor, lead_ids, owner, request_id=""):
     target = clean_owner(actor, owner, object_key="lead")
     updated = []
     for lead_id in lead_ids:
-        lead = get_scoped(Lead, actor, lead_id, for_update=True)
+        lead = get_scoped(Lead, actor, lead_id, for_update=True, action="U")
         if lead.owner_id == target.pk:
             updated.append(lead)
             continue

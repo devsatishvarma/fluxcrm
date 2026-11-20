@@ -20,26 +20,21 @@
         {% for row in rows %}
           <tr>
             <th scope="row">{{ row.key }}</th>
-            <td>
-              {% for letter in row.actions %}
+            <td colspan="2">
+              {% for item in row.letters %}
                 <label class="me-2">
-                  <input type="checkbox" name="{{ row.key }}_action" value="{{ letter }}" {% if letter in row.selected %}checked{% endif %}>
-                  {{ letter }}
+                  <input type="checkbox" name="{{ row.key }}_action" value="{{ item.letter }}" {% if item.checked %}checked{% endif %}>
+                  {{ item.letter }}
+                  <select class="form-select form-select-sm d-inline w-auto" name="{{ row.key }}_{{ item.letter }}_scope">
+                    {% for scope in scopes %}
+                      <option value="{{ scope }}" {% if item.scope == scope %}selected{% endif %}>{{ scope }}</option>
+                    {% endfor %}
+                  </select>
                 </label>
               {% endfor %}
               {% if row.key == "deal" %}
-                <label class="d-block">
-                  <input type="checkbox" name="deal_create" value="sql_conversion" {% if row.create == "sql_conversion" %}checked{% endif %}>
-                  Create when the lead is SQL Ready
-                </label>
+                <span class="d-block">Creating a deal from a lead requires the SQL stage.</span>
               {% endif %}
-            </td>
-            <td>
-              <select class="form-select" name="{{ row.key }}_scope">
-                {% for scope in scopes %}
-                  <option value="{{ scope }}" {% if row.scope == scope %}selected{% endif %}>{{ scope }}</option>
-                {% endfor %}
-              </select>
             </td>
           </tr>
         {% endfor %}

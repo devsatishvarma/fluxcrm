@@ -223,7 +223,7 @@ def report_preset(user):
     scope = grant_for(user, "report").scope
     if scope == "ALL":
         return "Executive"
-    if scope == "MANAGER_TREE":
+    if scope in {"MANAGER_TREE", "REPORTING_LINE"}:
         return "Manager"
     return "Rep"
 
@@ -1308,7 +1308,9 @@ def _conversion(user, start, end):
     }
 
 
-def _activity_companies(activity_ids):
+def _activity_companies(activity_ids, user):
+    from core.access import scoped
+
     links = list(ActivityLink.objects.filter(activity_id__in=activity_ids))
     grouped = defaultdict(list)
     for link in links:
@@ -1321,26 +1323,30 @@ def _activity_companies(activity_ids):
         if model is Lead:
             found = {
                 lead.pk: lead.company_name
-                for lead in Lead.objects.filter(pk__in=object_ids).only("company_name")
+                for lead in scoped(
+                    Lead.objects.filter(pk__in=object_ids), user
+                ).only("company_name")
             }
         elif model is Account:
             found = {
                 account.pk: account.name
-                for account in Account.objects.filter(pk__in=object_ids).only("name")
+                for account in scoped(
+                    Account.objects.filter(pk__in=object_ids), user
+                ).only("name")
             }
         elif model is Contact:
             found = {
                 contact.pk: contact.account.name
-                for contact in Contact.objects.filter(pk__in=object_ids).select_related(
-                    "account"
-                )
+                for contact in scoped(
+                    Contact.objects.filter(pk__in=object_ids), user
+                ).select_related("account")
             }
         elif model is Deal:
             found = {
                 deal.pk: _deal_company(deal)
-                for deal in Deal.objects.filter(pk__in=object_ids).select_related(
-                    "account", "lead", "converted_from_lead"
-                )
+                for deal in scoped(
+                    Deal.objects.filter(pk__in=object_ids), user
+                ).select_related("account", "lead", "converted_from_lead")
             }
         for object_id, name in found.items():
             names[(content_type_id, object_id)] = name
@@ -1360,7 +1366,9 @@ def _activities(user, start, end):
     if end_dt is not None:
         queryset = queryset.filter(occurred_at__lt=end_dt)
     activities = list(queryset.order_by("-occurred_at", "pk"))
-    companies = _activity_companies([activity.pk for activity in activities])
+    companies = _activity_companies(
+        [activity.pk for activity in activities], user
+    )
     type_labels = dict(Activity.Type.choices)
     owner_ids = {activity.owner_id for activity in activities}
     names = {

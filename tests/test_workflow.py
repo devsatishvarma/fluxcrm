@@ -21,6 +21,7 @@ pytestmark = pytest.mark.django_db
 
 
 def deal_form(lead_id, **overrides):
+    Lead.objects.filter(pk=lead_id).exclude(stage="SQL").update(stage="SQL")
     payload = {
         "title": "Assessment",
         "lead": str(lead_id),
@@ -165,6 +166,15 @@ def test_deal_close_rules_history_and_open_pipeline(client):
     api.force_authenticate(user=admin)
     lead = api.post("/api/v1/leads/", lead_form(owner=owner.pk), format="json")
     lead_id = lead.json()["id"]
+
+    def another_lead(email):
+        created = api.post(
+            "/api/v1/leads/",
+            lead_form(owner=owner.pk, email=email),
+            format="json",
+        )
+        return created.json()["id"]
+
     open_deal = api.post(
         "/api/v1/deals/",
         deal_form(lead_id, title="Open work", owner=owner.pk),
@@ -172,17 +182,17 @@ def test_deal_close_rules_history_and_open_pipeline(client):
     )
     lost = api.post(
         "/api/v1/deals/",
-        deal_form(lead_id, title="Lost work", amount="50.00"),
+        deal_form(another_lead("lost@example.test"), title="Lost work", amount="50.00"),
         format="json",
     )
     held = api.post(
         "/api/v1/deals/",
-        deal_form(lead_id, title="Held work", amount="25.00"),
+        deal_form(another_lead("held@example.test"), title="Held work", amount="25.00"),
         format="json",
     )
     won = api.post(
         "/api/v1/deals/",
-        deal_form(lead_id, title="Won work", amount=None),
+        deal_form(another_lead("won@example.test"), title="Won work", amount=None),
         format="json",
     )
     assert open_deal.status_code == 201
@@ -1046,9 +1056,15 @@ def test_old_deal_stages_map_without_touching_leads():
     admin = make_user("ada", admin=True)
     api = APIClient()
     api.force_authenticate(user=admin)
-    lead = Lead.objects.get(
-        pk=api.post("/api/v1/leads/", lead_form(), format="json").json()["id"]
-    )
+
+    def posted_lead(email):
+        return Lead.objects.get(
+            pk=api.post("/api/v1/leads/", lead_form(email=email), format="json").json()[
+                "id"
+            ]
+        )
+
+    lead = posted_lead("early@example.test")
     early = Deal.objects.get(
         pk=api.post(
             "/api/v1/deals/",
@@ -1059,14 +1075,14 @@ def test_old_deal_stages_map_without_touching_leads():
     later = Deal.objects.get(
         pk=api.post(
             "/api/v1/deals/",
-            deal_form(lead.pk, title="Later"),
+            deal_form(posted_lead("later@example.test").pk, title="Later"),
             format="json",
         ).json()["id"]
     )
     held = Deal.objects.get(
         pk=api.post(
             "/api/v1/deals/",
-            deal_form(lead.pk, title="Held"),
+            deal_form(posted_lead("held-stage@example.test").pk, title="Held"),
             format="json",
         ).json()["id"]
     )

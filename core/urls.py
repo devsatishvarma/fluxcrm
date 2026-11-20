@@ -62,6 +62,11 @@ urlpatterns = [
     path("teams/", access_views.team_list, name="teams"),
     path("teams/new/", access_views.team_edit, name="team_create"),
     path("teams/<int:team_id>/", access_views.team_edit, name="team_edit"),
+    path(
+        "teams/<int:team_id>/delete/",
+        access_views.team_delete,
+        name="team_delete",
+    ),
     path("roles/", access_views.role_list, name="roles"),
     path("roles/<int:role_id>/", access_views.role_edit, name="role_edit"),
     path("audit/", access_views.audit_list, name="audit"),

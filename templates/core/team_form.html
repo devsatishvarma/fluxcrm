@@ -44,4 +44,14 @@
     </p>
     <button class="btn btn-primary" type="submit">Save team</button>
   </form>
+  {% if team.pk %}
+    {% if person_count %}
+      <p>Move every member to another team before this team can be deleted.</p>
+    {% else %}
+      <form method="post" action="{% url 'core:team_delete' team.pk %}">
+        {% csrf_token %}
+        <button class="btn btn-outline-danger" type="submit">Delete team</button>
+      </form>
+    {% endif %}
+  {% endif %}
 {% endblock %}

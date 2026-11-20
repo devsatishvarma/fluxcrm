@@ -56,6 +56,9 @@ def _deal(actor, **extra):
         "amount": extra.pop("amount", "10.00"),
     }
     payload.update(extra)
+    lead_id = payload.get("lead")
+    if lead_id:
+        Lead.objects.filter(pk=lead_id).exclude(stage="SQL").update(stage="SQL")
     return create_deal(actor=actor, data=payload, request_id="test")
 
 
@@ -207,8 +210,8 @@ def test_prior_quarter_and_sql_cohort_reconcile():
         {"start": "2026-10-01", "end": "2026-12-31"},
     )
     assert conversion["total"] == 4
-    assert conversion["sql_count"] == 1
-    assert conversion["rows"][2]["count"] == "25%"
+    assert conversion["sql_count"] == 3
+    assert conversion["rows"][2]["count"] == "75%"
     assert missed.company_name == "Missed Co"
 
 
@@ -365,6 +368,7 @@ def test_confidence_follows_probability_and_deal_reports_are_grouped(client):
     assert confidence_for_probability(Decimal("39.99")) == "LOW"
     admin = make_user("jordan", admin=True)
     lead = _lead(admin, "Confidence Co")
+    early_lead = _lead(admin, "Early Co")
     likely = _deal(
         admin,
         lead=str(lead.pk),
@@ -377,7 +381,7 @@ def test_confidence_follows_probability_and_deal_reports_are_grouped(client):
     assert likely.confidence == "HIGH"
     early = _deal(
         admin,
-        lead=str(lead.pk),
+        lead=str(early_lead.pk),
         title="Early work",
         amount="20.00",
         probability="10.00",

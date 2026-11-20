@@ -248,6 +248,8 @@ Lead conversion is not a lead stage and not a deal stage. A person can convert a
 
 ## 6. Roles, hierarchy and permission matrix
 
+The matrix in this section is version 1. Version 2.0 is section 6A and decision D-054. The running application enforces section 6A.
+
 ### Scope policy
 
 - `OWN`: records owned by user or created by user where owner is unset.
@@ -276,6 +278,26 @@ Legend: `C` create, `R` read, `U` update, `D` soft-delete, `X` export, `A` admin
 Admin is a bootstrap/configuration role and should not be assigned for day-to-day sales. Manager export is allowed by default; company may switch to Admin-only. Owner/team scope is applied consistently across list, search, count, aggregate, report, and export queries. “Read-only” means no mutating API or import path, even if the UI is manipulated.
 
 Phase 1 Standard User remains beside this matrix: create, read, update, and soft-delete on records that person owns, with no export. Sales Director/Manager may correct a stage and override probability. SDR/BDR may create a deal only when the source lead is SQL. Report and import screens arrive in later phases; their grants are already enforced on the preparatory export and import checks. Audit search is read-only. Denial and privilege logs store the actor, object, action, and reason, not CRM field values.
+
+## 6A. Version 2.0 access model
+
+Confirmed 2026-11-09. See D-054. The running screens enforce this section.
+
+- Scope is stored on each grant: NONE, OWN, TEAM, REPORTING_LINE, or ALL. REPORTING_LINE is the user plus every direct and indirect report. Missing grant means no access.
+- `grants_version` remains the counter for an edit. The audit log stores the old and new matrix and does not store customer PII.
+- Roles: Super Admin, Admin, Sales Director/Manager, Sales Executive, Client Success, Marketing, Read-only/Executive, Standard User. SDR/BDR is removed. Account Executive is renamed Sales Executive.
+- The bootstrap administrator is Super Admin. Other existing Admin users become Admin.
+- Only Super Admin creates users and sets or resets passwords. Admin and Super Admin manage teams, settings, and grants, and may assign any role except Super Admin. Admin cannot edit a Super Admin. The last Super Admin cannot be removed. A user cannot change their own role.
+- Sales Executive and Standard User: OWN on leads, deals, tasks, activities, and reports.
+- Sales Director/Manager: REPORTING_LINE on those objects, and import is allowed.
+- Deal create from a lead requires lead stage `SQL`. One lead sources one deal. An account can have several deals with different owners. Every deal query uses the viewer's deal grant.
+- Accounts and contacts: read is ALL for any role with R. Sales roles may create. Update is OWN, REPORTING_LINE for Sales Director/Manager, and ALL for Admin and Super Admin.
+- Marketing and Client Success keep an editable seed. Admin and Super Admin change it in the role screen.
+- Read-only/Executive: R ALL on lead, account, contact, deal, activity, task, and report. Audit shows each person only the actions they took. Admin and Super Admin see every audit action.
+- Import: Sales Director/Manager, Admin, and Super Admin only. Scope matches the object being imported. Rows get an owner, cannot change a record outside that scope, and are audited.
+- Admin and Super Admin have no team. Every other user has one team and can be moved. A team can be deleted only after its members move to another team.
+- Deactivation reassigns the user's records. It does not delete the user.
+- Authenticator-app sign-in, without email or text, waits for a Django 6-compatible library. It is not part of the current version.
 
 ## 7. Screen inventory and fast-entry patterns
 

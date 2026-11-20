@@ -964,6 +964,27 @@ here before implementing it.
 - **Approval source:** User request to ask for notes when completing a task.
 - **Migration/rollback impact:** No data change.
 
+### D-054 — Version 2.0 access model
+
+- **Date/status:** 2026-11-09 — Confirmed and implemented. The screens use these grants. Marketing and Client Success remain editable from Roles.
+- **Decision:** Version 2.0 replaces the version 1 role matrix. D-018 remains the record of what version 1 enforced. The product version shown in the app is 2.0 from this decision forward.
+- **Roles:** Super Admin, Admin, Sales Director/Manager, Sales Executive, Client Success, Marketing, Read-only/Executive, and Standard User. Account Executive is renamed Sales Executive. SDR/BDR is removed. The first administrator becomes Super Admin. Every other current Admin becomes Admin.
+- **Scope:** A scope belongs to one grant (role, object, action), not to the whole role. The values are NONE, OWN, TEAM, REPORTING_LINE, and ALL. REPORTING_LINE replaces MANAGER_TREE and means the user plus every direct and indirect report. No grant means no access. `grants_version` stays the change counter. Each edit still stores the old and new matrix in the audit log, without customer PII.
+- **Super Admin and Admin:** Only a Super Admin can create a user or set or reset that user's password. Admin and Super Admin can manage teams, company settings, and the grant matrix, and can assign every role except Super Admin. An Admin cannot change a Super Admin account. The last Super Admin cannot be deactivated or demoted. A user cannot change their own role.
+- **Sales access:** Sales Executive and Standard User use OWN for leads, deals, tasks, activities, and reports. Sales Director/Manager uses REPORTING_LINE for those objects and may import. A deal can be created from a lead only when the lead stage key is `SQL`. A lead is the source of only one deal. An account may have deals with different owners. Visibility of every deal follows the viewer's grant.
+- **Accounts and contacts:** A role with an R grant can read every account and contact. Sales roles may create them. Update is OWN, REPORTING_LINE for a Sales Director/Manager, and ALL for Admin and Super Admin.
+- **Marketing and Client Success:** Their starting grants stay editable. Admin and Super Admin change them from the role screen. No code change is required for a later edit.
+- **Read-only/Executive:** Keeps read access to every lead, account, contact, deal, activity, task, and report. The audit log shows that person only the actions they took. Admin and Super Admin see every audit action.
+- **Import:** Only Sales Director/Manager, Admin, and Super Admin. The import uses the same scope as the object being imported. Imported rows get an owner, do not change a record outside that scope, and each import is audited.
+- **Teams:** Admin and Super Admin have no team. Every other user has exactly one team, and that team can be reassigned. A team can be deleted only when it has no members. A user on more than one active team keeps the alphabetically first team.
+- **Deactivation:** Deactivate the user and reassign the records they own. Do not hard-delete the user.
+- **Sign-in second factor:** An authenticator app, with no email and no text message, is a later version 2.0 item. It is not in this version. The current `django-two-factor-auth` release lists Django only through 5.2, and this app uses Django 6. Confirm a Django 6 release before adding it. Do not add the package until that check is done.
+- **Rationale:** The version 1 scope was attached to the role, several screens did not use it, and the role names no longer match the sales team.
+- **Affected phases:** 6, and the version 2.0 access work that follows this decision.
+- **Specification impact:** `architecture-MVP-spec.md` section 6A. Help, the home page, and the footer show version 2.0.
+- **Approval source:** User answers on 2026-11-09 to the twelve access questions.
+- **Migration/rollback impact:** Rename one role, remove SDR/BDR after its users move to another role, add Super Admin, set one team per non-admin user, and keep `grants_version`. Rolling back restores the version 1 role keys and the many-team membership from a backup taken before the migration.
+
 ## Starter taxonomy — version 1
 
 The user approved a standard, admin-editable starter set. Keys are stable

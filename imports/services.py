@@ -397,7 +397,7 @@ def _index_existing(actor, entity, rows):
     visible = {}
     hidden = set()
     if external_ids:
-        for record in scoped(model.objects.all(), actor).filter(
+        for record in scoped(model.objects.all(), actor, action="U").filter(
             external_id__in=external_ids
         ):
             visible[record.external_id] = record.pk
@@ -407,16 +407,23 @@ def _index_existing(actor, entity, rows):
             )
         ) - set(visible)
     emails = {}
+    hidden_emails = set()
+    hidden_accounts = set()
     if entity in {"lead", "contact"}:
         wanted = []
         for row in rows:
             if row.get("email"):
                 wanted.append(str(row["email"]).strip().lower())
         if wanted:
-            for record in scoped(model.objects.all(), actor).filter(
+            for record in scoped(model.objects.all(), actor, action="U").filter(
                 email_normalized__in=wanted
             ):
                 emails.setdefault(record.email_normalized, record.pk)
+            hidden_emails = set(
+                model.objects.filter(email_normalized__in=wanted).values_list(
+                    "email_normalized", flat=True
+                )
+            ) - set(emails)
     accounts = {}
     if entity == "account":
         domains = [
@@ -426,15 +433,29 @@ def _index_existing(actor, entity, rows):
             row.get("name_normalized") for row in rows if row.get("name_normalized")
         ]
         if domains:
-            for record in scoped(model.objects.all(), actor).filter(
+            visible_domains = set()
+            for record in scoped(model.objects.all(), actor, action="U").filter(
                 website_domain__in=domains
             ):
                 accounts.setdefault(("domain", record.website_domain), record.pk)
+                visible_domains.add(record.website_domain)
+            for domain in model.objects.filter(website_domain__in=domains).values_list(
+                "website_domain", flat=True
+            ):
+                if domain not in visible_domains:
+                    hidden_accounts.add(("domain", domain))
         if names:
-            for record in scoped(model.objects.all(), actor).filter(
+            visible_names = set()
+            for record in scoped(model.objects.all(), actor, action="U").filter(
                 name_normalized__in=names
             ):
                 accounts.setdefault(("name", record.name_normalized), record.pk)
+                visible_names.add(record.name_normalized)
+            for name in model.objects.filter(name_normalized__in=names).values_list(
+                "name_normalized", flat=True
+            ):
+                if name not in visible_names:
+                    hidden_accounts.add(("name", name))
     known_accounts = {}
     known_contacts = {}
     account_ids = [
@@ -467,6 +488,8 @@ def _index_existing(actor, entity, rows):
         "visible": visible,
         "hidden": hidden,
         "emails": emails,
+        "hidden_emails": hidden_emails,
+        "hidden_accounts": hidden_accounts,
         "accounts": accounts,
         "known_accounts": known_accounts,
         "known_contacts": known_contacts,
@@ -489,9 +512,7 @@ def _enrich(entity, data):
 def _match(entity, data, indexes, pending):
     external_id = data.get("external_id") or ""
     if external_id and external_id in indexes["hidden"]:
-        raise ValidationError(
-            {"external_id": "That external ID belongs to a record you cannot change."}
-        )
+        raise ValidationError({"external_id": "This row cannot be imported."})
     if external_id and external_id in pending["external_id"]:
         return pending["external_id"][external_id]
     if external_id and external_id in indexes["visible"]:
@@ -500,17 +521,23 @@ def _match(entity, data, indexes, pending):
         email = str(data["email"]).strip().lower()
         if email in pending["email"]:
             return pending["email"][email]
+        if email in indexes.get("hidden_emails", ()):
+            raise ValidationError({"email": "This row cannot be imported."})
         if email in indexes["emails"]:
             return {"pk": indexes["emails"][email], "row": None}
     if entity == "account":
         domain = data.get("website_domain") or ""
         if domain and ("domain", domain) in pending["account"]:
             return pending["account"][("domain", domain)]
+        if domain and ("domain", domain) in indexes.get("hidden_accounts", ()):
+            raise ValidationError({"name": "This row cannot be imported."})
         if domain and ("domain", domain) in indexes["accounts"]:
             return {"pk": indexes["accounts"][("domain", domain)], "row": None}
         name = data.get("name_normalized") or ""
         if name and ("name", name) in pending["account"]:
             return pending["account"][("name", name)]
+        if name and ("name", name) in indexes.get("hidden_accounts", ()):
+            raise ValidationError({"name": "This row cannot be imported."})
         if name and ("name", name) in indexes["accounts"]:
             return {"pk": indexes["accounts"][("name", name)], "row": None}
     return None

@@ -228,7 +228,8 @@ def test_limits_permissions_and_formula_export(client):
         },
     )
     assert refused.status_code == 403
-    client.force_login(owner)
+    director = make_role_user("importer", "SALES_DIRECTOR")
+    client.force_login(director)
     huge = "external_id,first_name,last_name,company_name,source\n" + (
         "\n".join(f"H-{i},A,B,Co,WEB" for i in range(50_001))
     )
@@ -257,6 +258,7 @@ def test_limits_permissions_and_formula_export(client):
             "stage": "NEW",
         },
     )
+    client.force_login(owner)
     denied = client.get(reverse("imports:export", args=["lead"]))
     assert denied.status_code == 403
     admin = make_user("jordan", admin=True)

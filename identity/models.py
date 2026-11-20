@@ -51,6 +51,13 @@ class User(AbstractUser):
         on_delete=models.PROTECT,
         related_name="users",
     )
+    team = models.ForeignKey(
+        "Team",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="assigned_users",
+    )
     last_seen_at = models.DateTimeField(null=True, blank=True)
 
     REQUIRED_FIELDS = ["email", "display_name"]
@@ -66,17 +73,37 @@ class User(AbstractUser):
                 )
             seen.add(ancestor.pk)
             ancestor = ancestor.manager
+        self.ensure_team()
+
+    def ensure_team(self):
+        """Admin and Super Admin have no team. Everyone else keeps the chosen team."""
+        if not self.role_id:
+            return
+        if self.role.key in {"ADMIN", "SUPER_ADMIN"}:
+            self.team = None
+
+    def save(self, *args, **kwargs):
+        if self.role_id:
+            self.ensure_team()
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None and "team" not in update_fields:
+            kwargs["update_fields"] = [*update_fields, "team"]
+        super().save(*args, **kwargs)
 
     @property
     def is_company_admin(self) -> bool:
-        return self.role_id is not None and self.role.key == "ADMIN"
+        return self.role_id is not None and self.role.key in {"ADMIN", "SUPER_ADMIN"}
+
+    @property
+    def is_super_admin(self) -> bool:
+        return self.role_id is not None and self.role.key == "SUPER_ADMIN"
 
     def __str__(self) -> str:
         return self.display_name or self.username
 
 
 class Team(models.Model):
-    """Optional grouping. Record visibility still follows the manager tree."""
+    """One team for each person except Admin and Super Admin."""
 
     name = models.CharField(max_length=80, unique=True)
     manager = models.ForeignKey(

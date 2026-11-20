@@ -6,7 +6,6 @@ from datetime import UTC, datetime
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Q
 
 from accounts.models import Account, Contact
 from audit.models import AuditEvent
@@ -30,12 +29,8 @@ CONVERTIBLE_ACCOUNT_TYPES = {Account.Type.CUSTOMER, Account.Type.PROSPECT}
 
 
 def contacts_for_user(user):
-    """Contacts this person can read, plus contacts on accounts they can open."""
-    queryset = Contact.objects.select_related("account", "owner")
-    visible_accounts = scoped(Account.objects.all(), user)
-    return queryset.filter(
-        Q(pk__in=scoped(queryset, user).values("pk")) | Q(account__in=visible_accounts)
-    ).distinct()
+    """Contacts this person is allowed to read."""
+    return scoped(Contact.objects.select_related("account", "owner"), user)
 
 
 def normalize_name(value):
@@ -43,19 +38,22 @@ def normalize_name(value):
     return " ".join(compact.split())
 
 
-def account_candidates(*, name, domain=""):
+def account_candidates(*, name, domain="", user=None):
     """Explain possible matches. This never merges or overwrites a record."""
     found = {}
     normalized = normalize_name(name)
+    accounts = Account.objects.all()
+    if user is not None:
+        accounts = scoped(accounts, user)
     if domain:
-        for account in Account.objects.filter(website_domain=domain):
+        for account in accounts.filter(website_domain=domain):
             found[account.pk] = _candidate(account, 100, "Same website domain")
     if normalized:
-        for account in Account.objects.filter(name_normalized=normalized):
+        for account in accounts.filter(name_normalized=normalized):
             _merge_candidate(found, account, 90, "Same account name")
         token = normalized.split()[0]
         if len(token) >= 4:
-            for account in Account.objects.filter(name_normalized__icontains=token):
+            for account in accounts.filter(name_normalized__icontains=token):
                 if account.name_normalized == normalized:
                     continue
                 _merge_candidate(found, account, 60, "Similar account name")
@@ -330,8 +328,15 @@ def contact_differences(contact, incoming):
 @transaction.atomic
 def set_account_parent(*, actor, account, parent_id):
     require_action(actor, "account", "U", object_id=account.pk)
+    locked = get_scoped(
+        Account,
+        actor,
+        account.pk,
+        for_update=True,
+        related=("owner", "parent"),
+        action="U",
+    )
     parent = None if not parent_id else get_scoped(Account, actor, parent_id)
-    locked = Account.objects.select_for_update().get(pk=account.pk)
     assert_account_parent(locked, parent)
     locked.parent = parent
     locked.updated_by = actor
@@ -343,8 +348,15 @@ def set_account_parent(*, actor, account, parent_id):
 @transaction.atomic
 def set_reports_to(*, actor, contact, manager_id):
     require_action(actor, "contact", "U", object_id=contact.pk)
+    locked = get_scoped(
+        Contact,
+        actor,
+        contact.pk,
+        for_update=True,
+        related=("owner", "account", "reports_to"),
+        action="U",
+    )
     manager = None if not manager_id else get_scoped(Contact, actor, manager_id)
-    locked = Contact.objects.select_for_update().get(pk=contact.pk)
     assert_reports_to(
         locked,
         manager,
@@ -362,7 +374,12 @@ def update_account(*, actor, account_id, version, data, request_id=""):
     """Change the fields a person can edit. The id stays with the application."""
     require_action(actor, "account", "U", object_id=account_id)
     account = get_scoped(
-        Account, actor, account_id, for_update=True, related=("owner", "parent")
+        Account,
+        actor,
+        account_id,
+        for_update=True,
+        related=("owner", "parent"),
+        action="U",
     )
     if require_version(version) != account.version:
         raise VersionConflict
@@ -421,6 +438,7 @@ def update_contact(*, actor, contact_id, version, data, request_id=""):
         contact_id,
         for_update=True,
         related=("owner", "account", "reports_to"),
+        action="U",
     )
     if require_version(version) != contact.version:
         raise VersionConflict
@@ -494,7 +512,7 @@ def delete_account(*, actor, account_id, version, delete_reason, request_id=""):
     from sales.models import Deal
 
     require_action(actor, "account", "D", object_id=account_id)
-    account = get_scoped(Account, actor, account_id, for_update=True)
+    account = get_scoped(Account, actor, account_id, for_update=True, action="D")
     if require_version(version) != account.version:
         raise VersionConflict
     if Account.objects.filter(parent=account).exists():
@@ -532,7 +550,7 @@ def delete_contact(*, actor, contact_id, version, delete_reason, request_id=""):
     from sales.models import Deal
 
     require_action(actor, "contact", "D", object_id=contact_id)
-    contact = get_scoped(Contact, actor, contact_id, for_update=True)
+    contact = get_scoped(Contact, actor, contact_id, for_update=True, action="D")
     if require_version(version) != contact.version:
         raise VersionConflict
     if Contact.objects.filter(reports_to=contact).exists():

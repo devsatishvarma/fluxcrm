@@ -17,6 +17,7 @@ from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+APP_VERSION = "2.0"
 
 
 def env_bool(name: str, default: bool = False) -> bool:
@@ -76,6 +77,7 @@ MIDDLEWARE = [
     "core.middleware.RequestIdMiddleware",
     "core.middleware.AccessDenialMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -172,6 +174,14 @@ USE_TZ = True
 
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
+    },
+}
 MEDIA_URL = "/media/"
 MEDIA_ROOT = Path(os.getenv("DJANGO_MEDIA_ROOT", BASE_DIR / "uploads"))
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
@@ -182,6 +192,8 @@ LOGOUT_REDIRECT_URL = "core:login"
 SESSION_COOKIE_AGE = 60 * 30
 SESSION_SAVE_EVERY_REQUEST = True
 PASSWORD_RESET_TIMEOUT = 60 * 60
+# Off until an email provider is chosen. The console backend must not send resets.
+PASSWORD_RESET_ENABLED = env_bool("DJANGO_PASSWORD_RESET_ENABLED", default=False)
 EMAIL_BACKEND = os.getenv(
     "DJANGO_EMAIL_BACKEND",
     "django.core.mail.backends.console.EmailBackend",
@@ -201,6 +213,10 @@ REST_FRAMEWORK = {
 }
 
 SESSION_COOKIE_HTTPONLY = True
+# Django's documented default. Confirm in
+# https://docs.djangoproject.com/en/6.0/ref/settings/#session-cookie-samesite
+SESSION_COOKIE_SAMESITE = "Lax"
+CSRF_COOKIE_SAMESITE = "Lax"
 SESSION_COOKIE_SECURE = env_bool("DJANGO_SECURE_COOKIES", default=not DEBUG)
 CSRF_COOKIE_SECURE = env_bool("DJANGO_SECURE_COOKIES", default=not DEBUG)
 SECURE_SSL_REDIRECT = env_bool("DJANGO_SECURE_SSL_REDIRECT", default=False)

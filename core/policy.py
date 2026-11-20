@@ -27,7 +27,8 @@ OBJECTS = (
     "audit",
 )
 ACTIONS = "CRUDXA"
-SCOPES = ("OWN", "TEAM", "MANAGER_TREE", "ALL")
+SCOPES = ("NONE", "OWN", "TEAM", "REPORTING_LINE", "ALL")
+SCOPE_CHOICES = ("OWN", "TEAM", "REPORTING_LINE", "ALL")
 OBJECT_LABELS = {
     "leads.lead": "lead",
     "accounts.account": "account",
@@ -51,43 +52,83 @@ class AccessDenied(PermissionDenied):
 
 @dataclass(frozen=True)
 class Grant:
-    actions: frozenset
-    scope: str
+    """Actions this role may take, each with its own scope."""
+
+    scopes: dict
     create: str = ""
+
+    @property
+    def actions(self):
+        return frozenset(self.scopes)
+
+    def scope_for(self, action):
+        return self.scopes.get(action, "NONE")
+
+    @property
+    def scope(self):
+        """Read scope. Write checks use scope_for."""
+        return self.scope_for("R")
 
 
 def _grant(actions, scope, create=""):
-    entry = {"actions": actions, "scope": scope}
+    entry = {"scopes": {letter: scope for letter in actions}}
+    if create:
+        entry["create"] = create
+    return entry
+
+
+def _scopes(scopes, create=""):
+    entry = {"scopes": {letter: scope for letter, scope in scopes.items()}}
     if create:
         entry["create"] = create
     return entry
 
 
 def _matrix(objects):
-    return {"version": 1, "objects": objects}
+    return {"version": 2, "objects": objects}
+
+
+_CRM = (
+    "lead",
+    "account",
+    "contact",
+    "deal",
+    "activity",
+    "task",
+)
+_ACCOUNT_SALES = _scopes({"C": "OWN", "R": "ALL", "U": "OWN", "D": "OWN"})
+_ACCOUNT_MANAGER = _scopes(
+    {"C": "REPORTING_LINE", "R": "ALL", "U": "REPORTING_LINE", "X": "REPORTING_LINE"}
+)
+_ACCOUNT_SUCCESS = _scopes({"C": "OWN", "R": "ALL", "U": "OWN"})
 
 
 ROLE_SPECS = {
-    "ADMIN": {
-        "name": "Admin",
-        "description": "Bootstrap and configuration access.",
+    "SUPER_ADMIN": {
+        "name": "Super Admin",
+        "description": "Creates users, sets passwords, and can change every record.",
         "scope_policy": "ALL",
         "permissions": _matrix(
-            {
-                key: _grant("CRUDXA", "ALL")
-                for key in (
-                    "lead",
-                    "account",
-                    "contact",
-                    "deal",
-                    "activity",
-                    "task",
-                )
-            }
+            {key: _grant("CRUDXA", "ALL") for key in _CRM}
             | {
-                "report": _grant("A", "ALL"),
-                "import": _grant("A", "ALL"),
-                "user": _grant("A", "ALL"),
+                "report": _grant("RXA", "ALL"),
+                "import": _grant("CRXA", "ALL"),
+                "user": _grant("RUDA", "ALL"),
+                "settings": _grant("A", "ALL"),
+                "audit": _grant("R", "ALL"),
+            }
+        ),
+    },
+    "ADMIN": {
+        "name": "Admin",
+        "description": "Teams, settings, and grants. Cannot add users or passwords.",
+        "scope_policy": "ALL",
+        "permissions": _matrix(
+            {key: _grant("CRUDXA", "ALL") for key in _CRM}
+            | {
+                "report": _grant("RXA", "ALL"),
+                "import": _grant("CRXA", "ALL"),
+                "user": _grant("RUDA", "ALL"),
                 "settings": _grant("A", "ALL"),
                 "audit": _grant("R", "ALL"),
             }
@@ -99,127 +140,97 @@ ROLE_SPECS = {
         "scope_policy": "OWN",
         "permissions": _matrix(
             {
-                key: _grant("CRUD", "OWN")
-                for key in (
-                    "lead",
-                    "account",
-                    "contact",
-                    "deal",
-                    "activity",
-                    "task",
-                )
-            }
-            | {
+                "lead": _grant("CRUD", "OWN"),
+                "deal": _grant("CRUD", "OWN", create="sql_conversion"),
+                "activity": _grant("CRUD", "OWN"),
+                "task": _grant("CRUD", "OWN"),
+                "account": _ACCOUNT_SALES,
+                "contact": _ACCOUNT_SALES,
                 "report": _grant("R", "OWN"),
-                "import": _grant("CR", "OWN"),
-                "user": _grant("", "OWN"),
-                "settings": _grant("", "OWN"),
+                "import": _grant("", "NONE"),
+                "user": _grant("", "NONE"),
+                "settings": _grant("", "NONE"),
                 "audit": _grant("R", "OWN"),
             }
         ),
     },
     "SALES_DIRECTOR": {
         "name": "Sales Director/Manager",
-        "description": "Records owned by this person and their reporting line.",
-        "scope_policy": "MANAGER_TREE",
+        "description": "Own records plus the reporting line. Can import.",
+        "scope_policy": "REPORTING_LINE",
         "permissions": _matrix(
             {
-                key: _grant("CRUX", "MANAGER_TREE")
-                for key in (
-                    "lead",
-                    "account",
-                    "contact",
-                    "deal",
-                    "activity",
-                    "task",
-                )
-            }
-            | {
-                "report": _grant("RX", "MANAGER_TREE"),
-                "import": _grant("CRX", "TEAM"),
-                "user": _grant("R", "MANAGER_TREE"),
-                "settings": _grant("", "MANAGER_TREE"),
-                "audit": _grant("R", "MANAGER_TREE"),
+                "lead": _grant("CRUX", "REPORTING_LINE"),
+                "deal": _grant("CRUX", "REPORTING_LINE", create="sql_conversion"),
+                "activity": _grant("CRUX", "REPORTING_LINE"),
+                "task": _grant("CRUX", "REPORTING_LINE"),
+                "account": _ACCOUNT_MANAGER,
+                "contact": _ACCOUNT_MANAGER,
+                "report": _grant("RX", "REPORTING_LINE"),
+                "import": _grant("CRX", "REPORTING_LINE"),
+                "user": _grant("R", "REPORTING_LINE"),
+                "settings": _grant("", "NONE"),
+                "audit": _grant("R", "OWN"),
             }
         ),
     },
-    "ACCOUNT_EXECUTIVE": {
-        "name": "Account Executive",
-        "description": "Own leads, and team accounts, contacts, and deals.",
-        "scope_policy": "TEAM",
+    "SALES_EXECUTIVE": {
+        "name": "Sales Executive",
+        "description": "Own leads, deals, tasks, and activities.",
+        "scope_policy": "OWN",
         "permissions": _matrix(
             {
                 "lead": _grant("CRU", "OWN"),
-                "account": _grant("CRU", "TEAM"),
-                "contact": _grant("CRU", "TEAM"),
-                "deal": _grant("CRU", "TEAM"),
-                "activity": _grant("CRU", "TEAM"),
-                "task": _grant("CRU", "TEAM"),
-                "report": _grant("R", "TEAM"),
-                "import": _grant("CR", "OWN"),
-                "user": _grant("", "OWN"),
-                "settings": _grant("", "OWN"),
-                "audit": _grant("R", "TEAM"),
-            }
-        ),
-    },
-    "SDR": {
-        "name": "SDR/BDR",
-        "description": "Own leads. Team reads. Deal create only from SQL.",
-        "scope_policy": "TEAM",
-        "permissions": _matrix(
-            {
-                "lead": _grant("CRU", "OWN"),
-                "account": _grant("R", "TEAM"),
-                "contact": _grant("CRU", "TEAM"),
-                "deal": _grant("R", "TEAM", create="sql_conversion"),
-                "activity": _grant("CRU", "TEAM"),
-                "task": _grant("CRU", "TEAM"),
-                "report": _grant("R", "TEAM"),
-                "import": _grant("CR", "OWN"),
-                "user": _grant("", "OWN"),
-                "settings": _grant("", "OWN"),
-                "audit": _grant("R", "TEAM"),
+                "deal": _grant("CRU", "OWN", create="sql_conversion"),
+                "activity": _grant("CRU", "OWN"),
+                "task": _grant("CRU", "OWN"),
+                "account": _scopes({"C": "OWN", "R": "ALL", "U": "OWN"}),
+                "contact": _scopes({"C": "OWN", "R": "ALL", "U": "OWN"}),
+                "report": _grant("R", "OWN"),
+                "import": _grant("", "NONE"),
+                "user": _grant("", "NONE"),
+                "settings": _grant("", "NONE"),
+                "audit": _grant("R", "OWN"),
             }
         ),
     },
     "MARKETING": {
         "name": "Marketing",
-        "description": "Team leads and activities, with read access elsewhere.",
+        "description": "Team leads and activities. Edit these grants from Roles.",
         "scope_policy": "TEAM",
         "permissions": _matrix(
             {
                 "lead": _grant("CRU", "TEAM"),
-                "account": _grant("R", "TEAM"),
-                "contact": _grant("R", "TEAM"),
+                "account": _grant("R", "ALL"),
+                "contact": _grant("R", "ALL"),
                 "deal": _grant("R", "TEAM"),
                 "activity": _grant("CRU", "TEAM"),
                 "task": _grant("CRU", "TEAM"),
                 "report": _grant("R", "TEAM"),
-                "import": _grant("CR", "TEAM"),
-                "user": _grant("", "TEAM"),
-                "settings": _grant("", "TEAM"),
-                "audit": _grant("R", "TEAM"),
+                "import": _grant("", "NONE"),
+                "user": _grant("", "NONE"),
+                "settings": _grant("", "NONE"),
+                "audit": _grant("R", "OWN"),
             }
         ),
     },
     "CLIENT_SUCCESS": {
         "name": "Client Success",
-        "description": "Team accounts and contacts. No import.",
+        "description": "Accounts and contacts. An administrator can edit these grants.",
         "scope_policy": "TEAM",
         "permissions": _matrix(
             {
                 "lead": _grant("R", "TEAM"),
-                "account": _grant("CRU", "TEAM"),
-                "contact": _grant("CRU", "TEAM"),
+                "account": _ACCOUNT_SUCCESS,
+                "contact": _ACCOUNT_SUCCESS,
                 "deal": _grant("R", "TEAM"),
                 "activity": _grant("CRU", "TEAM"),
                 "task": _grant("CRU", "TEAM"),
                 "report": _grant("R", "TEAM"),
-                "import": _grant("", "TEAM"),
-                "user": _grant("", "TEAM"),
-                "settings": _grant("", "TEAM"),
-                "audit": _grant("R", "TEAM"),
+                "import": _grant("", "NONE"),
+                "user": _grant("", "NONE"),
+                "settings": _grant("", "NONE"),
+                "audit": _grant("R", "OWN"),
             }
         ),
     },
@@ -238,13 +249,13 @@ ROLE_SPECS = {
                     "activity",
                     "task",
                     "report",
-                    "audit",
                 )
             }
             | {
-                "import": _grant("", "ALL"),
-                "user": _grant("", "ALL"),
-                "settings": _grant("", "ALL"),
+                "audit": _grant("R", "OWN"),
+                "import": _grant("", "NONE"),
+                "user": _grant("", "NONE"),
+                "settings": _grant("", "NONE"),
             }
         ),
     },
@@ -271,20 +282,31 @@ def model_for(object_key):
     }[object_key]
 
 
+def _normalize_scope(scope):
+    if scope == "MANAGER_TREE":
+        return "REPORTING_LINE"
+    if scope not in SCOPES:
+        return "OWN"
+    return scope
+
+
 def grant_for(user, object_key):
     role = getattr(user, "role", None)
     if role is None or object_key not in OBJECTS:
-        return Grant(frozenset(), "OWN")
+        return Grant({}, "")
     stored = role.permissions or {}
-    if stored.get("version") != 1:
+    if stored.get("version") not in {1, 2}:
         stored = ROLE_SPECS.get(role.key, {}).get("permissions", {})
     raw = (stored.get("objects") or {}).get(object_key) or {}
-    scope = raw.get("scope") or "OWN"
-    if scope not in SCOPES:
-        scope = "OWN"
+    if "scopes" in raw:
+        scopes = {}
+        for action, scope in (raw.get("scopes") or {}).items():
+            if action in ACTIONS:
+                scopes[action] = _normalize_scope(scope)
+        return Grant(scopes, raw.get("create") or "")
+    scope = _normalize_scope(raw.get("scope") or "OWN")
     return Grant(
-        frozenset(raw.get("actions") or ""),
-        scope,
+        {letter: scope for letter in (raw.get("actions") or "") if letter in ACTIONS},
         raw.get("create") or "",
     )
 
@@ -295,20 +317,26 @@ def allows(user, object_key, action, *, lead=None):
     if not getattr(user, "is_active", False):
         return False
     grant = grant_for(user, object_key)
-    if action in grant.actions:
-        return True
-    return bool(
-        action == "C"
-        and object_key == "deal"
-        and grant.create == "sql_conversion"
-        and getattr(lead, "stage", "") == "SQL"
-    )
+    if action == "C" and object_key == "deal" and lead is not None:
+        permitted = action in grant.actions or grant.create == "sql_conversion"
+        return permitted and getattr(lead, "stage", "") == "SQL"
+    return action in grant.actions
 
 
 def can_correct(user):
-    """Stage correction and probability override: Admin or Sales Director."""
+    """Stage correction and probability override."""
     role = getattr(user, "role", None)
-    return role is not None and role.key in {"ADMIN", "SALES_DIRECTOR"}
+    return role is not None and role.key in {"SUPER_ADMIN", "ADMIN", "SALES_DIRECTOR"}
+
+
+def write_scope(user, object_key):
+    """Scope used when choosing an owner. Update, then create, then assign."""
+    grant = grant_for(user, object_key)
+    for action in ("U", "C", "A"):
+        scope = grant.scope_for(action)
+        if scope != "NONE":
+            return scope
+    return "NONE"
 
 
 def note_denial(*, actor, object_key, action, object_id="", reason):
@@ -405,30 +433,28 @@ def descendant_ids(user):
 
 
 def team_member_ids(user):
-    from identity.models import User
+    from identity.models import Team, User
 
-    active_teams = user.teams.filter(active=True)
-    if not active_teams.exists():
+    team_id = getattr(user, "team_id", None)
+    if not team_id or not Team.objects.filter(pk=team_id, active=True).exists():
         return set()
-    return set(
-        User.objects.filter(teams__in=active_teams, teams__active=True).values_list(
-            "pk", flat=True
-        )
-    )
+    return set(User.objects.filter(team_id=team_id).values_list("pk", flat=True))
 
 
 def owner_ids_for(user, scope):
     """User ids whose records this scope includes. None means every owner."""
+    if scope == "MANAGER_TREE":
+        scope = "REPORTING_LINE"
     if scope == "ALL":
         return None
-    if not getattr(user, "is_authenticated", False):
+    if not getattr(user, "is_authenticated", False) or scope == "NONE":
         return set()
     if scope == "OWN":
         return {user.pk}
     if scope == "TEAM":
         peers = team_member_ids(user)
         return peers or {user.pk}
-    if scope == "MANAGER_TREE":
+    if scope == "REPORTING_LINE":
         return {user.pk, *descendant_ids(user)}
     return {user.pk}
 
@@ -437,7 +463,7 @@ def assignable_users(user, object_key):
     from identity.models import User
 
     queryset = User.objects.filter(is_active=True).order_by("display_name")
-    allowed = owner_ids_for(user, grant_for(user, object_key).scope)
+    allowed = owner_ids_for(user, write_scope(user, object_key))
     if allowed is None:
         return queryset
     return queryset.filter(pk__in=allowed)

@@ -11,6 +11,7 @@
     {% if company %}
       <p class="home-company">{{ company.display_name }}</p>
     {% endif %}
+    <p>Version {{ app_version }}</p>
     <p>Local time: <time datetime="{{ local_now|date:'c' }}">{{ local_now|date:"m-d-Y, h:i A" }}</time> {{ timezone_name }}</p>
   </section>
   <h2>Start here</h2>

@@ -1,5 +1,9 @@
 # Development Guide
 
+Production on one virtual machine is documented in [DEPLOYMENT.md](DEPLOYMENT.md).
+The commands below are for a laptop. Password reset email is off unless
+`DJANGO_PASSWORD_RESET_ENABLED=true`.
+
 ## Prerequisites
 
 - Docker Engine/Desktop with Compose

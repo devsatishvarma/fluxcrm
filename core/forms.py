@@ -3,6 +3,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django import forms
+from django.conf import settings
 from django.contrib.auth.forms import AuthenticationForm
 from django.core.exceptions import ValidationError
 
@@ -261,6 +262,11 @@ class UserCreateForm(forms.Form):
         self.fields["manager"].queryset = User.objects.filter(is_active=True).order_by(
             "display_name"
         )
+        if not settings.PASSWORD_RESET_ENABLED:
+            self.fields.pop("send_invitation")
+            self.fields[
+                "email"
+            ].help_text = "Stored on the user. Password reset email is off."
 
     def clean_email(self):
         email, _domain = clean_email(self.cleaned_data["email"])
@@ -276,6 +282,8 @@ class UserCreateForm(forms.Form):
         cleaned = super().clean()
         password = cleaned.get("password")
         confirmation = cleaned.get("password_confirmation")
+        if not settings.PASSWORD_RESET_ENABLED:
+            cleaned["send_invitation"] = False
         if not cleaned.get("send_invitation") and not password:
             self.add_error("password", "Enter a password or send an invitation.")
         if password and confirmation and password != confirmation:
@@ -308,22 +316,36 @@ class UserEditForm(forms.Form):
     )
     role = forms.ModelChoiceField(queryset=Role.objects.none())
     manager = forms.ModelChoiceField(queryset=User.objects.none(), required=False)
-    teams = forms.ModelMultipleChoiceField(
+    team = forms.ModelChoiceField(
         queryset=Team.objects.none(),
         required=False,
-        widget=ChoiceCheckboxes,
-        help_text="Choose every team this person belongs to.",
+        label="Team",
+        help_text="One team. Admin and Super Admin have none.",
     )
 
-    def __init__(self, *args, instance, **kwargs):
+    def __init__(self, *args, instance, actor=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["role"].queryset = Role.objects.order_by("name")
+        roles = Role.objects.order_by("name")
+        if actor is None or not actor.is_super_admin:
+            roles = roles.exclude(key="SUPER_ADMIN")
+        self.fields["role"].queryset = roles
         self.fields["manager"].queryset = (
             User.objects.filter(is_active=True)
             .exclude(pk=instance.pk)
             .order_by("display_name")
         )
-        self.fields["teams"].queryset = Team.objects.order_by("name")
+        self.fields["team"].queryset = Team.objects.order_by("name")
+        if actor is not None and actor.is_super_admin:
+            self.fields["password"] = forms.CharField(
+                required=False,
+                widget=forms.PasswordInput,
+                help_text="Leave blank to keep the current password.",
+            )
+            self.fields["password_confirmation"] = forms.CharField(
+                required=False,
+                label="Password confirmation",
+                widget=forms.PasswordInput,
+            )
         for field in self.fields.values():
             widget = field.widget
             if isinstance(widget, forms.Select):
@@ -338,7 +360,7 @@ class UserEditForm(forms.Form):
                     "phone": format_phone(instance.phone, empty=""),
                     "role": instance.role_id,
                     "manager": instance.manager_id,
-                    "teams": list(instance.teams.values_list("pk", flat=True)),
+                    "team": instance.team_id,
                 }
             )
 
@@ -348,6 +370,16 @@ class UserEditForm(forms.Form):
 
     def clean_phone(self):
         return _form_phone(self.cleaned_data.get("phone"))
+
+    def clean(self):
+        cleaned = super().clean()
+        password = cleaned.get("password")
+        confirmation = cleaned.get("password_confirmation")
+        if password and password != confirmation:
+            self.add_error("password_confirmation", "Passwords do not match.")
+        if password and not confirmation:
+            self.add_error("password_confirmation", "Confirm the password.")
+        return cleaned
 
 
 def _validate_timezone(value: str) -> str:

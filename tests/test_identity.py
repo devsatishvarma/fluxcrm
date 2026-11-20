@@ -21,6 +21,12 @@ pytestmark = pytest.mark.django_db
 ADMIN_PASSWORD = "correct-horse-battery"
 
 
+@pytest.fixture(autouse=True)
+def _enable_password_reset_for_these_tests(settings):
+    """These tests cover the reset flow. Production leaves it off."""
+    settings.PASSWORD_RESET_ENABLED = True
+
+
 def setup_payload(**overrides):
     payload = {
         "legal_name": "Infoshare Systems Inc.",
@@ -72,6 +78,16 @@ def test_setup_is_repeatable_and_has_no_default_password(client):
     admin.refresh_from_db()
     assert admin.check_password(ADMIN_PASSWORD)
     assert User.objects.count() == 1
+
+
+@override_settings(PASSWORD_RESET_ENABLED=False)
+def test_password_reset_stays_hidden_until_email_is_enabled(client):
+    complete_setup(client)
+    login_page = client.get(reverse("core:login"))
+    assert login_page.status_code == 200
+    assert b"Reset password" not in login_page.content
+    assert b"version 2.0" in login_page.content
+    assert client.get(reverse("core:password_reset")).status_code == 404
 
 
 def test_active_user_can_log_in_and_disabled_user_cannot(client):
@@ -462,8 +478,37 @@ def test_team_edit_lists_only_active_members(client):
         reverse("core:team_edit", args=[team.pk]),
         {"name": "West", "active": "1"},
     )
+    assert removed.status_code == 200
+    assert b"Move these people to another team" in removed.content
+    assert set(team.members.values_list("username", flat=True)) == {"ada", "ida"}
+
+
+def test_a_team_deletes_only_when_it_has_no_members(client):
+    complete_setup(client)
+    client.post(
+        reverse("core:login"),
+        {"username": "satish", "password": ADMIN_PASSWORD},
+    )
+    _, standard = ensure_roles()
+    person = User.objects.create_user(
+        username="member",
+        email="member.team@example.test",
+        password=ADMIN_PASSWORD,
+        display_name="Team Member",
+        role=standard,
+    )
+    occupied = Team.objects.create(name="Occupied")
+    person.team = occupied
+    person.save(update_fields=("team",))
+    empty = Team.objects.create(name="Empty")
+    blocked = client.post(reverse("core:team_delete", args=[occupied.pk]))
+    assert blocked.status_code == 302
+    assert Team.objects.filter(name="Occupied").exists()
+    page = client.get(reverse("core:teams"))
+    assert b"Move members first" in page.content
+    removed = client.post(reverse("core:team_delete", args=[empty.pk]))
     assert removed.status_code == 302
-    assert list(team.members.values_list("username", flat=True)) == ["ida"]
+    assert not Team.objects.filter(name="Empty").exists()
 
 
 def test_admin_can_edit_a_user_name_role_manager_and_teams(client):
@@ -493,7 +538,7 @@ def test_admin_can_edit_a_user_name_role_manager_and_teams(client):
     team = Team.objects.create(name="West")
     other = Team.objects.create(name="East")
     page = client.get(reverse("core:user_edit", args=[person.pk]))
-    assert b'class="choice-line"' in page.content
+    assert b'name="team"' in page.content
     assert b'for="id_teams_' not in page.content
     assert page.status_code == 200
     assert b"Name" in page.content
@@ -509,7 +554,7 @@ def test_admin_can_edit_a_user_name_role_manager_and_teams(client):
             "phone": "949-555-0199",
             "role": director.pk,
             "manager": User.objects.get(username="satish").pk,
-            "teams": [team.pk],
+            "team": team.pk,
         },
     )
     assert saved.status_code == 302
@@ -519,7 +564,7 @@ def test_admin_can_edit_a_user_name_role_manager_and_teams(client):
     assert person.phone == "(949) 555-0199"
     assert person.role_id == director.pk
     assert person.manager.username == "satish"
-    assert list(person.teams.values_list("name", flat=True)) == ["West"]
+    assert person.team.name == "West"
     moved = client.post(
         reverse("core:user_edit", args=[person.pk]),
         {
@@ -528,11 +573,12 @@ def test_admin_can_edit_a_user_name_role_manager_and_teams(client):
             "phone": "949-555-0199",
             "role": director.pk,
             "manager": User.objects.get(username="satish").pk,
-            "teams": [other.pk],
+            "team": other.pk,
         },
     )
     assert moved.status_code == 302
-    assert list(person.teams.values_list("name", flat=True)) == ["East"]
+    person.refresh_from_db()
+    assert person.team.name == "East"
     assert AuditEvent.objects.filter(
         action="user.updated", object_id=str(person.pk)
     ).exists()
@@ -550,4 +596,4 @@ def test_admin_can_edit_a_user_name_role_manager_and_teams(client):
         },
     )
     assert kept.status_code == 200
-    assert User.objects.get(username="satish").role.key == "ADMIN"
+    assert User.objects.get(username="satish").role.key == "SUPER_ADMIN"
