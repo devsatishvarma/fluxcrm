@@ -270,6 +270,20 @@ docker compose -f compose.production.yaml up -d --build
 4. If send fails, read the web log for `Graph token acquisition failed` or
    `Graph sendMail failed` (no tokens or message bodies are logged).
 
+### 7. Security notes for this integration
+
+- Treat `AZURE_CLIENT_SECRET` like a production root password: rotate on a
+  schedule, store only in server secrets, and never commit it. Anyone with the
+  secret can send mail as the shared mailbox outside GlideCRM.
+- Do not set `DJANGO_PASSWORD_RESET_ENABLED=true` until Graph vars and
+  `PUBLIC_BASE_URL` are set. Startup refuses console-backend reset mail so
+  reset links are not printed into Docker logs.
+- Keep `DJANGO_DEBUG=false` and a long unique `DJANGO_SECRET_KEY` on every
+  real host. Do not set `DJANGO_MFA_REQUIRED=false` except short break-glass
+  recovery, then turn it back on.
+- Restrict who can `docker compose exec` / SSH on the host: that access can
+  run `clear_mfa` and bypass authenticator enrollment.
+
 ## Who can see what, and what is recorded
 
 Roles already limit each user to the records they are allowed to read and

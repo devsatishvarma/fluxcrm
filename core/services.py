@@ -6,7 +6,7 @@ import secrets
 from datetime import timedelta
 
 from django.conf import settings
-from django.contrib.auth.forms import PasswordResetForm
+from core.forms import GlidePasswordResetForm
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
@@ -292,7 +292,7 @@ def send_user_password_reset(
         )
     if not user.is_active:
         raise ValidationError("Enable this user before sending a password reset.")
-    form = PasswordResetForm({"email": user.email})
+    form = GlidePasswordResetForm({"email": user.email})
     if not form.is_valid():
         raise ValidationError(form.errors.as_text())
     form.save(
@@ -343,7 +343,11 @@ def issue_on_screen_password_reset_link(
         "core:password_reset_confirm",
         kwargs={"uidb64": uid, "token": token},
     )
-    reset_url = request.build_absolute_uri(path)
+    public_base = (getattr(settings, "PUBLIC_BASE_URL", "") or "").rstrip("/")
+    if public_base:
+        reset_url = f"{public_base}{path}"
+    else:
+        reset_url = request.build_absolute_uri(path)
     record_audit(
         actor=actor,
         action="user.password_reset_link_issued",
@@ -455,8 +459,10 @@ def record_attempt(scope: str, subject: str):
 
 
 def is_throttled(scope: str, subject: str) -> bool:
-    limit = LOGIN_LIMIT if scope == "login" else RESET_LIMIT
-    window = LOGIN_WINDOW if scope == "login" else RESET_WINDOW
+    if scope in {"login", "mfa_verify"}:
+        limit, window = LOGIN_LIMIT, LOGIN_WINDOW
+    else:
+        limit, window = RESET_LIMIT, RESET_WINDOW
     cutoff = timezone.now() - window
     return (
         AuthThrottle.objects.filter(

@@ -24,6 +24,7 @@ from django.views.decorators.http import require_POST
 from core.forms import (
     CompanySettingsForm,
     GlideLoginForm,
+    GlidePasswordResetForm,
     SetupForm,
     UserCreateForm,
     UserEditForm,
@@ -120,6 +121,7 @@ def logout_view(request: HttpRequest) -> HttpResponse:
 
 
 class ThrottledPasswordResetView(PasswordResetView):
+    form_class = GlidePasswordResetForm
     template_name = "registration/password_reset_form.html"
     email_template_name = "registration/password_reset_email.txt"
     subject_template_name = "registration/password_reset_subject.txt"
@@ -159,6 +161,12 @@ class GlidePasswordResetConfirmView(PasswordResetConfirmView):
 
     template_name = "registration/password_reset_confirm.html"
     success_url = reverse_lazy("core:password_reset_complete")
+
+    def dispatch(self, request, *args, **kwargs):
+        response = super().dispatch(request, *args, **kwargs)
+        response["Cache-Control"] = "no-store, max-age=0"
+        response["Pragma"] = "no-cache"
+        return response
 
 
 class GlidePasswordResetCompleteView(PasswordResetCompleteView):
@@ -477,11 +485,14 @@ def user_show_password_reset_link(request: HttpRequest, user_id: int) -> HttpRes
             },
             status=422,
         )
-    return render(
+    response = render(
         request,
         "core/user_password_reset_link.html",
         {"account": user, "reset_url": reset_url},
     )
+    response["Cache-Control"] = "no-store, max-age=0"
+    response["Pragma"] = "no-cache"
+    return response
 
 
 @login_required
@@ -492,6 +503,15 @@ def mfa_verify(request: HttpRequest) -> HttpResponse:
         return redirect("core:home")
     error = ""
     if request.method == "POST":
+        subject = str(request.user.pk)
+        if is_throttled("mfa_verify", subject):
+            logger.info("MFA verification throttled", extra={"outcome": "throttled"})
+            return render(
+                request,
+                "core/mfa_verify.html",
+                {"error": "Too many attempts. Wait and try again.", "throttled": True},
+                status=429,
+            )
         try:
             verify_mfa_token(
                 user=request.user,
@@ -501,7 +521,7 @@ def mfa_verify(request: HttpRequest) -> HttpResponse:
             )
         except ValidationError as exc:
             error = exc.messages[0]
-            record_attempt("mfa_verify", str(request.user.pk))
+            record_attempt("mfa_verify", subject)
             logger.info("MFA verification failed", extra={"outcome": "failure"})
         else:
             return redirect("core:home")

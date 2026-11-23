@@ -1,10 +1,11 @@
 from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
+from urllib.parse import urlparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django import forms
 from django.conf import settings
-from django.contrib.auth.forms import AuthenticationForm
+from django.contrib.auth.forms import AuthenticationForm, PasswordResetForm
 from django.core.exceptions import ValidationError
 
 from core.display import format_phone, format_whole
@@ -224,6 +225,24 @@ class CompanySettingsForm(forms.ModelForm):
 
 class GlideLoginForm(AuthenticationForm):
     username = forms.CharField(max_length=150)
+
+
+class GlidePasswordResetForm(PasswordResetForm):
+    """Pin reset-email links to PUBLIC_BASE_URL (not the request Host header)."""
+
+    def save(self, domain_override=None, use_https=False, request=None, **kwargs):
+        public = (getattr(settings, "PUBLIC_BASE_URL", "") or "").rstrip("/")
+        if public and domain_override is None:
+            parsed = urlparse(public)
+            if parsed.netloc:
+                domain_override = parsed.netloc
+                use_https = parsed.scheme == "https"
+        return super().save(
+            domain_override=domain_override,
+            use_https=use_https,
+            request=request,
+            **kwargs,
+        )
 
 
 class UserCreateForm(forms.Form):

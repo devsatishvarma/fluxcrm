@@ -238,6 +238,17 @@ DEFAULT_FROM_EMAIL = os.getenv(
     "DJANGO_DEFAULT_FROM_EMAIL",
     GRAPH_SHARED_MAILBOX or "glidecrm@localhost",
 )
+# Self-serve reset must not print tokens to the console backend in real deploys.
+if (
+    PASSWORD_RESET_ENABLED
+    and not _graph_ready
+    and EMAIL_BACKEND.endswith("console.EmailBackend")
+):
+    raise ImproperlyConfigured(
+        "DJANGO_PASSWORD_RESET_ENABLED requires Graph mail "
+        "(AZURE_* + GRAPH_SHARED_MAILBOX + PUBLIC_BASE_URL) or a non-console "
+        "DJANGO_EMAIL_BACKEND."
+    )
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [

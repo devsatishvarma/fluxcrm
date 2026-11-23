@@ -40,7 +40,7 @@ services:
     command:
       - sh
       - -c
-      - python manage.py migrate --noinput && gunicorn glidecrm.wsgi:application --bind 0.0.0.0:8000 --workers 2 --access-logfile - --error-logfile -
+      - python manage.py migrate --noinput && gunicorn glidecrm.wsgi:application --bind 0.0.0.0:8000 --workers 2 --logger-class glidecrm.gunicorn_logging.RedactingLogger --access-logfile - --error-logfile -
     depends_on:
       database:
         condition: service_healthy
