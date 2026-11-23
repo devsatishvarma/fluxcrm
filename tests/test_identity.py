@@ -121,6 +121,7 @@ def test_active_user_can_log_in_and_disabled_user_cannot(client):
 @override_settings(
     EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
     PUBLIC_BASE_URL="https://crm.internal.example.test",
+    ALLOWED_HOSTS=["testserver", "evil.example.test"],
 )
 def test_password_reset_is_single_use_expiring_and_not_logged(client, caplog):
     complete_setup(client)
