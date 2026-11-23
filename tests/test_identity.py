@@ -118,12 +118,22 @@ def test_active_user_can_log_in_and_disabled_user_cannot(client):
     assert denied.wsgi_request.user.is_authenticated is False
 
 
-@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+@override_settings(
+    EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+    PUBLIC_BASE_URL="https://crm.internal.example.test",
+)
 def test_password_reset_is_single_use_expiring_and_not_logged(client, caplog):
     complete_setup(client)
     caplog.set_level(logging.INFO)
-    client.post(reverse("core:password_reset"), {"email": "satish@example.test"})
+    # Host header must not win over PUBLIC_BASE_URL in the emailed link.
+    client.post(
+        reverse("core:password_reset"),
+        {"email": "satish@example.test"},
+        HTTP_HOST="evil.example.test",
+    )
     message = mail.outbox[0].body
+    assert "https://crm.internal.example.test/password-reset/" in message
+    assert "evil.example.test" not in message
     match = re.search(r"/password-reset/\S+", message)
     assert match is not None
     reset_path = match.group(0)
@@ -207,7 +217,10 @@ def test_standard_user_cannot_administer_company_or_users(client):
     )
 
 
-@override_settings(PASSWORD_RESET_ENABLED=False)
+@override_settings(
+    PASSWORD_RESET_ENABLED=False,
+    PUBLIC_BASE_URL="https://crm.internal.example.test",
+)
 def test_super_admin_on_screen_reset_link_without_email(client, caplog):
     complete_setup(client)
     client.post(
@@ -225,11 +238,12 @@ def test_super_admin_on_screen_reset_link_without_email(client, caplog):
     caplog.set_level(logging.INFO)
     shown = client.post(reverse("core:user_show_password_reset_link", args=[target.pk]))
     assert shown.status_code == 200
+    assert shown["Cache-Control"].startswith("no-store")
     assert b"Password reset link" in shown.content
     match = re.search(rb'id="reset-url"[^>]*value="([^"]+)"', shown.content)
     assert match is not None
     reset_url = match.group(1).decode()
-    assert "/password-reset/" in reset_url
+    assert reset_url.startswith("https://crm.internal.example.test/password-reset/")
     assert reset_url not in caplog.text
     assert AuditEvent.objects.filter(
         action="user.password_reset_link_issued",
