@@ -161,6 +161,20 @@
                       <button class="btn btn-sm btn-outline-secondary" type="submit">Cancel</button>
                     </form>
                   </div>
+                  {% if graph_mail_enabled %}
+                    <form method="post" action="{% url 'activities:email' task.pk %}" class="task-pair task-line">
+                      {% csrf_token %}
+                      <label class="visually-hidden" for="watchers-{{ task.pk }}">Watchers</label>
+                      <select class="form-select form-select-sm" id="watchers-{{ task.pk }}" name="watcher_ids" multiple size="2" title="Optional watchers">
+                        {% for person in mail_watchers %}
+                          {% if person.pk != task.owner_id %}
+                            <option value="{{ person.pk }}">{{ person.display_name }}</option>
+                          {% endif %}
+                        {% endfor %}
+                      </select>
+                      <button class="btn btn-sm btn-outline-secondary" type="submit" title="Emails the owner and selected watchers">Email task</button>
+                    </form>
+                  {% endif %}
                 {% elif task.status == "HOLD" %}
                   <div class="task-pair">
                     <form method="post" action="{% url 'activities:resume' task.pk %}">

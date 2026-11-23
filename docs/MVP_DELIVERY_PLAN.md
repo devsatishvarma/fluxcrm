@@ -5,7 +5,11 @@
 This is the execution plan for the architecture in
 [`architecture-MVP-spec.md`](../architecture-MVP-spec.md). It covers design,
 development, testing, release controls, and progress reporting for MVP Phases
-0–9. Phase 10 is post-MVP and requires separate approval.
+0–9. Phases 10A–10E are post-MVP / version 2.0 enhancements approved in
+D-055; they do not inflate the Phase 0–9 MVP percentage. Each 10x slice still
+follows Design → Develop → Verify → Gate, updates in-app Help when behavior
+ships, and is marked complete only after thorough automated and walkthrough
+tests are recorded in `DEVELOPMENT_STATUS.md`.
 
 The original architecture remains the product baseline. Confirmed decisions and
 all departures from it are recorded in
@@ -113,8 +117,10 @@ and can be safely changed.
 ### Design
 
 - Finalize first-administrator bootstrap and repeat-run behavior.
-- Define user invitation/create/disable/reset flows and email behavior. Select
-  an email delivery provider before enabling production password reset.
+- Define user invitation/create/disable/reset flows and email behavior.
+  Production self-serve password reset stays off until Phase 10C (Microsoft
+  Graph shared mailbox). Until then Super Admin set-password and Phase 10A
+  on-screen one-time links cover recovery (D-055).
 - Map the confirmed company profile, USD, January fiscal start, and
   `America/Los_Angeles` defaults to validated fields.
 - Define login/reset throttles, idle timeout, security audit events, and
@@ -210,8 +216,9 @@ and can be safely changed.
 
 - Define activity/task linking, quick-add defaults, reminder policy, stale
   rules, scheduler run keys, retry behavior, and time-zone boundaries.
-- Confirm that MVP reminders are in-app/batched unless an email provider has
-  been approved.
+- Confirm that MVP reminders are in-app/batched. Outbound reminder email is
+  Phase 10C after Graph shared-mailbox mail is live (D-055); keep the in-app
+  row and send at most one email per task/recipient/due time.
 
 ### Develop
 
@@ -391,14 +398,145 @@ checks below remain the version 1 record.
 - A small pilot completes with no unresolved critical defect and reviewed
   telemetry/user feedback.
 
-## Phase 10 — Post-MVP modules
+## Phase 10 — Version 2.0 identity and Microsoft mail (post-MVP)
 
-Phase 10 is not one implementation batch. Entra SSO, Outlook calendar,
-OneDrive, goals/scorecards, sales handbook, cases, product/price books/lines,
-and any new integration each require a separate approved design, permission
-model, migration/rollback plan, feature-isolation strategy, and pilot. Microsoft
-licensing, tenant policy, app registration, consent, and minimum OAuth scopes
-must be confirmed before planning those integrations.
+Phase 10 is split into gated slices (D-055). Track each slice’s gate items in
+`DEVELOPMENT_STATUS.md` under Phase 10; they never count toward the 69-item
+MVP total. Goals/scorecards, sales handbook, cases, and product/price books
+remain separately approved and are not scheduled below.
+
+**Cross-cutting for every 10x slice:** update Help for shipped behavior; keep
+tokens and mailbox secrets out of logs and audit snapshots; record automated
+test and walkthrough evidence before marking a gate item passed.
+
+### Phase 10A — Super Admin on-screen password recovery
+
+**Goal:** recover a user password without email or SMS.
+
+#### Design
+
+- Super Admin verifies the requester out of band, then the Users screen shows
+  a single-use reset URL (copyable). Keep Super Admin set-password.
+- Token lifetime, single-use, rate limits, and audit fields (no raw token in
+  logs). `DJANGO_PASSWORD_RESET_ENABLED` stays false.
+
+#### Develop
+
+- Generate and redeem the on-screen link; invalidate on use or expiry.
+- Help: how Super Admin resets a password without email.
+
+#### Verify and gate
+
+- [x] Only Super Admin can create the link; Admin and below cannot.
+- [x] Link expires, is single-use, is throttled, and never appears in logs.
+- [x] Set-password and on-screen link are both audited.
+- [x] Help documents the Super Admin recovery path.
+- [x] Automated negative-auth tests and a human walkthrough pass.
+
+### Phase 10B — TOTP multi-factor authentication
+
+**Goal:** password plus authenticator-app code at sign-in.
+
+#### Design
+
+- Confirm Django 6 support for the chosen TOTP library before adding it.
+- Confirm enrollment policy (minimum Super Admin and Admin; preferred all
+  active users). Backup codes and Super Admin recovery when the device is lost.
+- No email OTP and no SMS.
+
+#### Develop
+
+- Enrollment, login challenge, backup-code consumption, disable/re-enroll under
+  Super Admin recovery.
+- Help: enroll, sign in with MFA, use backup codes, request admin recovery.
+
+#### Verify and gate
+
+- [x] Library Django 6 check is recorded before the package is added.
+- [x] Password alone is insufficient once the user is enrolled.
+- [x] Backup codes work once each; reuse fails.
+- [x] Super Admin can recover a locked-out user without email/SMS.
+- [x] Help covers enrollment and recovery.
+- [x] Automated tests (success, failure, replay, unauthorized) and walkthrough
+      pass.
+
+### Phase 10C — Microsoft Graph shared mailbox and email scope v1
+
+**Goal:** outbound CRM mail from a shared Office 365 mailbox.
+
+#### Design
+
+- Confirm tenant app registration, consent, minimum Graph send scopes, and the
+  shared mailbox address (supplied when this slice is ready to configure).
+- Map invitation, password-reset, task email, and due/overdue reminder
+  templates; deep links use the production site origin.
+- Extend `deliver_due_reminders`: keep the in-app reminder; send at most one
+  email per task/recipient/effective due time; failed sends are retry-safe.
+- Plan unlocking `DJANGO_PASSWORD_RESET_ENABLED` only after Graph send works in
+  the target environment.
+
+#### Develop
+
+- Graph client and shared-mailbox sender configuration (secrets in env, not
+  code).
+- Task email to assignee and optional watchers with CRM deep link.
+- Reminder email path on the existing scheduler job.
+- Invitation and self-serve password-reset mail; enable the production flag
+  when the mailbox is live.
+- Help: invitations, self-serve reset, task email, and email reminders.
+
+#### Verify and gate
+
+- [x] Mail sends only through the configured shared mailbox.
+- [x] Task email reaches assignee and optional watchers with a working deep
+      link.
+- [x] Due/overdue: in-app row remains; email is sent at most once per
+      task/recipient/due time; retries do not duplicate.
+- [x] Invitation and password-reset mail work; self-serve reset may be enabled.
+- [x] Delivery failures are observable and do not leak tokens or PII in logs.
+- [x] Help covers the new mail behaviors.
+- [x] Automated tests (including mocked Graph failure) and walkthrough pass.
+
+### Phase 10D — Extended CRM outbound notifications
+
+**Goal:** additional outbound mail in the approved priority order.
+
+Implement and gate one capability at a time (do not batch-mark complete):
+
+1. Stale lead/deal alerts to owner/manager.
+2. Assignment notifications when a lead, deal, or task is reassigned.
+3. “Email contact” compose from lead/contact via Graph; log Email activity.
+4. Morning digest of overdue tasks and follow-ups due today.
+5. Deal-stage or SQL transition alerts to the manager.
+6. Import/system failure alerts for ops (not sales).
+
+#### Verify and gate (per capability)
+
+- [ ] Capability behaves as designed under the viewer’s grants.
+- [ ] Idempotent or deduped where a job could run twice.
+- [ ] Help updated for that capability.
+- [ ] Automated tests and walkthrough recorded before the next capability
+      starts.
+
+### Phase 10E — Later / heavier Microsoft Graph modules
+
+**Goal:** separately approved heavy integrations; not started from 10C alone.
+
+Each item needs its own design, permission model, migration/rollback plan,
+feature isolation, and pilot approval:
+
+- Outlook calendar two-way sync and appointment booking.
+- Log inbound email to a lead (mailbox subscription and matching).
+- OneDrive attachments via Graph.
+- Entra ID SSO (optional; may replace or complement local passwords + TOTP).
+- Goals/scorecards, sales handbook, cases, product/price books/lines remain
+  out of the mail track and still need separate approval.
+
+#### Verify and gate
+
+- [ ] Written design and tenant/licensing confirmation exist before develop.
+- [ ] Pilot criteria and rollback are recorded.
+- [ ] Help and tests pass for the approved module only.
 
 ## 4. Cross-phase requirement gates
 
@@ -436,10 +574,14 @@ must be confirmed before planning those integrations.
   to the nearest whole percent.
 - Overall MVP percentage is `all passed gate items in Phases 0–9 / all gate
   items in Phases 0–9`, so phases with more acceptance work contribute more.
-- Phase 10 is reported separately and never inflates MVP completion.
+- Phase 10A–10E gate items are reported separately and never inflate MVP
+  completion. Phase 10D marks each capability only when that capability’s own
+  four gate items pass.
 - Only reproducibly verified items count as passed. Partial implementation does
   not count unless the checklist item itself defines an independently
   verifiable increment.
+- Help must be updated in the same slice that ships user-visible behavior;
+  missing Help blocks the Help gate item for that slice.
 - Update `DEVELOPMENT_STATUS.md` at the end of every work session and whenever
   a gate, blocker, scope, decision, or verification result changes.
 - Record architecture or scope changes in

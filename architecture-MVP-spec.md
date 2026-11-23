@@ -44,7 +44,7 @@
 | Import/export | XLSX and CSV templates, mapping, validation preview, duplicate policies, external-ID upsert, row errors, batch history and guarded rollback. | OneDrive integration may replace manual document-sharing workflows. |
 | Cases | Out of scope. | Account/contact-linked support cases with status, priority, owner and SLA dates. |
 | Sales Handbook | Out of scope. | Goals/KPIs, lead acquisition strategy, Infoshare Pyramid Sales Process, contextual scripts, Client Success collaboration, reporting guide and weekly status template. |
-| Integrations | None required for core CRM. Local attachments and email/task logging. | Microsoft Graph for Outlook calendar and OneDrive; optional Entra SSO. |
+| Integrations | None required for core CRM. Local attachments and email/task logging. | Microsoft Graph outbound mail from a shared mailbox (invites, reset, task and reminder email, then extended CRM notifications); later calendar, inbound mail, OneDrive; optional Entra SSO. See D-055. |
 
 ## 3. Data model
 
@@ -297,7 +297,7 @@ Confirmed 2026-11-09. See D-054. The running screens enforce this section.
 - Import: Sales Director/Manager, Admin, and Super Admin only. Scope matches the object being imported. Rows get an owner, cannot change a record outside that scope, and are audited.
 - Admin and Super Admin have no team. Every other user has one team and can be moved. A team can be deleted only after its members move to another team.
 - Deactivation reassigns the user's records. It does not delete the user.
-- Authenticator-app sign-in, without email or text, waits for a Django 6-compatible library. It is not part of the current version.
+- Authenticator-app (TOTP) sign-in, without email or text, is required for every active user (Phase 10B / D-055) via `django-otp`. Backup codes are issued at enrollment. Super Admin can clear MFA so a user can re-enroll. Interim password recovery without email is Super Admin set-password plus Phase 10A on-screen one-time link; self-serve email reset waits for Phase 10C Graph shared-mailbox mail.
 
 ## 7. Screen inventory and fast-entry patterns
 

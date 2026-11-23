@@ -15,6 +15,7 @@ urlpatterns = [
     path("tasks/<uuid:task_id>/resume/", views.task_resume, name="resume"),
     path("tasks/<uuid:task_id>/delete/", views.task_delete, name="delete"),
     path("tasks/<uuid:task_id>/snooze/", views.task_snooze, name="snooze"),
+    path("tasks/<uuid:task_id>/email/", views.task_email, name="email"),
     path(
         "activities/<uuid:activity_id>/edit/",
         views.activity_update,

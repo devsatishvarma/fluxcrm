@@ -85,3 +85,42 @@ class SetupRequiredMiddleware:
         if not User.objects.exists():
             return redirect("core:setup")
         return self.get_response(request)
+
+
+class MFAEnforcementMiddleware:
+    """Require TOTP enrollment and verification when MFA_REQUIRED is on."""
+
+    _PUBLIC_PREFIXES = (
+        "/health",
+        "/ready",
+        "/setup",
+        "/static",
+        "/brand/",
+        "/login",
+        "/logout",
+        "/password-reset",
+    )
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request: HttpRequest) -> HttpResponse:
+        from core.mfa import mfa_enabled, user_has_mfa, user_is_mfa_verified
+
+        if not mfa_enabled():
+            return self.get_response(request)
+        path = request.path
+        if path.startswith(self._PUBLIC_PREFIXES):
+            return self.get_response(request)
+        user = request.user
+        if not user.is_authenticated:
+            return self.get_response(request)
+        if user_is_mfa_verified(request):
+            return self.get_response(request)
+        if user_has_mfa(user):
+            if path.startswith("/mfa/verify"):
+                return self.get_response(request)
+            return redirect("core:mfa_verify")
+        if path.startswith("/mfa/enroll") or path.startswith("/mfa/backup-codes"):
+            return self.get_response(request)
+        return redirect("core:mfa_enroll")

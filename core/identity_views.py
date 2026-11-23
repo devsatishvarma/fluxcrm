@@ -28,12 +28,22 @@ from core.forms import (
     UserCreateForm,
     UserEditForm,
 )
+from core.mfa import (
+    clear_user_mfa,
+    confirm_totp_enrollment,
+    mfa_status_for_users,
+    post_password_login_redirect,
+    start_totp_enrollment,
+    user_has_mfa,
+    verify_mfa_token,
+)
 from core.notices import fail_with, failed, form_text, succeeded, validation_text
 from core.policy import AccessDenied, allows, require_action, visible_user_ids
 from core.services import (
     SetupAlreadyCompleted,
     create_standard_user,
     is_throttled,
+    issue_on_screen_password_reset_link,
     record_attempt,
     send_user_password_reset,
     set_user_active,
@@ -97,7 +107,7 @@ def login_view(request: HttpRequest) -> HttpResponse:
                 "Sign-in succeeded",
                 extra={"outcome": "success", "user_id": user.pk},
             )
-            return redirect("core:home")
+            return redirect(post_password_login_redirect(user))
         record_attempt("login", username)
         logger.info("Sign-in failed", extra={"outcome": "failure"})
     return render(request, "core/login.html", {"form": form})
@@ -145,22 +155,14 @@ class GlidePasswordResetDoneView(PasswordResetDoneView):
 
 
 class GlidePasswordResetConfirmView(PasswordResetConfirmView):
+    """Accepts email-sent and Super Admin on-screen reset links (D-055 / 10A)."""
+
     template_name = "registration/password_reset_confirm.html"
     success_url = reverse_lazy("core:password_reset_complete")
-
-    def dispatch(self, request, *args, **kwargs):
-        if not settings.PASSWORD_RESET_ENABLED:
-            raise Http404
-        return super().dispatch(request, *args, **kwargs)
 
 
 class GlidePasswordResetCompleteView(PasswordResetCompleteView):
     template_name = "registration/password_reset_complete.html"
-
-    def dispatch(self, request, *args, **kwargs):
-        if not settings.PASSWORD_RESET_ENABLED:
-            raise Http404
-        return super().dispatch(request, *args, **kwargs)
 
 
 @login_required
@@ -252,11 +254,15 @@ def user_list(request: HttpRequest) -> HttpResponse:
     managers = User.objects.filter(is_active=True).order_by("display_name")
     if visible is not None:
         managers = managers.filter(pk__in=visible)
+    user_rows = list(users)
+    mfa_enrolled = mfa_status_for_users([account.pk for account in user_rows])
+    for account in user_rows:
+        account.mfa_enrolled = mfa_enrolled.get(account.pk, False)
     return render(
         request,
         "core/user_list.html",
         {
-            "users": users,
+            "users": user_rows,
             "can_administer": allows(request.user, "user", "A"),
             "can_create_users": request.user.is_super_admin,
             "managers": managers,
@@ -436,4 +442,130 @@ def user_send_password_reset(request: HttpRequest, user_id: int) -> HttpResponse
             status=503,
         )
     succeeded(request, f"Password reset sent to {user.email}.")
+    return redirect("core:user_list")
+
+
+@login_required
+@require_POST
+def user_show_password_reset_link(request: HttpRequest, user_id: int) -> HttpResponse:
+    if not request.user.is_super_admin:
+        return HttpResponse(status=403)
+    user = get_object_or_404(
+        User.objects.select_related("role"),
+        pk=user_id,
+    )
+    try:
+        reset_url = issue_on_screen_password_reset_link(
+            actor=request.user,
+            user=user,
+            request=request,
+            request_id=getattr(request, "request_id", ""),
+        )
+    except ValidationError as exc:
+        failed(request, f"Could not create the password reset link. {exc.messages[0]}")
+        return render(
+            request,
+            "core/user_list.html",
+            {
+                "users": User.objects.select_related("role", "manager", "team"),
+                "error": exc.messages[0],
+                "can_administer": True,
+                "can_create_users": True,
+                "managers": User.objects.filter(is_active=True).order_by(
+                    "display_name"
+                ),
+            },
+            status=422,
+        )
+    return render(
+        request,
+        "core/user_password_reset_link.html",
+        {"account": user, "reset_url": reset_url},
+    )
+
+
+@login_required
+def mfa_verify(request: HttpRequest) -> HttpResponse:
+    if not user_has_mfa(request.user):
+        return redirect("core:mfa_enroll")
+    if getattr(request.user, "is_verified", lambda: False)():
+        return redirect("core:home")
+    error = ""
+    if request.method == "POST":
+        try:
+            verify_mfa_token(
+                user=request.user,
+                token=request.POST.get("token", ""),
+                request=request,
+                request_id=getattr(request, "request_id", ""),
+            )
+        except ValidationError as exc:
+            error = exc.messages[0]
+            record_attempt("mfa_verify", str(request.user.pk))
+            logger.info("MFA verification failed", extra={"outcome": "failure"})
+        else:
+            return redirect("core:home")
+    return render(request, "core/mfa_verify.html", {"error": error})
+
+
+@login_required
+def mfa_enroll(request: HttpRequest) -> HttpResponse:
+    if user_has_mfa(request.user):
+        return redirect("core:mfa_verify")
+    error = ""
+    if request.method == "POST":
+        try:
+            backup_codes = confirm_totp_enrollment(
+                user=request.user,
+                token=request.POST.get("token", ""),
+                request=request,
+                request_id=getattr(request, "request_id", ""),
+            )
+        except ValidationError as exc:
+            error = exc.messages[0]
+        else:
+            request.session["mfa_backup_codes"] = backup_codes
+            return redirect("core:mfa_backup_codes")
+    enrollment = start_totp_enrollment(
+        user=request.user,
+        request_id=getattr(request, "request_id", ""),
+    )
+    return render(
+        request,
+        "core/mfa_enroll.html",
+        {
+            "error": error,
+            "qr_data_uri": enrollment["qr_data_uri"],
+            "secret": enrollment["secret"],
+        },
+    )
+
+
+@login_required
+def mfa_backup_codes(request: HttpRequest) -> HttpResponse:
+    codes = request.session.pop("mfa_backup_codes", None)
+    if not codes:
+        return redirect("core:home")
+    return render(request, "core/mfa_backup_codes.html", {"codes": codes})
+
+
+@login_required
+@require_POST
+def user_clear_mfa(request: HttpRequest, user_id: int) -> HttpResponse:
+    if not request.user.is_super_admin:
+        return HttpResponse(status=403)
+    user = get_object_or_404(User, pk=user_id)
+    try:
+        clear_user_mfa(
+            actor=request.user,
+            user=user,
+            request_id=getattr(request, "request_id", ""),
+        )
+    except ValidationError as exc:
+        failed(request, f"Could not clear MFA. {exc.messages[0]}")
+        return redirect("core:user_list")
+    succeeded(
+        request,
+        f"Authenticator cleared for {user.display_name}. They must enroll again.",
+    )
     return redirect("core:user_list")

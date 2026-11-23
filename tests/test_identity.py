@@ -199,6 +199,154 @@ def test_standard_user_cannot_administer_company_or_users(client):
         ).status_code
         == 403
     )
+    assert (
+        client.post(
+            reverse("core:user_show_password_reset_link", args=[admin.pk])
+        ).status_code
+        == 403
+    )
+
+
+@override_settings(PASSWORD_RESET_ENABLED=False)
+def test_super_admin_on_screen_reset_link_without_email(client, caplog):
+    complete_setup(client)
+    client.post(
+        reverse("core:login"),
+        {"username": "satish", "password": ADMIN_PASSWORD},
+    )
+    _, standard = ensure_roles()
+    target = User.objects.create_user(
+        username="riley",
+        email="riley@example.test",
+        password="another-strong-pass",
+        display_name="Riley",
+        role=standard,
+    )
+    caplog.set_level(logging.INFO)
+    shown = client.post(reverse("core:user_show_password_reset_link", args=[target.pk]))
+    assert shown.status_code == 200
+    assert b"Password reset link" in shown.content
+    match = re.search(rb'id="reset-url"[^>]*value="([^"]+)"', shown.content)
+    assert match is not None
+    reset_url = match.group(1).decode()
+    assert "/password-reset/" in reset_url
+    assert reset_url not in caplog.text
+    assert AuditEvent.objects.filter(
+        action="user.password_reset_link_issued",
+        object_id=str(target.pk),
+    ).exists()
+    audit = AuditEvent.objects.get(
+        action="user.password_reset_link_issued",
+        object_id=str(target.pk),
+    )
+    assert audit.after_json["delivery"] == "on_screen"
+    assert "token" not in str(audit.after_json).lower()
+
+    from urllib.parse import urlparse
+
+    reset_path = urlparse(reset_url).path
+    guest = Client()
+    step = guest.post(
+        reset_path,
+        {
+            "new_password1": "replacement-pass-onscreen",
+            "new_password2": "replacement-pass-onscreen",
+        },
+    )
+    assert step.status_code == 302
+    changed = guest.post(
+        step.url,
+        {
+            "new_password1": "replacement-pass-onscreen",
+            "new_password2": "replacement-pass-onscreen",
+        },
+    )
+    assert changed.status_code == 302
+    target.refresh_from_db()
+    assert target.check_password("replacement-pass-onscreen")
+    reused = guest.get(reset_path)
+    assert b"invalid or has expired" in reused.content
+
+
+@override_settings(PASSWORD_RESET_ENABLED=False)
+def test_admin_cannot_issue_on_screen_reset_link(client):
+    complete_setup(client)
+    ensure_roles()
+    admin_role = Role.objects.get(key="ADMIN")
+    admin = User.objects.create_user(
+        username="ada",
+        email="ada@example.test",
+        password="another-strong-pass",
+        display_name="Ada",
+        role=admin_role,
+    )
+    target = User.objects.get(username="satish")
+    client.post(
+        reverse("core:login"),
+        {"username": "ada", "password": "another-strong-pass"},
+    )
+    denied = client.post(
+        reverse("core:user_show_password_reset_link", args=[target.pk])
+    )
+    assert denied.status_code == 403
+    assert not AuditEvent.objects.filter(
+        action="user.password_reset_link_issued",
+        actor=admin,
+    ).exists()
+
+
+@override_settings(PASSWORD_RESET_ENABLED=False)
+def test_on_screen_reset_link_is_throttled_and_blocks_inactive(client):
+    complete_setup(client)
+    client.post(
+        reverse("core:login"),
+        {"username": "satish", "password": ADMIN_PASSWORD},
+    )
+    _, standard = ensure_roles()
+    target = User.objects.create_user(
+        username="riley",
+        email="riley@example.test",
+        password="another-strong-pass",
+        display_name="Riley",
+        role=standard,
+    )
+    for _ in range(5):
+        assert (
+            client.post(
+                reverse("core:user_show_password_reset_link", args=[target.pk])
+            ).status_code
+            == 200
+        )
+    throttled = client.post(
+        reverse("core:user_show_password_reset_link", args=[target.pk])
+    )
+    assert throttled.status_code == 422
+    assert b"Too many password reset links" in throttled.content
+
+    target.is_active = False
+    target.save(update_fields=("is_active",))
+    # Clear throttle window for the inactive check by using a different actor path:
+    # still Super Admin; throttle is per actor:user so inactive fails first.
+    from identity.models import AuthThrottle
+
+    AuthThrottle.objects.all().delete()
+    inactive = client.post(
+        reverse("core:user_show_password_reset_link", args=[target.pk])
+    )
+    assert inactive.status_code == 422
+    assert b"Enable this user" in inactive.content
+
+
+def test_help_documents_on_screen_password_recovery(client):
+    complete_setup(client)
+    client.post(
+        reverse("core:login"),
+        {"username": "satish", "password": ADMIN_PASSWORD},
+    )
+    help_page = client.get(reverse("core:help"))
+    assert help_page.status_code == 200
+    assert b"Show reset link" in help_page.content
+    assert b"expires in one hour" in help_page.content
 
 
 def test_company_values_persist_and_render_in_company_timezone(client):

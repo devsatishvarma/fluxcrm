@@ -5,26 +5,56 @@
 
 ## Current position
 
-- **MVP completion:** 93% (64 of 69 Phase 0–9 gate items verified)
-- **Current phase:** Phase 9 — Cloud pilot and operational hardening
-- **Phase status:** Started. The release gate is in place and the 500,000-lead list was measured on this machine. The cloud host is not selected.
-- **Phase completion:** 17% (1 of 6 gate items verified)
+- **MVP completion:** 93% (64 of 69 Phase 0–9 gate items verified). Remaining Phase 9 cloud-host items are deferred as taken care of outside this tracker (user direction 2026-11-23).
+- **Current phase:** Phase 10D — Extended CRM outbound notifications (next). Phases 10A–10C complete in code.
+- **Phase status:** Phase 10C Graph mail shipped; live send waits on Entra app + shared mailbox values in `.env`.
+- **Phase completion:** Phase 10A: 5/5. Phase 10B: 6/6. Phase 10C: 7/7 (mocked Graph). Phase 10 overall still excluded from MVP %.
 - **Planning baseline:** Complete
-- **Code baseline:** Tag `phase-9-baseline` and branch `baseline/phase-9`, at the GlideCRM sales-workflow commit. Phase 9 remains in progress from this point.
-- **Product version:** 2.0. The access rules in D-054 are implemented.
-- **Last updated:** 2026-11-09
-- **Last verified result:** On this machine's Docker MySQL 8.4, the open lead list at 500,000 rows returned in 0.400 seconds and the New-stage list in 0.180 seconds. Both are inside the 2 second target. See D-028.
+- **Code baseline:** Tag `phase-9-baseline` and branch `baseline/phase-9`, at the GlideCRM sales-workflow commit.
+- **Product version:** 2.0. D-054 access, D-055 MFA (10B), and Graph outbound mail (10C) are implemented.
+- **Last updated:** 2026-11-23
+- **Last verified result:** `uv run pytest tests/test_graph_mail.py tests/test_activities.py` — 18 passed.
 
-## Current phase gate — Phase 9
+## Deferred phase gate — Phase 9
 
-- [ ] `check --deploy`, TLS, host/origin, cookie, proxy, and network controls pass on the pilot host.
-- [ ] A current database-and-upload backup restores into a clean environment.
-- [ ] Backup age, restore result, app/DB health, storage, latency, errors, and jobs have named actionable alerts.
+Remaining cloud-host items are treated as taken care of outside this repo
+tracker (user direction 2026-11-23). List timing already passed.
+
+- [~] `check --deploy`, TLS, host/origin, cookie, proxy, and network controls pass on the pilot host. *(deferred / external)*
+- [~] A current database-and-upload backup restores into a clean environment. *(deferred / external)*
+- [~] Backup age, restore result, app/DB health, storage, latency, errors, and jobs have named actionable alerts. *(deferred / external)*
 - [x] Normal filtered lists meet the <2 second target on agreed pilot hardware, or
       a measured remediation decision is recorded.
-- [ ] The 50-user scenario and permission matrix pass with representative data.
-- [ ] A small pilot completes with no unresolved critical defect and reviewed
-      telemetry/user feedback.
+- [~] The 50-user scenario and permission matrix pass with representative data. *(deferred / external)*
+- [~] A small pilot completes with no unresolved critical defect and reviewed
+      telemetry/user feedback. *(deferred / external)*
+
+## Completed phase gate — Phase 10A
+
+- [x] Only Super Admin can create the link; Admin and below cannot.
+- [x] Link expires, is single-use, is throttled, and never appears in logs.
+- [x] Set-password and on-screen link are both audited.
+- [x] Help documents the Super Admin recovery path.
+- [x] Automated negative-auth tests and a human walkthrough pass.
+
+## Completed phase gate — Phase 10B
+
+- [x] Library Django 6 check recorded (`django-otp`; not `django-two-factor-auth`).
+- [x] Password alone is insufficient once the user is enrolled / MFA required.
+- [x] Backup codes work once each; reuse fails.
+- [x] Super Admin can clear MFA; Admin cannot.
+- [x] Help covers enrollment and recovery.
+- [x] Automated tests pass (`tests/test_mfa.py`).
+
+## Completed phase gate — Phase 10C
+
+- [x] Mail sends only through the configured shared mailbox (Graph backend).
+- [x] Task email reaches owner and optional watchers with a CRM deep link.
+- [x] Due/overdue: in-app reminder remains; email at most once; retries safe.
+- [x] Invitation and password-reset mail use Graph when enabled + configured.
+- [x] Delivery failures are logged without tokens/PII dumps.
+- [x] Help covers task email, reminders, and shared-mailbox reset.
+- [x] Automated tests pass (`tests/test_graph_mail.py`, mocked Graph).
 
 ## Completed phase gate — Phase 8
 
@@ -130,19 +160,92 @@
 - **Phase 9 — Cloud pilot/hardening:** 1/6, started. The 500,000-lead list
   is under 2 seconds on this machine. See D-027 and D-028. The provider,
   HTTPS host, and pilot are still open.
-- **Phase 10 — Post-MVP modules:** separately approved; excluded from MVP %.
+- **Phase 10 — Identity and Microsoft mail (D-055):** planned; excluded from
+  MVP %. 10A admin on-screen reset, 10B TOTP MFA, 10C Graph shared mailbox +
+  email v1, 10D extended outbound notifications, 10E later heavy Graph.
+
+## Phase 10 tracking (excluded from MVP %)
+
+Gate checklists live in [`docs/MVP_DELIVERY_PLAN.md`](docs/MVP_DELIVERY_PLAN.md).
+Copy a slice’s verify items here when that slice starts. Mark `[x]` only with
+repeatable evidence. Every slice must update Help and pass thorough tests
+before completion.
+
+### Phase 10A — Super Admin on-screen password recovery
+
+- **Status:** Complete (2026-11-23).
+- **Design (2026-11-23):** Reuse Django password-reset tokens
+  (`PASSWORD_RESET_TIMEOUT` = 1 hour). Super Admin POSTs from Users; CRM shows
+  a copyable absolute URL on a dedicated page (token not stored in flash
+  messages). Self-serve email request stays off; confirm/complete URLs accept
+  admin-issued tokens. Throttle scope `admin_password_reset` on
+  `actor_id:user_id` (5 / hour). Audit `user.password_reset_link_issued` with
+  delivery `on_screen` and no token. Inactive users cannot receive a link.
+- **Tasks:**
+  - [x] Design recorded (token lifetime, audit, rate limits).
+  - [x] On-screen single-use reset link for Super Admin.
+  - [x] Help updated for admin recovery without email.
+  - [x] All 10A verify/gate items pass (see delivery plan).
+
+### Phase 10B — TOTP MFA
+
+- **Status:** Complete (2026-11-23).
+- **Tasks:**
+  - [x] Confirm Django 6–compatible TOTP library before adding the package
+        (`django-otp` + `qrcode` + `Pillow`).
+  - [x] Enrollment policy: all active users (`DJANGO_MFA_REQUIRED`).
+  - [x] Enrollment, login challenge, backup codes, Super Admin Clear MFA.
+  - [x] Help updated for MFA enroll/sign-in/recovery.
+  - [x] All 10B verify/gate items pass.
+
+### Phase 10C — Graph shared mailbox + email scope v1
+
+- **Status:** Complete in code (2026-11-23). Live Graph send needs Entra values.
+- **Tasks:**
+  - [x] Graph client + shared-mailbox env contract (`AZURE_*`, `GRAPH_SHARED_MAILBOX`,
+        `PUBLIC_BASE_URL`); Django backend auto-selected when configured.
+  - [x] Task email (owner + optional watchers) with CRM deep link.
+  - [x] Due/overdue: extend `deliver_due_reminders`; in-app + `email_sent_at`.
+  - [x] Invitation + password-reset mail via Graph backend; enable
+        `DJANGO_PASSWORD_RESET_ENABLED` after mailbox is live.
+  - [x] Help updated for invitations, reset, task email, and email reminders.
+  - [x] All 10C verify/gate items pass (including Graph failure paths).
+  - [ ] Operator supplies real shared mailbox + app registration (config only).
+
+### Phase 10D — Extended CRM outbound notifications
+
+- **Status:** Not started. One capability at a time after 10C.
+- **Tasks (priority order):**
+  - [ ] Stale lead/deal alerts (owner/manager) — Help + tests.
+  - [ ] Assignment notifications (lead/deal/task) — Help + tests.
+  - [ ] “Email contact” from lead/contact via Graph; log Email activity —
+        Help + tests.
+  - [ ] Morning digest (overdue tasks / follow-ups due today) — Help + tests.
+  - [ ] Deal-stage or SQL alerts to manager — Help + tests.
+  - [ ] Import/system failure alerts (ops) — Help + tests.
+
+### Phase 10E — Later / heavier Graph modules
+
+- **Status:** Not started; each module needs its own design approval.
+- **Tasks:**
+  - [ ] Outlook calendar two-way sync — design, then develop/verify.
+  - [ ] Inbound email → lead logging — design, then develop/verify.
+  - [ ] OneDrive attachments — design, then develop/verify.
+  - [ ] Entra ID SSO (optional) — design, then develop/verify.
 
 ## Active blockers
 
 Phase 9 has no cloud provider, managed MySQL offering, or off-host backup
 target yet. Satish is the interim alert owner. Stage moves still use the
 Phase 3 reason-based gates; requiring a logged activity before a stage change
-is a later decision. See D-013.
+is a later decision. See D-013. Phase 10C is blocked on the shared mailbox
+address and Entra app registration until those are supplied.
 
 ## Decisions needed later
 
-- Before production password reset: select the email delivery provider and
-  failure-alert owner. Development reset uses the console/locmem backend.
+- Phase 10C: shared mailbox address, Entra app registration, consent, and
+  failure-alert owner for mail delivery. Development reset still uses the
+  console/locmem backend until Graph is live.
 - Company logo upload is optional and was not supplied. It can be added later
   from company settings.
 - Before a production deploy: select the cloud provider, managed MySQL
@@ -150,17 +253,33 @@ is a later decision. See D-013.
   remains the interim alert owner. See D-027.
 - Before production pilot: approve data classification, retention/deletion,
   attachment, and antivirus policies.
-- After the pilot: separately prioritize and approve Phase 10 modules and
-  Microsoft 365 tenant/licensing policy.
+- Phase 10E modules and any Entra SSO still need separate design approval.
 
 ## Next three actions
 
-1. Name the cloud provider, managed MySQL offering, and off-host backup target.
-2. Name a second incident contact. Satish owns the alert list until then.
-3. Run the 50-user scenario against representative data before a pilot.
+1. Supply Entra app (Mail.Send), shared mailbox address, and `PUBLIC_BASE_URL`;
+   then set `DJANGO_PASSWORD_RESET_ENABLED=true` and rebuild containers.
+2. Start Phase 10D capability 1 (stale lead/deal alert emails) when ready.
+3. Keep Phase 9 external deploy evidence with the host owner if needed for ops.
 
 ## Latest evidence
 
+- 2026-11-23: Phase 10C shipped. Graph shared-mailbox client, task email,
+  reminder emails (`email_sent_at`), Graph Django email backend for
+  invite/reset. `pytest tests/test_graph_mail.py tests/test_activities.py`
+  18 passed. Live send waits on Entra + mailbox env values.
+- 2026-11-23: Phase 10B shipped. `django-otp` TOTP for all active users;
+  enroll QR + backup codes; verify at sign-in; Super Admin Clear MFA; Help
+  updated. `pytest tests/test_mfa.py` 4 passed. `DJANGO_MFA_REQUIRED=true`.
+- 2026-11-23: Phase 10A shipped. Super Admin **Show reset link** on Users;
+  confirm/complete work while email reset stays off; audit
+  `user.password_reset_link_issued`; Help updated. `pytest tests/test_identity.py`
+  20 passed. Remaining Phase 9 items deferred as taken care of externally.
+- 2026-11-23: D-055 approved. MFA is TOTP; interim password recovery is Super
+  Admin set-password plus on-screen one-time link (Phase 10A); production
+  self-serve reset waits for Graph shared-mailbox mail (Phase 10C). Email
+  scope v1 is task email, due/overdue reminder email, and invitation/reset
+  mail. Extended notifications and heavy Graph modules are Phase 10D–10E.
 - 2026-11-09: Version 2.0 access is implemented. Scope is stored on each
   grant. Super Admin creates users and sets passwords. Sales Executive
   replaces Account Executive. SDR/BDR is removed. A lead sources one deal,
@@ -436,6 +555,9 @@ is a later decision. See D-013.
 
 ## Recent decision/change log
 
+- **2026-11-23 — MFA and Microsoft mail (D-055):** TOTP MFA; Super Admin
+  on-screen reset until Graph mail; shared mailbox outbound; email v1 and
+  ordered v2/later scopes. Phases 10A–10E added to the delivery plan.
 - **2026-10-11 — Planning baseline:** Adopted Design → Develop → Verify → Gate
   for every phase; no phase advances with failed CI or unresolved critical
   defects.

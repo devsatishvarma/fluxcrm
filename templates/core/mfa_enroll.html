@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Set up authenticator · GlideCRM{% endblock %}
+{% block body_class %}page-auth{% endblock %}
+{% block content %}
+  <h1>Set up authenticator</h1>
+  <p>Every GlideCRM user enrolls an authenticator app. Scan the QR code with Google Authenticator, Microsoft Authenticator, or a similar app. You can also type the secret by hand.</p>
+  {% if error %}<p role="alert">{{ error }}</p>{% endif %}
+  <p>
+    <img src="{{ qr_data_uri }}" alt="Authenticator QR code" width="200" height="200">
+  </p>
+  <p>Secret: <code>{{ secret }}</code></p>
+  <form method="post" class="col-lg-6">
+    {% csrf_token %}
+    <label class="form-label" for="token">Enter the 6-digit code to confirm</label>
+    <input class="form-control" id="token" name="token" inputmode="numeric" autocomplete="one-time-code" required>
+    <button class="btn btn-primary mt-3" type="submit">Confirm and continue</button>
+  </form>
+  <form method="post" action="{% url 'core:logout' %}" class="mt-3">
+    {% csrf_token %}
+    <button class="btn btn-link" type="submit">Log out</button>
+  </form>
+{% endblock %}

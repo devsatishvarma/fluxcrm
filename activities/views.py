@@ -6,6 +6,7 @@ from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
 
 from accounts.services import contacts_for_user
+from activities.mail import email_task
 from activities.models import Task
 from activities.services import (
     TASK_BUCKET_KEYS,
@@ -24,9 +25,11 @@ from activities.services import (
 )
 from core.access import activate_viewer_timezone, scoped
 from core.exceptions import VersionConflict
+from core.graph_mail import graph_mail_configured
 from core.notices import fail_with, failed, succeeded, validation_text
 from core.policy import require_action
 from core.validation import require_delete_confirmation
+from identity.models import User
 from leads.models import Lead
 from sales.models import Deal
 
@@ -77,6 +80,10 @@ def task_list(request):
             "contacts": contacts_for_user(request.user).order_by(
                 "last_name", "first_name"
             ),
+            "graph_mail_enabled": graph_mail_configured(),
+            "mail_watchers": User.objects.filter(is_active=True)
+            .order_by("display_name")
+            .only("id", "display_name", "email"),
         },
     )
 
@@ -383,6 +390,37 @@ def task_snooze(request, task_id):
         failure="Could not snooze the task.",
         until=request.POST.get("snooze_until"),
     )
+
+
+@login_required
+@require_POST
+def task_email(request, task_id):
+    try:
+        require_action(request.user, "task", "R", object_id=task_id)
+        task = scoped(
+            Task.objects.select_related("owner"),
+            request.user,
+        ).get(pk=task_id)
+    except PermissionDenied:
+        return render(request, "crm/forbidden.html", status=403)
+    except Task.DoesNotExist:
+        return render(request, "crm/forbidden.html", status=403)
+    watcher_ids = request.POST.getlist("watcher_ids")
+    try:
+        count = email_task(
+            actor=request.user,
+            task=task,
+            watcher_ids=watcher_ids,
+            request_id=_request_id(request),
+        )
+    except ValidationError as exc:
+        failed(request, f"Could not email the task. {exc.messages[0]}")
+        return _back(request)
+    succeeded(
+        request,
+        f"Task {task.title} emailed to {count} recipient{'s' if count != 1 else ''}.",
+    )
+    return _back(request)
 
 
 def _mutate(request, operation, task_id, *, success, failure, **extra):

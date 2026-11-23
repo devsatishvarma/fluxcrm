@@ -1,6 +1,7 @@
 """Transactional identity and company-profile operations."""
 
 import hashlib
+import logging
 import secrets
 from datetime import timedelta
 
@@ -20,6 +21,8 @@ LOGIN_LIMIT = 5
 LOGIN_WINDOW = timedelta(minutes=15)
 RESET_LIMIT = 5
 RESET_WINDOW = timedelta(hours=1)
+
+logger = logging.getLogger(__name__)
 
 
 class SetupAlreadyCompleted(Exception):
@@ -307,6 +310,53 @@ def send_user_password_reset(
         after={"delivery": "email", "user_id": user.pk},
         request_id=request_id,
     )
+
+
+def issue_on_screen_password_reset_link(
+    *,
+    actor,
+    user,
+    request,
+    request_id="",
+):
+    """Build a single-use reset URL for a Super Admin to copy. Never email it."""
+    from django.contrib.auth.tokens import default_token_generator
+    from django.urls import reverse
+    from django.utils.encoding import force_bytes
+    from django.utils.http import urlsafe_base64_encode
+
+    from core.policy import deny
+
+    if not getattr(actor, "is_super_admin", False):
+        deny(actor, "user", "A")
+    if not user.is_active:
+        raise ValidationError("Enable this user before creating a password reset link.")
+    throttle_subject = f"{actor.pk}:{user.pk}"
+    if is_throttled("admin_password_reset", throttle_subject):
+        raise ValidationError(
+            "Too many password reset links for this user. Wait and try again."
+        )
+    record_attempt("admin_password_reset", throttle_subject)
+    uid = urlsafe_base64_encode(force_bytes(user.pk))
+    token = default_token_generator.make_token(user)
+    path = reverse(
+        "core:password_reset_confirm",
+        kwargs={"uidb64": uid, "token": token},
+    )
+    reset_url = request.build_absolute_uri(path)
+    record_audit(
+        actor=actor,
+        action="user.password_reset_link_issued",
+        instance=user,
+        before=None,
+        after={"delivery": "on_screen", "user_id": user.pk},
+        request_id=request_id,
+    )
+    logger.info(
+        "On-screen password reset link issued",
+        extra={"outcome": "success", "user_id": user.pk},
+    )
+    return reset_url
 
 
 @transaction.atomic

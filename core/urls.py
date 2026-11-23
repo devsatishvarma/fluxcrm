@@ -12,6 +12,13 @@ urlpatterns = [
     path("login/", identity_views.login_view, name="login"),
     path("brand/glidecrm-logo.png", identity_views.brand_logo, name="brand_logo"),
     path("logout/", identity_views.logout_view, name="logout"),
+    path("mfa/verify/", identity_views.mfa_verify, name="mfa_verify"),
+    path("mfa/enroll/", identity_views.mfa_enroll, name="mfa_enroll"),
+    path(
+        "mfa/backup-codes/",
+        identity_views.mfa_backup_codes,
+        name="mfa_backup_codes",
+    ),
     path(
         "password-reset/",
         identity_views.ThrottledPasswordResetView.as_view(),
@@ -48,6 +55,16 @@ urlpatterns = [
         "users/<int:user_id>/password-reset/",
         identity_views.user_send_password_reset,
         name="user_send_password_reset",
+    ),
+    path(
+        "users/<int:user_id>/password-reset-link/",
+        identity_views.user_show_password_reset_link,
+        name="user_show_password_reset_link",
+    ),
+    path(
+        "users/<int:user_id>/clear-mfa/",
+        identity_views.user_clear_mfa,
+        name="user_clear_mfa",
     ),
     path(
         "users/<int:user_id>/manager/",

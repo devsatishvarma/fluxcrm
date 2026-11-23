@@ -144,7 +144,8 @@ Set:
 - `SITE_ADDRESS` to the public IP only. No `https://` and no port.
 - `DJANGO_ALLOWED_HOSTS` to that same IP.
 - `DJANGO_CSRF_TRUSTED_ORIGINS` to `https://` plus that IP.
-- `DJANGO_PASSWORD_RESET_ENABLED=false` until you choose an email provider.
+- `DJANGO_PASSWORD_RESET_ENABLED=false` until Phase 10C Graph shared-mailbox
+  mail is live (D-055).
 - `DJANGO_LOG_LEVEL=INFO`. `DEBUG` logging can write database values,
   including email addresses, into the log.
 
@@ -180,14 +181,94 @@ container rebuild.
 
 ## Two-factor authentication
 
-Not enabled in this version. The library to evaluate is
-`django-two-factor-auth` (it uses `django-otp`). On PyPI, the current
-release's Django classifiers stop at Django 5.2, and this CRM runs Django 6.
-Check the project's current install page and Django support list before
-adding it. Do not guess the settings.
+Phase 10B delivers TOTP authenticator-app MFA with `django-otp` (not
+`django-two-factor-auth`). Set `DJANGO_MFA_REQUIRED=true` (the production
+example default). Every active user enrolls after password sign-in, confirms
+with a 6-digit code, and stores one-time backup codes. A Super Admin can
+Clear MFA on Users so that person can enroll again. Password recovery without
+email remains Super Admin set-password and Phase 10A on-screen one-time links.
+Self-serve password-reset and invitation email use Microsoft Graph after the
+Entra setup below is complete and `DJANGO_PASSWORD_RESET_ENABLED=true`.
 
-Until that is confirmed, the server login, the cloud account, and a long
-CRM password are the controls that are actually on.
+## Entra setup (Microsoft Graph shared mailbox)
+
+GlideCRM sends outbound mail (invitations, password reset, task email, due
+reminders) through Microsoft Graph as a **shared mailbox**. Infoshare’s
+mailbox is `crm@infosharesystems.com`. The CRM host may sit on a VPN with no
+public URL; that is fine for sending mail. Microsoft does not need to reach
+your CRM. `PUBLIC_BASE_URL` is only for links inside the email body so
+recipients on the VPN can open Tasks.
+
+Sign in at <https://entra.microsoft.com> (or Azure Portal → Microsoft Entra
+ID) as a Global Admin or Application Admin.
+
+### 1. Create the app registration
+
+1. **App registrations** → **New registration**.
+2. Name it, for example `GlideCRM Mail`.
+3. Supported account types: **Accounts in this organizational directory only**
+   (single tenant).
+4. Redirect URI: leave blank. Client-credentials mail does not use a browser
+   redirect.
+5. Register the app.
+
+### 2. Copy tenant and client IDs
+
+| `.env` value | Where to find it |
+|---|---|
+| `AZURE_TENANT_ID` | Entra ID → **Overview** → **Tenant ID** |
+| `AZURE_CLIENT_ID` | The app → **Overview** → **Application (client) ID** |
+| `AZURE_CLIENT_SECRET` | The app → **Certificates & secrets** → **New client secret** → copy the **Value** immediately (it is shown once) |
+| `GRAPH_SHARED_MAILBOX` | `crm@infosharesystems.com` |
+| `PUBLIC_BASE_URL` | The URL VPN users already use to open GlideCRM, for example `https://crm.internal.infosharesystems.com` or `http://10.x.x.x:8000`. No trailing slash. |
+
+Store the client secret only in `.env` or the server secret store. Never commit
+it.
+
+### 3. Grant Mail.Send and consent
+
+1. The app → **API permissions** → **Add a permission** → **Microsoft Graph**
+   → **Application permissions**.
+2. Add **`Mail.Send`**.
+3. Click **Grant admin consent** for the tenant and confirm it shows Granted.
+
+### 4. Allow the app to send as the shared mailbox
+
+The app registration alone is not enough. Exchange / Microsoft 365 admin must
+allow this application to send as `crm@infosharesystems.com` (application
+access policy or equivalent “Send As” for the shared mailbox). Use your IT
+standard for Graph application mail. Until that is done, Graph returns an
+authorization error when GlideCRM calls `sendMail`.
+
+### 5. Put the values in `.env` and restart
+
+```bash
+AZURE_TENANT_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+AZURE_CLIENT_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+AZURE_CLIENT_SECRET=the-secret-value
+GRAPH_SHARED_MAILBOX=crm@infosharesystems.com
+PUBLIC_BASE_URL=https://crm.internal.infosharesystems.com
+DJANGO_DEFAULT_FROM_EMAIL=crm@infosharesystems.com
+DJANGO_PASSWORD_RESET_ENABLED=true
+```
+
+Leave `DJANGO_EMAIL_BACKEND` unset so production picks
+`core.mail_backend.GraphSharedMailboxBackend` when the Azure variables are
+present. Then rebuild or restart the stack:
+
+```bash
+docker compose -f compose.production.yaml up -d --build
+```
+
+### 6. Smoke-check
+
+1. As Super Admin, create a user with invitation email enabled, or use
+   **Send password reset** on Users.
+2. Confirm the message arrives from `crm@infosharesystems.com`.
+3. On Tasks, use **Email task** and confirm the deep link opens GlideCRM while
+   on the VPN.
+4. If send fails, read the web log for `Graph token acquisition failed` or
+   `Graph sendMail failed` (no tokens or message bodies are logged).
 
 ## Who can see what, and what is recorded
 

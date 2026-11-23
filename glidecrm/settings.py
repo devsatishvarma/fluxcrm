@@ -62,6 +62,9 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django_otp",
+    "django_otp.plugins.otp_static",
+    "django_otp.plugins.otp_totp",
     "rest_framework",
     "django_htmx",
     "accounts",
@@ -82,7 +85,9 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django_otp.middleware.OTPMiddleware",
     "core.middleware.SetupRequiredMiddleware",
+    "core.middleware.MFAEnforcementMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django_htmx.middleware.HtmxMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -192,13 +197,47 @@ LOGOUT_REDIRECT_URL = "core:login"
 SESSION_COOKIE_AGE = 60 * 30
 SESSION_SAVE_EVERY_REQUEST = True
 PASSWORD_RESET_TIMEOUT = 60 * 60
-# Off until an email provider is chosen. The console backend must not send resets.
+# Off until Phase 10C Graph shared-mailbox mail is live. Super Admin on-screen
+# reset links (Phase 10A) still work while this flag is false.
 PASSWORD_RESET_ENABLED = env_bool("DJANGO_PASSWORD_RESET_ENABLED", default=False)
+# Phase 10B: TOTP for every active user (D-055). Tests turn this off by default.
+MFA_REQUIRED = env_bool("DJANGO_MFA_REQUIRED", default=True)
+MFA_BACKUP_CODE_COUNT = 10
+# Phase 10C — Microsoft Graph shared mailbox (leave blank until ready).
+AZURE_TENANT_ID = os.getenv("AZURE_TENANT_ID", "")
+AZURE_CLIENT_ID = os.getenv("AZURE_CLIENT_ID", "")
+AZURE_CLIENT_SECRET = os.getenv("AZURE_CLIENT_SECRET", "")
+GRAPH_SHARED_MAILBOX = os.getenv("GRAPH_SHARED_MAILBOX", "")
+PUBLIC_BASE_URL = os.getenv(
+    "PUBLIC_BASE_URL",
+    "",
+).rstrip("/")
+if not PUBLIC_BASE_URL:
+    site = os.getenv("SITE_ADDRESS", "").strip()
+    if site:
+        PUBLIC_BASE_URL = (
+            site if site.startswith("http") else f"https://{site}"
+        ).rstrip("/")
+
+_graph_ready = bool(
+    AZURE_TENANT_ID
+    and AZURE_CLIENT_ID
+    and AZURE_CLIENT_SECRET
+    and GRAPH_SHARED_MAILBOX
+    and PUBLIC_BASE_URL
+)
 EMAIL_BACKEND = os.getenv(
     "DJANGO_EMAIL_BACKEND",
-    "django.core.mail.backends.console.EmailBackend",
+    (
+        "core.mail_backend.GraphSharedMailboxBackend"
+        if _graph_ready
+        else "django.core.mail.backends.console.EmailBackend"
+    ),
 )
-DEFAULT_FROM_EMAIL = os.getenv("DJANGO_DEFAULT_FROM_EMAIL", "glidecrm@localhost")
+DEFAULT_FROM_EMAIL = os.getenv(
+    "DJANGO_DEFAULT_FROM_EMAIL",
+    GRAPH_SHARED_MAILBOX or "glidecrm@localhost",
+)
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [

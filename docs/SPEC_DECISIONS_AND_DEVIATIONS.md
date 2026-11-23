@@ -84,16 +84,22 @@ here before implementing it.
 
 ### D-006 — Deployment and post-MVP scope
 
-- **Date/status:** 2026-10-11 — Confirmed
+- **Date/status:** 2026-10-11 — Confirmed; Microsoft outbound-mail priority updated by D-055 on 2026-11-23
 - Keep cloud design provider-neutral until a provider decision is made before
   Phase 9.
-- Treat every Phase 10 module as a separate, approved post-pilot project.
-- Defer Microsoft 365 licensing, tenant policy, app registration, consent, and
-  module priority until post-pilot planning.
-- **Affected phases:** 9 and 10
+- Treat every Phase 10 module as a separate, approved post-pilot project with
+  its own design → develop → verify → gate cycle. D-055 schedules Phases
+  10A–10E (admin reset link, TOTP MFA, Graph shared-mailbox outbound mail,
+  extended CRM email, later heavy Graph). Calendar, inbound mail, OneDrive,
+  and Entra SSO still need their own design approval inside 10E or later.
+- Microsoft 365 licensing, tenant policy, app registration, consent, and the
+  shared mailbox address are confirmed during Phase 10C design, not during
+  MVP Phases 0–9.
+- **Affected phases:** 9 and 10A–10E
 - **Specification impact:** Prevents an unapproved provider or Microsoft
-  integration choice from entering MVP scope.
-- **Approval source:** User selection.
+  integration choice from entering MVP scope while allowing approved outbound
+  mail work after D-055.
+- **Approval source:** User selection; D-055 for outbound mail sequencing.
 
 ### D-007 — Progress reporting
 
@@ -224,9 +230,11 @@ here before implementing it.
   time zone. Complete and snooze are audited and bump the version. Naive form
   times are read in that user's zone; stored values stay UTC.
 - Reminders are in-app rows, one per task, recipient, and effective due time.
-  No email is sent. `run_due_jobs` still skips a repeated run in the same
-  minute. A failed run stays `FAILED` and is retried on a later minute without
-  creating a second reminder for a due time already delivered.
+  No email is sent in MVP. Phase 10C (D-055) adds at most one Graph email per
+  the same key while keeping the in-app row. `run_due_jobs` still skips a
+  repeated run in the same minute. A failed run stays `FAILED` and is retried
+  on a later minute without creating a second reminder for a due time already
+  delivered.
 - A lead is stale after 14 days without a newer linked activity, and a deal
   after 21 days. Company administrators can change both thresholds. The list
   badge uses one grouped query for the current page.
@@ -237,8 +245,9 @@ here before implementing it.
   or task before Contacted, Discovery, Proposal, or Closing is a later change
   so existing audited transitions stay valid.
 - **Affected phases:** 4
-- **Specification impact:** Keeps reminder email deferred until a provider is
-  approved, and skips sample rows whose parent deal is not in the database.
+- **Specification impact:** Keeps reminder email deferred until Phase 10C
+  Graph shared mailbox (D-055), and skips sample rows whose parent deal is
+  not in the database.
 - **Approval source:** User request to proceed with Phase 4.
 
 ### D-014 — Record age, time in stage, and lead temperature
@@ -978,12 +987,29 @@ here before implementing it.
 - **Import:** Only Sales Director/Manager, Admin, and Super Admin. The import uses the same scope as the object being imported. Imported rows get an owner, do not change a record outside that scope, and each import is audited.
 - **Teams:** Admin and Super Admin have no team. Every other user has exactly one team, and that team can be reassigned. A team can be deleted only when it has no members. A user on more than one active team keeps the alphabetically first team.
 - **Deactivation:** Deactivate the user and reassign the records they own. Do not hard-delete the user.
-- **Sign-in second factor:** An authenticator app, with no email and no text message, is a later version 2.0 item. It is not in this version. The current `django-two-factor-auth` release lists Django only through 5.2, and this app uses Django 6. Confirm a Django 6 release before adding it. Do not add the package until that check is done.
+- **Sign-in second factor:** Superseded for scheduling by D-055. Until Phase 10B ships, authenticator-app MFA is not in the running product. Confirm Django 6 support for the chosen library before adding the package.
 - **Rationale:** The version 1 scope was attached to the role, several screens did not use it, and the role names no longer match the sales team.
 - **Affected phases:** 6, and the version 2.0 access work that follows this decision.
 - **Specification impact:** `architecture-MVP-spec.md` section 6A. Help, the home page, and the footer show version 2.0.
 - **Approval source:** User answers on 2026-11-09 to the twelve access questions.
 - **Migration/rollback impact:** Rename one role, remove SDR/BDR after its users move to another role, add Super Admin, set one team per non-admin user, and keep `grants_version`. Rolling back restores the version 1 role keys and the many-team membership from a backup taken before the migration.
+
+### D-055 — MFA, password recovery, and Microsoft 365 outbound mail
+
+- **Date/status:** 2026-11-23 — Confirmed. Phases 10A–10C implemented. 10D–10E remain. Live Graph send still needs Entra app + shared mailbox values in `.env`.
+- **MFA:** TOTP authenticator app only for the first MFA delivery. No email OTP and no SMS. Backup codes are required. Super Admin can recover a locked-out user. **Enrollment:** every active user. **Library:** `django-otp` (+ `qrcode`/`Pillow`) directly—not `django-two-factor-auth`, whose Django classifiers still stop at 5.2 while this app runs Django 6. Implemented in Phase 10B.
+- **Password reset without email (now):** Self-serve email reset stays off (`DJANGO_PASSWORD_RESET_ENABLED=false`) until Phase 10C. Super Admin may set a password today, and Phase 10A adds an on-screen single-use reset link the Super Admin can copy after out-of-band identity check. The link expires, is single-use, is rate-limited, and is audited without logging the token.
+- **Password reset with email (planned):** After Graph mail works, unlock Django's self-serve reset and keep Super Admin set-password and on-screen link as break-glass.
+- **Microsoft 365 mail:** Outbound only in the first mail phases, via Microsoft Graph, sending from a shared mailbox. The mailbox address is supplied when Phase 10C is ready to configure; it is not hard-coded now. App registration, tenant consent, and minimum Graph scopes are confirmed in that phase's design.
+- **Email scope v1 (Phase 10C):** (1) Email a task to the assignee and optional watchers with a CRM deep link. (2) Due and overdue reminders: extend `deliver_due_reminders`, keep the in-app reminder row, send at most one email per task/recipient/due time. (3) Invitation and password-reset mail; then enable `DJANGO_PASSWORD_RESET_ENABLED` in production when the shared mailbox is live.
+- **Email scope v2 (Phase 10D), priority order:** stale lead/deal alerts to owner/manager; assignment notifications for lead/deal/task; compose “Email contact” from lead/contact via Graph and log an Email activity; morning digest of overdue tasks and follow-ups due today; deal-stage or SQL transition alerts to the manager; import/system failure alerts for ops.
+- **Later / heavier (Phase 10E, still separately gated):** Outlook calendar two-way sync; log inbound email to a lead; OneDrive attachments via Graph; Entra SSO remains its own approved design.
+- **Help and verification:** Every delivered slice updates in-app Help for the new behavior. A slice is complete only when automated tests (including negative auth, idempotency, and delivery failure paths where relevant) and a human walkthrough pass, and evidence is recorded in `DEVELOPMENT_STATUS.md`.
+- **Rationale:** Users need MFA and recovery before or as the pilot grows; outbound Graph mail unlocks invitations, reset, and task/reminder mail without waiting for calendar or inbound sync.
+- **Affected phases:** 10A–10E (post-MVP / version 2.0 enhancements). Does not change the Phase 0–9 MVP gate total of 69.
+- **Specification impact:** Updates MFA and Integrations planning in `architecture-MVP-spec.md`; replaces the open “select email provider” item with Graph shared mailbox; schedules reminder email that D-013 deferred.
+- **Approval source:** User decisions on 2026-11-23 (TOTP; Super Admin + on-screen link then Graph mail; shared mailbox; email scope v1 and ordered v2/later list).
+- **Migration/rollback impact:** 10A and 10B add identity tables (reset-link audit, TOTP devices, backup codes). 10C–10D add mail delivery state and optional settings for the shared mailbox. Rolling back uses a pre-slice backup; do not reverse-migrate production mail history.
 
 ## Starter taxonomy — version 1
 

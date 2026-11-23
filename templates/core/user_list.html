@@ -6,9 +6,9 @@
   <h1>Users</h1>
   {% if error %}<p role="alert">{{ error }}</p>{% endif %}
   {% if password_reset_enabled %}
-    <p>Password reset instructions go to the email on that user. Phone is stored as (XXX) XXX-XXXX and is not used for the reset.</p>
+    <p>Password reset instructions can go to the email on that user. A Super Admin can also show a one-time reset link on screen. Phone is stored as (XXX) XXX-XXXX and is not used for the reset.</p>
   {% else %}
-    <p>Password reset email is off. Set a temporary password when you add a user. Phone is stored as (XXX) XXX-XXXX.</p>
+    <p>Password reset email is off. A Super Admin sets a temporary password on Edit user, or shows a one-time reset link on screen after verifying the person out of band. Phone is stored as (XXX) XXX-XXXX.</p>
   {% endif %}
   {% if can_administer %}
     <p>
@@ -56,11 +56,25 @@
                 </select>
                 <button class="btn btn-outline-secondary btn-sm" type="submit">Save manager</button>
               </form>
-              {% if can_create_users and password_reset_enabled %}
-                <form class="d-inline" method="post" action="{% url 'core:user_send_password_reset' account.pk %}">
-                  {% csrf_token %}
-                  <button class="btn btn-outline-secondary btn-sm" type="submit" title="Sends the reset link to {{ account.email }}">Send password reset</button>
-                </form>
+              {% if can_create_users %}
+                {% if password_reset_enabled %}
+                  <form class="d-inline" method="post" action="{% url 'core:user_send_password_reset' account.pk %}">
+                    {% csrf_token %}
+                    <button class="btn btn-outline-secondary btn-sm" type="submit" title="Sends the reset link to {{ account.email }}">Send password reset</button>
+                  </form>
+                {% endif %}
+                {% if account.is_active %}
+                  <form class="d-inline" method="post" action="{% url 'core:user_show_password_reset_link' account.pk %}">
+                    {% csrf_token %}
+                    <button class="btn btn-outline-secondary btn-sm" type="submit" title="Shows a one-time link to copy. Does not send email.">Show reset link</button>
+                  </form>
+                {% endif %}
+                {% if account.mfa_enrolled %}
+                  <form class="d-inline" method="post" action="{% url 'core:user_clear_mfa' account.pk %}" onsubmit="return confirm('Clear authenticator for {{ account.display_name }}? They must enroll again at the next sign-in.');">
+                    {% csrf_token %}
+                    <button class="btn btn-outline-danger btn-sm" type="submit" title="Removes TOTP and backup codes so the user can enroll again.">Clear MFA</button>
+                  </form>
+                {% endif %}
               {% endif %}
               <form method="post" action="{% url 'core:user_set_active' account.pk %}">
                 {% csrf_token %}

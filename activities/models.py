@@ -208,6 +208,11 @@ class Reminder(models.Model):
     )
     due_key = models.CharField(max_length=40)
     sent_at = models.DateTimeField()
+    email_sent_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the Graph reminder email was sent; null until delivered.",
+    )
 
     class Meta:
         constraints = [
@@ -218,6 +223,7 @@ class Reminder(models.Model):
         ]
         indexes = [
             models.Index(fields=("recipient", "sent_at")),
+            models.Index(fields=("email_sent_at",)),
         ]
 
     def __str__(self) -> str:
