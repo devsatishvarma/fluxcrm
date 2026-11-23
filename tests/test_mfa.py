@@ -246,3 +246,20 @@ def test_help_documents_mfa(client, settings):
     assert help_page.status_code == 200
     assert b"authenticator app (TOTP)" in help_page.content
     assert b"clears MFA" in help_page.content
+
+
+def test_mfa_verify_is_application_throttled(client, mfa_on, totp_clock):
+    complete_setup(client)
+    satish = User.objects.get(username="satish")
+    enroll_user(satish, client=client, clock=totp_clock)
+    client.post(
+        reverse("core:login"),
+        {"username": "satish", "password": ADMIN_PASSWORD},
+    )
+    reset_mfa_throttle(satish)
+    for _ in range(5):
+        bad = client.post(reverse("core:mfa_verify"), {"token": "000000"})
+        assert bad.status_code == 200
+    blocked = client.post(reverse("core:mfa_verify"), {"token": "000000"})
+    assert blocked.status_code == 429
+    assert b"Too many attempts" in blocked.content
